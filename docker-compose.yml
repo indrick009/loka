@@ -1,0 +1,156 @@
+name: loka
+
+# Service names used inside the compose network. They are pinned here so a
+# developer-facing .env (which points at localhost) cannot silently make the
+# containers dial themselves. `environment` wins over `env_file`.
+x-network-env: &network-env
+  DATABASE__HOST: postgres
+  BROKER__URL: amqp://${RABBITMQ_DEFAULT_USER:-loka}:${RABBITMQ_DEFAULT_PASS:-loka}@rabbitmq:5672/
+  REDIS_URL: redis://redis:6379/0
+  OBJECT_STORAGE__ENDPOINT: http://minio:9000
+  WHATSAPP__GATEWAY_URL: http://baileys:3000
+
+x-app: &app
+  build:
+    context: .
+    target: api
+  env_file: [.env]
+  environment: *network-env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-loka}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-loka}
+      POSTGRES_DB: ${POSTGRES_DB:-loka}
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - log_min_duration_statement=500
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loka} -d ${POSTGRES_DB:-loka}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    ports: ["5432:5432"]
+
+  pgbouncer:
+    image: edoburu/pgbouncer:1.23.1
+    profiles: [pgbouncer]
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:-loka}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-loka}
+      PGDATABASE: ${POSTGRES_DB:-loka}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 2000
+      DEFAULT_POOL_SIZE: 40
+      SERVER_IDLE_TIMEOUT: 600
+    ports: ["6432:6432"]
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    # Published on loopback only: local tooling (pytest, alembic) uses the same
+    # port as the containers, without exposing Redis on the network.
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-loka}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-loka}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    ports: ["5672:5672", "15672:15672"]
+
+  minio:
+    image: minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    ports: ["9000:9000", "9001:9001"]
+
+  baileys:
+    image: node:22-alpine
+    working_dir: /app
+    volumes:
+      - baileys-src:/app
+    command:
+      - sh
+      - -c
+      - "npm init -y >/dev/null 2>&1 || true;
+         npm install @whiskeysockets/baileys pino qrcode express pino-pretty;
+         echo 'Baileys sidecar placeholder: implement src/index.js exposing POST /send and POST /events' ;
+         tail -f /dev/null"
+    profiles: [wa]
+    ports: ["3000:3000"]
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+
+  api:
+    <<: *app
+    command:
+      - uvicorn
+      - loka.interfaces.http.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    <<: *app
+    build:
+      context: .
+      target: worker
+    command: ["python", "-m", "loka.interfaces.workers.main"]
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+  baileys-src:
