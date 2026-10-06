@@ -33,6 +33,8 @@ class ServiceFeePaymentRow(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="CREATED")
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provider_reference: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    callback_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

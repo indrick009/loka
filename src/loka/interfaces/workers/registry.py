@@ -15,6 +15,12 @@ from loka.interfaces.worker.conversation_analysis_consumer import (
     AI_REQUEST_QUEUE,
     ConversationAnalysisConsumer,
 )
+from loka.interfaces.worker.fraud_consumer import (
+    FRAUD_ANALYSIS_QUEUE,
+    PAYMENTS_EVENTS_QUEUE,
+    FraudAnalysisConsumer,
+    PaymentEventsConsumer,
+)
 from loka.interfaces.worker.whatsapp_inbound_consumer import (
     INBOUND_QUEUE,
     WhatsAppInboundConsumer,
@@ -34,6 +40,8 @@ def handler_registry() -> dict[str, ConsumerFactory]:
     registry: dict[str, ConsumerFactory] = {
         INBOUND_QUEUE: WhatsAppInboundConsumer,
         AI_REQUEST_QUEUE: ConversationAnalysisConsumer,
+        PAYMENTS_EVENTS_QUEUE: PaymentEventsConsumer,
+        FRAUD_ANALYSIS_QUEUE: FraudAnalysisConsumer,
     }
     declared = {spec.name for spec in QUEUES}
     unknown = set(registry) - declared

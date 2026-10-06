@@ -16,7 +16,10 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loka.interfaces.http.auth import BearerTokenAuthenticator
 from loka.interfaces.http.container import Container
 from loka.interfaces.http.errors import register_error_handlers
+from loka.interfaces.http.routers import fraud as fraud_router
+from loka.interfaces.http.routers import payments as payments_router
 from loka.interfaces.http.routers import properties as properties_router
+from loka.interfaces.http.routers import reports as reports_router
 from loka.shared.application.context import (
     new_id,
     reset_request_id,
@@ -136,6 +139,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Response(content=metrics.render(), media_type="text/plain")
 
     app.include_router(properties_router.router)
+    app.include_router(payments_router.router)
+    app.include_router(reports_router.router)
+    app.include_router(fraud_router.router)
 
     @app.get("/", include_in_schema=False)
     async def root() -> PlainTextResponse:

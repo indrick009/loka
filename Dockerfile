@@ -15,6 +15,18 @@ COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir -e ".[dev]"
 
+FROM base AS test
+COPY .env.example ./
+COPY alembic ./alembic
+COPY alembic.ini ./
+COPY tests ./tests
+CMD ["pytest"]
+
+FROM base AS migrate
+COPY alembic ./alembic
+COPY alembic.ini ./
+CMD ["alembic", "upgrade", "head"]
+
 FROM base AS api
 EXPOSE 8000
 CMD ["uvicorn", "loka.interfaces.http.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]

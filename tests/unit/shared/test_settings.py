@@ -33,7 +33,26 @@ def test_env_example_is_not_empty() -> None:
     assert len(_example_pairs()) > 20
 
 
-def test_every_env_example_name_maps_to_a_real_setting(tmp_path: Path) -> None:
+def test_every_env_example_name_maps_to_a_real_setting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The docker compose network pins some values via ``environment``; clear
+    them so the pure code defaults are what's under test."""
+    for name in (
+        "DATABASE__HOST",
+        "DATABASE__PORT",
+        "DATABASE__USER",
+        "DATABASE__PASSWORD",
+        "DATABASE__DATABASE",
+        "REDIS_URL",
+        "BROKER__URL",
+        "OBJECT_STORAGE__ENDPOINT",
+        "WHATSAPP__GATEWAY_URL",
+        "AI__PROVIDER",
+        "AI__BASE_URL",
+        "AI__API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(_env_file=None)
     env_file = tmp_path / ".env"
     env_file.write_text("\n".join(f"{name}={value}" for name, value in _example_pairs()))

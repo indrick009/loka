@@ -12,9 +12,11 @@ import asyncio
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 
 import pytest
 import pytest_asyncio
+from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,20 +31,29 @@ from loka.shared.infrastructure.redis_client import build_redis
 
 @pytest.fixture(scope="session")
 def integration_settings() -> Settings:
-    return Settings(
-        environment="test",
-        database={
-            "host": "localhost",
-            "port": 5432,
-            "user": "loka",
-            "password": "loka",
-            "database": "loka_test",
-            "pool_size": 5,
-            "max_overflow": 2,
-        },
-        redis_url="redis://localhost:6379/1",
-        encryption_key="integration-test-key-material-32-bytes!!",
+    """Connection targets come from the environment.
+
+    Inside ``docker compose run test`` that is the compose network (``postgres``,
+    ``redis``); on the host it is ``localhost``. Only the database name, the
+    Redis DB index and the encryption key are forced, so the suite can never
+    truncate the development database.
+    """
+    base = Settings()
+    return base.model_copy(
+        update={
+            "environment": "test",
+            "database": base.database.model_copy(
+                update={"database": "loka_test", "pool_size": 5, "max_overflow": 2}
+            ),
+            "redis_url": _redis_db_url(base.redis_url, db=1),
+            "encryption_key": SecretStr("integration-test-key-material-32-bytes!!"),
+        }
     )
+
+
+def _redis_db_url(url: str, db: int) -> str:
+    parsed = urlparse(url)
+    return urlunparse(parsed._replace(path=f"/{db}"))
 
 
 async def _truncate_everything(db: Database) -> None:

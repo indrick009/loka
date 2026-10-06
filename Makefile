@@ -25,19 +25,19 @@ worker:
 	docker compose up -d worker
 
 test:
-	docker compose run --rm api pytest -m "not integration"
+	docker compose --profile test run --rm test
 
 test-all:
-	docker compose run --rm api pytest
+	docker compose --profile test run --rm test pytest
 
 lint:
-	docker compose run --rm api ruff check src tests
+	docker compose --profile test run --rm --no-deps test ruff check src tests
 
 fmt:
-	docker compose run --rm api ruff format src tests
+	docker compose --profile test run --rm --no-deps test ruff format src tests
 
 typecheck:
-	docker compose run --rm api mypy
+	docker compose --profile test run --rm --no-deps test mypy
 
 psql:
 	docker compose exec postgres psql -U $${POSTGRES_USER:-loka} -d $${POSTGRES_DB:-loka}

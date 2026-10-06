@@ -15,15 +15,16 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Annotated
 
-from fastapi import Request
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
 from loka.interfaces.http.container import get_container
-from loka.shared.domain.errors import Unauthenticated
+from loka.shared.domain.errors import AuthorizationDenied, Unauthenticated
 from loka.shared.infrastructure.db.engine import Database
 
 BEARER_SCHEME = "Bearer"
@@ -87,6 +88,16 @@ async def require_principal(request: Request) -> Principal:
         principal = await authenticator.authenticate(session, credentials.credentials)
     if principal is None:
         raise Unauthenticated("the bearer token is invalid or expired")
+    return principal
+
+
+async def require_admin(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_principal)],
+) -> Principal:
+    """Route-guard for analyst endpoints: only admin sessions may call them."""
+    if not principal.is_admin:
+        raise AuthorizationDenied("analyst role required")
     return principal
 
 

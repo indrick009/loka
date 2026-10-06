@@ -7,7 +7,7 @@ never an automatic ban. Four bands map to four human-in-the-loop responses.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from enum import StrEnum
 
@@ -328,20 +328,21 @@ class ReportStatus(StrEnum):
     ACTIONED = "ACTIONED"
 
 
-@dataclass(slots=True)
 class Report(AggregateRoot):
-    report_id: uuid.UUID
-    reporter_id: uuid.UUID
-    reason: ReportReason
-    description: str
-    target_type: str
-    target_id: uuid.UUID
-    status: ReportStatus
-    created_at: datetime
-    updated_at: datetime
-    evidence: list[str] = field(default_factory=list)
-    assigned_to: uuid.UUID | None = None
-    resolution: str | None = None
+    __slots__ = (
+        "assigned_to",
+        "created_at",
+        "description",
+        "evidence",
+        "reason",
+        "report_id",
+        "reporter_id",
+        "resolution",
+        "status",
+        "target_id",
+        "target_type",
+        "updated_at",
+    )
 
     def __init__(
         self,
@@ -363,10 +364,10 @@ class Report(AggregateRoot):
         self.description = description.strip()
         self.target_type = target_type
         self.target_id = target_id
-        self.status = ReportStatus.OPEN
-        self.evidence = evidence or []
-        self.assigned_to = None
-        self.resolution = None
+        self.status: ReportStatus = ReportStatus.OPEN
+        self.evidence: list[str] = evidence or []
+        self.assigned_to: uuid.UUID | None = None
+        self.resolution: str | None = None
         self.created_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
 

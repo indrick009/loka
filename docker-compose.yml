@@ -44,6 +44,7 @@ services:
       - log_min_duration_statement=500
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-loka} -d ${POSTGRES_DB:-loka}"]
       interval: 5s
@@ -70,9 +71,10 @@ services:
     image: redis:7-alpine
     command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
     # Published on loopback only: local tooling (pytest, alembic) uses the same
-    # port as the containers, without exposing Redis on the network.
+    # port as the containers, without exposing Redis on the network. 6380, not
+    # 6379: a host redis-server already owns 6379 on this machine.
     ports:
-      - "127.0.0.1:6379:6379"
+      - "127.0.0.1:6380:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -122,6 +124,9 @@ services:
 
   migrate:
     <<: *app
+    build:
+      context: .
+      target: migrate
     command: ["alembic", "upgrade", "head"]
 
   api:
@@ -147,6 +152,19 @@ services:
       context: .
       target: worker
     command: ["python", "-m", "loka.interfaces.workers.main"]
+
+  test:
+    <<: *app
+    build:
+      context: .
+      target: test
+    profiles: [test]
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    command: ["pytest", "-m", "not integration"]
 
 volumes:
   postgres-data:
