@@ -141,6 +141,10 @@ class SqlAlchemyReportRepository:
 
     async def add(self, report: Report) -> None:
         self._session.add(_row_from_report(report))
+        # Flushed, not committed: submitting a report re-evaluates its target
+        # in the same transaction, and the engine runs with autoflush off —
+        # without this the new report is invisible to its own escalation.
+        await self._session.flush()
 
     async def get(self, report_id: uuid.UUID) -> Report | None:
         row = await self._session.get(ReportRow, report_id)
@@ -150,16 +154,19 @@ class SqlAlchemyReportRepository:
         row = await self._session.get(ReportRow, report.report_id)
         if row is None:
             self._session.add(_row_from_report(report))
-            return
-        row.target_type = report.target_type
-        row.target_id = report.target_id
-        row.reason = report.reason.value
-        row.description = report.description
-        row.status = report.status.value
-        row.evidence = list(report.evidence)
-        row.assigned_to = report.assigned_to
-        row.resolution = report.resolution
-        row.updated_at = report.updated_at
+        else:
+            row.target_type = report.target_type
+            row.target_id = report.target_id
+            row.reason = report.reason.value
+            row.description = report.description
+            row.status = report.status.value
+            row.evidence = list(report.evidence)
+            row.assigned_to = report.assigned_to
+            row.resolution = report.resolution
+            row.updated_at = report.updated_at
+        # Same reason as ``add``: a re-evaluation right after a status change
+        # must read the new status from the database.
+        await self._session.flush()
 
     async def list(
         self,

@@ -174,15 +174,40 @@ async def test_the_unique_constraint_rejects_a_parallel_worker(
             await session.commit()
 
 
-async def test_an_unknown_number_is_stored_without_an_account(
+async def test_an_unknown_number_is_registered_on_first_contact(
     database: Database, integration_settings: Settings
 ) -> None:
+    """WhatsApp is the sign-up: the first message provisions the account."""
     receipt = await _execute(database, integration_settings, _command(), now=NOW)
 
-    assert receipt.sender_user_id is None
+    assert receipt.sender_user_id is not None
     async with database.session() as session:
         row = await session.get(InboundMessageRow, receipt.message_id)
-        assert row is not None and row.sender_user_id is None
+        assert row is not None and row.sender_user_id == receipt.sender_user_id
+        user = await session.get(UserRow, receipt.sender_user_id)
+        assert user is not None
+        assert user.status == "ACTIVE"
+        assert user.phone_e164 == PHONE
+        assert user.phone_e164_hash == blind_index(PHONE, key=_key(integration_settings))
+        assert "TENANT" in user.roles
+        assert user.phone_verified_at is not None
+
+
+async def test_a_second_message_reuses_the_same_account(
+    database: Database, integration_settings: Settings
+) -> None:
+    first = await _execute(database, integration_settings, _command(), now=NOW)
+
+    second = await _execute(
+        database,
+        integration_settings,
+        _command(external_message_id="BAIL_E2_FOLLOWUP", text="Toujours disponible ?"),
+        now=NOW + timedelta(minutes=1),
+    )
+
+    assert second.sender_user_id == first.sender_user_id
+    async with database.session() as session:
+        assert await session.scalar(select(func.count()).select_from(UserRow)) == 1
 
 
 async def test_the_account_is_found_through_the_blind_index(

@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.identity.infrastructure.user_directory import (
-    SqlAlchemyUserDirectory,
+from loka.bounded_contexts.identity.infrastructure.persistence.user_repository import (
+    SqlAlchemyUserRepository,
 )
 from loka.bounded_contexts.messaging.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageUseCase,
@@ -52,5 +52,5 @@ def receive_inbound_message_use_case(
         uow,
         inbound=uow.repository("inbound_messages"),
         sessions=uow.repository("conversation_sessions"),
-        users=SqlAlchemyUserDirectory(session, index_key=index_key),
+        users=SqlAlchemyUserRepository(session, index_key=index_key, unit_of_work=uow),
     )

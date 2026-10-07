@@ -21,6 +21,10 @@ from loka.interfaces.worker.fraud_consumer import (
     FraudAnalysisConsumer,
     PaymentEventsConsumer,
 )
+from loka.interfaces.worker.search_projection_consumer import (
+    SEARCH_PROJECTION_QUEUE,
+    SearchProjectionConsumer,
+)
 from loka.interfaces.worker.whatsapp_inbound_consumer import (
     INBOUND_QUEUE,
     WhatsAppInboundConsumer,
@@ -42,6 +46,7 @@ def handler_registry() -> dict[str, ConsumerFactory]:
         AI_REQUEST_QUEUE: ConversationAnalysisConsumer,
         PAYMENTS_EVENTS_QUEUE: PaymentEventsConsumer,
         FRAUD_ANALYSIS_QUEUE: FraudAnalysisConsumer,
+        SEARCH_PROJECTION_QUEUE: SearchProjectionConsumer,
     }
     declared = {spec.name for spec in QUEUES}
     unknown = set(registry) - declared

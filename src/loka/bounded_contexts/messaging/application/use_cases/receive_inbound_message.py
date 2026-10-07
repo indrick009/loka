@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from loka.bounded_contexts.identity.application.ports import UserDirectory
+from loka.bounded_contexts.identity.application.ports import UserProvisioning
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -84,7 +84,7 @@ class ReceiveInboundMessageUseCase:
         *,
         inbound: InboundMessageRepository,
         sessions: ConversationSessionRepository,
-        users: UserDirectory,
+        users: UserProvisioning,
     ) -> None:
         self._uow = uow
         self._inbound = inbound
@@ -133,7 +133,11 @@ class ReceiveInboundMessageUseCase:
                 raise RuntimeError("inbound message vanished between insert and re-read")
             return self._receipt(raced, duplicated=True)
 
-        user_id = await self._users.user_id_for_phone(phone)
+        # First contact auto-registers: a WhatsApp message proves the sender
+        # holds the number, so no separate sign-up is needed. The account is
+        # created in this same transaction, after the dedupe check, so a
+        # redelivery cannot mint a second one.
+        user_id = await self._users.ensure_user(phone, now=received_at)
         session = await self._resolve_session(phone, user_id=user_id, now=received_at)
 
         await self._inbound.attach_conversation(
@@ -184,7 +188,7 @@ class ReceiveInboundMessageUseCase:
         )
 
     async def _resolve_session(
-        self, phone: PhoneNumber, *, user_id: uuid.UUID | None, now: datetime
+        self, phone: PhoneNumber, *, user_id: uuid.UUID, now: datetime
     ) -> ConversationSession:
         """Get the live conversation for this number, or open a new one.
 
@@ -206,7 +210,7 @@ class ReceiveInboundMessageUseCase:
 
         observed_revision = session.revision
         changed = False
-        if user_id is not None and session.user_id != user_id:
+        if session.user_id != user_id:
             # Same number, account recreated or merged: the account is the
             # authority, the session follows it.
             session.user_id = user_id

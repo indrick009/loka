@@ -24,6 +24,7 @@ from loka.shared.domain.events import DomainEvent, IntegrationEvent
 from loka.shared.infrastructure.db.base import Base
 
 _TOPIC_BY_EVENT = {
+    "UserPhoneVerified": "identity.events",
     "LandlordVerified": "landlord.events",
     "PropertyPublished": "property.events",
     "PropertyRented": "property.events",

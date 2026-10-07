@@ -89,6 +89,55 @@ class PropertyRow(Base):
     )
 
 
+class PropertySearchDocumentRow(Base):
+    """Read model behind public search.
+
+    Denormalised on purpose: a search page must never join the write model.
+    Rows are written from ``property.events`` by the search projection consumer
+    and carry the write-model ``source_version`` so a redelivered or reordered
+    event cannot overwrite a fresher document.
+    """
+
+    __tablename__ = "property_search_documents"
+
+    property_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    landlord_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    property_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    neighbourhood: Mapped[str | None] = mapped_column(String(96), nullable=True)
+
+    public_price_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    charges_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    charging_policy: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bathrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    surface_m2: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    minimum_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    available_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    amenities: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
+    media_object_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    source_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    source_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    projected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        # Keyset pagination: one index per supported sort, status first so the
+        # AVAILABLE filter is always part of the scan.
+        Index("ix_search_documents_recent", "status", "source_created_at", "property_id"),
+        Index("ix_search_documents_price", "status", "public_price_xaf", "property_id"),
+        Index("ix_search_documents_city_price", "status", "city", "public_price_xaf"),
+        Index("ix_search_documents_type", "status", "property_type"),
+        Index("ix_search_documents_verified", "status", "is_verified"),
+    )
+
+
 class PropertyMediaRow(Base):
     __tablename__ = "property_media"
 

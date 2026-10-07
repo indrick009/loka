@@ -7,11 +7,17 @@ the outcome. No business rule lives here.
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from datetime import date
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field, StrictBool
 
+from loka.bounded_contexts.property.application.queries.search_properties import (
+    PropertySearchCriteria,
+    PropertySearchQuery,
+    SearchPropertiesUseCase,
+)
 from loka.bounded_contexts.property.application.use_cases.publish_property import (
     PublishPropertyCommand,
 )
@@ -53,3 +59,46 @@ async def publish_property(
             now=clock.now(),
         )
     return summary.to_dict()
+
+
+@router.get("/search", status_code=status.HTTP_200_OK)
+async def search_properties(
+    request: Request,
+    city: Annotated[str | None, Query()] = None,
+    neighbourhood: Annotated[list[str] | None, Query()] = None,
+    property_type: Annotated[list[str] | None, Query()] = None,
+    min_price_xaf: Annotated[int | None, Query(ge=0)] = None,
+    max_price_xaf: Annotated[int | None, Query(ge=0)] = None,
+    min_bedrooms: Annotated[int | None, Query(ge=0)] = None,
+    min_surface_m2: Annotated[int | None, Query(ge=0)] = None,
+    available_before: Annotated[date | None, Query()] = None,
+    verified_only: Annotated[bool, Query()] = True,
+    sort: Annotated[Literal["recent", "price_asc", "price_desc"], Query()] = "recent",
+    cursor: Annotated[str | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=50)] = 20,
+) -> dict[str, object]:
+    """Public listing search.
+
+    Deliberately unauthenticated: the projection only exposes fields that are
+    already public on a listing, and browsing a marketplace is anonymous.
+    """
+    database = get_container(request).database
+    query = PropertySearchQuery(
+        criteria=PropertySearchCriteria(
+            city=city,
+            neighbourhoods=tuple(neighbourhood or ()),
+            property_types=tuple(property_type or ()),
+            min_price_xaf=min_price_xaf,
+            max_price_xaf=max_price_xaf,
+            min_bedrooms=min_bedrooms,
+            min_surface_m2=min_surface_m2,
+            available_before=available_before,
+            verified_only=verified_only,
+            sort=sort,
+        ),
+        cursor=cursor,
+        limit=limit,
+    )
+    async with unit_of_work(database) as uow:
+        result = await SearchPropertiesUseCase(uow).execute(query)
+    return {"items": result.items, "next_cursor": result.next_cursor}

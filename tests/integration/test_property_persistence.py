@@ -9,6 +9,9 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loka.bounded_contexts.property.application.queries.search_properties import (
+    PropertySearchCriteria,
+)
 from loka.bounded_contexts.property.domain.entities.property import Property
 from loka.bounded_contexts.property.domain.entities.property_media import (
     MediaKind,
@@ -37,12 +40,22 @@ from loka.bounded_contexts.property.infrastructure.persistence.property_reposito
     SqlAlchemyPropertyRepository,
 )
 from loka.bounded_contexts.property.infrastructure.persistence.property_search_repository import (
-    PropertySearchCriteria,
     PropertySearchRepository,
+)
+from loka.bounded_contexts.property.infrastructure.persistence.search_projector import (
+    SqlAlchemySearchProjector,
 )
 from loka.shared.domain.errors import ConcurrencyConflict
 
 pytestmark = pytest.mark.integration
+
+
+async def _project(session: AsyncSession, properties: list[Property]) -> None:
+    """Feed the read model directly: search reads the projection, not the write model."""
+    projector = SqlAlchemySearchProjector(session)
+    for prop in properties:
+        await projector.project(prop.id)
+    await session.commit()
 
 
 def _listing(landlord_id: uuid.UUID, *, now: datetime, price: int = 150_000) -> Property:
@@ -186,6 +199,7 @@ async def test_search_paginates_with_a_stable_cursor(session: AsyncSession) -> N
     now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
     repository = SqlAlchemyPropertyRepository(session)
     listing_ids: list[uuid.UUID] = []
+    projected: list[Property] = []
     for index in range(5):
         created = now + timedelta(minutes=index)
         prop = _listing(landlord_id, now=created, price=100_000 * (index + 1))
@@ -193,7 +207,9 @@ async def test_search_paginates_with_a_stable_cursor(session: AsyncSession) -> N
         prop.mark_verified(now=created)
         await repository.add(prop)
         listing_ids.append(prop.id)
+        projected.append(prop)
     await session.commit()
+    await _project(session, projected)
 
     search = PropertySearchRepository(session)
     criteria = PropertySearchCriteria(city="Douala", sort="price_asc", verified_only=True)
@@ -222,13 +238,16 @@ async def test_search_descending_sort_and_filters(session: AsyncSession) -> None
     landlord_id = uuid.uuid4()
     now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
     repository = SqlAlchemyPropertyRepository(session)
+    projected: list[Property] = []
     for index, price in enumerate((120_000, 90_000, 300_000)):
         prop = _listing(landlord_id, now=now + timedelta(minutes=index), price=price)
         prop.publish(now=now + timedelta(minutes=index), actor_id=landlord_id)
         if index != 1:
             prop.mark_verified(now=now + timedelta(minutes=index))
         await repository.add(prop)
+        projected.append(prop)
     await session.commit()
+    await _project(session, projected)
 
     search = PropertySearchRepository(session)
     verified = await search.search(
@@ -273,6 +292,7 @@ async def test_search_excludes_archived_and_other_cities(session: AsyncSession) 
     for prop in (archived, yaounde):
         await repository.add(prop)
     await session.commit()
+    await _project(session, [archived, yaounde])
 
     rows = await session.execute(
         select(PropertyRow.status).where(PropertyRow.id.in_([archived.id, yaounde.id]))

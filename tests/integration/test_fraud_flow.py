@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
@@ -227,4 +228,4 @@ async def test_a_missing_property_cannot_be_scored(
         f"/fraud/risk/PROPERTY/{uuid.uuid4()}/evaluate", headers=_auth(admin_token)
     )
     assert response.status_code == 404
-    assert response.json()["code"] == "resource_not_found"
+    assert response.json()["code"] == "not_found"

@@ -97,13 +97,19 @@ class FakeSessionRepository:
         self.store[session.phone.e164] = session
 
 
-class FakeUserDirectory:
+class FakeUserProvisioning:
+    """Mimics first-contact registration: an unknown number opens an account."""
+
     def __init__(self, user_id: uuid.UUID | None) -> None:
         self._user_id = user_id
         self.calls = 0
+        self.created: list[uuid.UUID] = []
 
-    async def user_id_for_phone(self, phone: PhoneNumber) -> uuid.UUID | None:
+    async def ensure_user(self, phone: PhoneNumber, *, now: datetime) -> uuid.UUID:
         self.calls += 1
+        if self._user_id is None:
+            self._user_id = uuid.uuid4()
+            self.created.append(self._user_id)
         return self._user_id
 
 
@@ -165,7 +171,7 @@ class FakeUnitOfWork(UnitOfWork):
 class _Harness:
     use_case: ReceiveInboundMessageUseCase
     uow: FakeUnitOfWork
-    users: FakeUserDirectory
+    users: FakeUserProvisioning
     inbound: FakeInboundRepository
     sessions: FakeSessionRepository
 
@@ -174,7 +180,7 @@ def _harness(*, user_id: uuid.UUID | None = None) -> _Harness:
     inbound = FakeInboundRepository()
     sessions = FakeSessionRepository()
     uow = FakeUnitOfWork(inbound, sessions)
-    users = FakeUserDirectory(user_id)
+    users = FakeUserProvisioning(user_id)
     return _Harness(
         use_case=ReceiveInboundMessageUseCase(
             uow, inbound=inbound, sessions=sessions, users=users
@@ -250,13 +256,14 @@ async def test_a_redelivered_message_is_ignored_without_side_effects() -> None:
     assert h.uow.commits == 1
 
 
-async def test_an_unknown_sender_still_gets_a_session() -> None:
-    """First contact is a normal state, not an error."""
+async def test_an_unknown_sender_is_registered_on_first_contact() -> None:
+    """WhatsApp is the sign-up: the first message creates the account."""
     h = _harness(user_id=None)
 
     receipt = await h.use_case.execute(_command(), now=NOW)
 
-    assert receipt.sender_user_id is None
+    assert receipt.sender_user_id is not None
+    assert h.users.created == [receipt.sender_user_id]
     assert receipt.session_id is not None
 
 

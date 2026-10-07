@@ -48,7 +48,10 @@ QUEUES: tuple[QueueSpec, ...] = (
     QueueSpec("notifications", routing_keys=("NotificationRequested",)),
     QueueSpec("payments.events", routing_keys=("PaymentSucceeded", "PaymentFailed")),
     QueueSpec("analytics.events", routing_keys=("AiUsageRecorded",)),
-    QueueSpec("search.projections", routing_keys=("PropertyPublished", "PropertyRented")),
+    QueueSpec(
+        "search.projections",
+        routing_keys=("PropertyPublished", "PropertyRented", "PropertyMarkedUnavailable"),
+    ),
     QueueSpec("trust.projections", routing_keys=("TenantFeedbackSubmitted",)),
     QueueSpec("outbox.dispatch"),
 )

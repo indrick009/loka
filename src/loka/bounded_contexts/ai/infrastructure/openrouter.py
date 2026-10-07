@@ -9,7 +9,6 @@ this repository reaches the network.
 from __future__ import annotations
 
 import json
-import logging
 import time
 from dataclasses import replace
 from typing import Any
@@ -23,8 +22,9 @@ from loka.bounded_contexts.ai.domain.services.ai_provider import (
 )
 from loka.shared.domain.errors import ExternalServiceUnavailable, RateLimited
 from loka.shared.infrastructure.config.settings import AISettings
+from loka.shared.infrastructure.logging import get_logger
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 RETRYABLE_STATUS = frozenset({408, 500, 502, 503, 504})
 _MAX_ERROR_BODY = 400
@@ -60,7 +60,7 @@ class OpenRouterIntentModel:
 
         answer = await self._complete(prompt, model=self._default, api_key=api_key)
         if answer is None and self._fallback != self._default:
-            log.warning("openrouter_primary_model_failed", extra={"model": self._default})
+            log.warning("openrouter_primary_model_failed", model=self._default)
             answer = await self._complete(prompt, model=self._fallback, api_key=api_key)
         if answer is None:
             raise ExternalServiceUnavailable(
@@ -87,7 +87,7 @@ class OpenRouterIntentModel:
                 headers=self._headers(api_key),
             )
         except httpx.HTTPError as exc:
-            log.warning("openrouter_transport_error", extra={"error": str(exc)})
+            log.warning("openrouter_transport_error", error=str(exc))
             return None
         finally:
             if owns_client:
@@ -168,7 +168,7 @@ class OpenRouterIntentModel:
             # pricing, so this is unreachable outside tests. It records zero
             # rather than a guess: a fabricated price would silently corrupt
             # every budget that reads this back.
-            log.error("openrouter_missing_pricing", extra={"model": model})
+            log.error("openrouter_missing_pricing", model=model)
             cost = 0.0
         else:
             cost = (input_tokens * pricing.input + output_tokens * pricing.output) / 1_000_000

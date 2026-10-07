@@ -8,7 +8,6 @@ must produce a typed error, never a fabricated answer.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import httpx
@@ -275,19 +274,20 @@ class TestTypedFailures:
 
 
 class TestUnpricedModel:
-    async def test_an_unpriced_model_records_zero_rather_than_a_guess(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_an_unpriced_model_records_zero_rather_than_a_guess(self) -> None:
         """Composition refuses to enable the pipeline in this state, so this is
-        only reachable from a test: it must be loud and honest, not plausible."""
+        only reachable from a test. It records 0 rather than an estimate: a
+        plausible-looking guess would silently corrupt every budget that reads
+        the ledger back.
+
+        The loud half of the contract — refusing to boot — is asserted in
+        ``test_ai_composition.py``.
+        """
         payload = json.dumps({"intent": "SUPPORT", "confidence": 0.8, "entities": {}})
         config = settings(model_pricing_usd_per_million={})
         model, _ = model_for(lambda _: completion(chat(payload)), config)
 
-        adapter_logger = "loka.bounded_contexts.ai.infrastructure.openrouter"
-        with caplog.at_level(logging.ERROR, logger=adapter_logger):
-            result = await model.understand_intent(prompt())
+        result = await model.understand_intent(prompt())
 
         assert result.usage is not None
         assert result.usage.estimated_cost_usd == 0.0
-        assert "openrouter_missing_pricing" in caplog.text
