@@ -49,12 +49,16 @@ from loka.bounded_contexts.messaging.domain.entities.conversation_session import
     ConversationSession,
     FlowStep,
 )
+from loka.bounded_contexts.messaging.domain.events.message_events import (
+    WhatsAppMessageSendRequested,
+)
 from loka.bounded_contexts.messaging.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
 )
 from loka.bounded_contexts.messaging.domain.repositories.inbound_message_repository import (
     InboundMessageRepository,
 )
+from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.infrastructure.metrics import (
@@ -330,6 +334,14 @@ class AnalyseConversationMessageUseCase:
         if accepted:
             await self._advance_session(session, intent, facts, next_step, now=now)
 
+        # Committed with the turn: an analysis the platform understood but never
+        # answered is a landlord staring at a silent thread, and no retry can
+        # notice a reply that was never staged.
+        question = question_key_for(next_step) if accepted else None
+        await self._stage_reply(
+            session, intent=intent, reason=reason, question_key=question, now=now
+        )
+
         await self._uow.commit()
         return AnalysisReport(
             session_id=session.id,
@@ -342,8 +354,41 @@ class AnalyseConversationMessageUseCase:
             facts=facts.as_context() if accepted else {},
             rejected_facts=dict(facts.rejected),
             next_step=next_step.value if next_step else None,
-            question_key=question_key_for(next_step) if accepted else None,
+            question_key=question,
             cost_usd=cost_usd,
+        )
+
+    async def _stage_reply(
+        self,
+        session: ConversationSession,
+        *,
+        intent: str,
+        reason: str | None,
+        question_key: str | None,
+        now: datetime,
+    ) -> None:
+        """Request the one reply this turn owes the user.
+
+        Which question comes next is decided above; this only records that an
+        answer is due and what kind it is. The copy itself belongs to the
+        outbound layer, so rewording a question never touches the model or the
+        conversation state.
+        """
+        self._uow.events.stage(
+            [
+                WhatsAppMessageSendRequested(
+                    aggregate_type="ConversationSession",
+                    aggregate_id=session.id,
+                    aggregate_version=session.revision,
+                    occurred_at=now,
+                    session_id=session.id,
+                    recipient_phone=session.phone.e164,
+                    reply_kind=_reply_kind(reason=reason, question_key=question_key),
+                    question_key=question_key,
+                    language=session.language,
+                )
+            ],
+            correlation_id=current_context().get("correlation_id") or "unknown",
         )
 
     async def _advance_session(
@@ -397,6 +442,19 @@ class AnalyseConversationMessageUseCase:
             user_spend=user_spend,
             has_user=user_id is not None,
         )
+
+
+def _reply_kind(*, reason: str | None, question_key: str | None) -> str:
+    """What kind of answer this turn owes the user.
+
+    Three cases, decided here so the outbound layer never has to re-derive
+    whether an analysis succeeded. ``reason`` is what the pipeline refused:
+    answering a question when the message was not understood would move a
+    conversation the platform never actually followed.
+    """
+    if reason is not None:
+        return "CLARIFY"
+    return "QUESTION" if question_key else "ACK"
 
 
 def build_analysis_prompt(

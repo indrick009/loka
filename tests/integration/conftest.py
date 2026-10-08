@@ -35,8 +35,9 @@ def integration_settings() -> Settings:
 
     Inside ``docker compose run test`` that is the compose network (``postgres``,
     ``redis``); on the host it is ``localhost``. Only the database name, the
-    Redis DB index and the encryption key are forced, so the suite can never
-    truncate the development database.
+    Redis DB index, the encryption key and the AI pipeline are forced, so the
+    suite can never truncate the development database and can never spend a
+    developer's model budget because their ``.env`` happened to be switched on.
     """
     base = Settings()
     return base.model_copy(
@@ -47,6 +48,7 @@ def integration_settings() -> Settings:
             ),
             "redis_url": _redis_db_url(base.redis_url, db=1),
             "encryption_key": SecretStr("integration-test-key-material-32-bytes!!"),
+            "ai": base.ai.model_copy(update={"pipeline_enabled": False}),
         }
     )
 

@@ -9,6 +9,7 @@ reached the session.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -33,6 +34,9 @@ from loka.bounded_contexts.identity.domain.value_objects.phone_number import Pho
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
     FlowStep,
+)
+from loka.bounded_contexts.messaging.domain.events.message_events import (
+    WhatsAppMessageSendRequested,
 )
 from loka.bounded_contexts.messaging.domain.repositories.inbound_message_repository import (
     StoredInboundMessage,
@@ -128,6 +132,19 @@ class FakeLedger:
 
 
 @dataclass
+class FakeEventPublisher:
+    """Records what the turn owes the user instead of publishing it."""
+
+    staged: list[Any] = field(default_factory=list)
+
+    def stage(self, events: Iterable[Any], *, correlation_id: str) -> None:
+        self.staged.extend(events)
+
+    async def flush(self) -> None:
+        return None
+
+
+@dataclass
 class StubModel:
     """Records whether it was called, and how often."""
 
@@ -148,6 +165,7 @@ class FakeUnitOfWork(UnitOfWork):
         self.commits = 0
         self.open_commits: list[int] = []
         self.commits_at_model_call: list[int] = []
+        self._events = FakeEventPublisher()
 
     def __enter__(self) -> FakeUnitOfWork:
         return self
@@ -168,8 +186,8 @@ class FakeUnitOfWork(UnitOfWork):
         return None
 
     @property
-    def events(self) -> Any:
-        raise NotImplementedError
+    def events(self) -> FakeEventPublisher:
+        return self._events
 
     def collect(self, aggregate: object) -> None:
         return None
@@ -771,3 +789,97 @@ class TestSessionAdvancement:
         )
 
         assert session.revision > before
+
+
+class TestTheStagedReply:
+    """A turn that was understood must be a turn that answers.
+
+    The reply is staged on the same unit of work as the conversation state, so
+    an analysis that lands without an answer cannot happen by construction.
+    """
+
+    async def test_a_question_turn_requests_exactly_one_reply(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="une phrase indeterminate",
+            model=StubModel(
+                result=_model_result(
+                    entities={"property_type": "APARTMENT", "city": "Douala"}
+                )
+            ),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.question_key == "ask.rent"
+        staged = uow.events.staged
+        assert len(staged) == 1
+        reply = staged[0]
+        assert isinstance(reply, WhatsAppMessageSendRequested)
+        assert reply.reply_kind == "QUESTION"
+        assert reply.question_key == "ask.rent"
+        assert reply.recipient_phone == PHONE
+        assert reply.session_id == session.id
+
+    async def test_a_refused_analysis_answers_with_a_clarification(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        use_case, _, _, _ = build(
+            uow, session, message_id, model=StubModel(result=_model_result(confidence=0.4))
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is False
+        staged = uow.events.staged
+        assert len(staged) == 1
+        reply = staged[0]
+        assert isinstance(reply, WhatsAppMessageSendRequested)
+        assert reply.reply_kind == "CLARIFY"
+        assert reply.question_key is None
+
+    async def test_a_turn_without_a_question_asks_for_nothing_more(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="une phrase indeterminate",
+            model=StubModel(result=_model_result(intent="SUPPORT")),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.question_key is None
+        staged = uow.events.staged
+        assert len(staged) == 1
+        assert staged[0].reply_kind == "ACK"
+
+    async def test_an_unmatched_message_requests_no_reply(
+        self, uow: FakeUnitOfWork, session: ConversationSession
+    ) -> None:
+        use_case = AnalyseConversationMessageUseCase(
+            uow,
+            inbound=FakeInboundRepository(),
+            sessions=FakeSessionRepository(),
+            turns=FakeTurnRepository(),
+            usage=FakeLedger(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=uuid.uuid4(), session_id=session.id), now=NOW
+        )
+
+        assert uow.events.staged == []
+        assert uow.commits == 0

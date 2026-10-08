@@ -7,6 +7,7 @@ starting more processes, not changing code.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import signal
 
 from loka.bounded_contexts.ai.infrastructure.composition import validate_ai_settings
@@ -16,6 +17,7 @@ from loka.shared.infrastructure.config.settings import get_settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import configure_logging, get_logger
 from loka.shared.infrastructure.worker.consumers import build_consumers
+from loka.shared.infrastructure.worker.outbox_dispatcher import OutboxDispatcher
 
 
 async def run() -> None:
@@ -48,9 +50,20 @@ async def run() -> None:
 
     logger.info("worker_started", queues=[c.queue_spec.name for c in consumers])
 
+    # Rows committed by a consumer only reach the broker through the outbox, so
+    # without this loop the AI analysis, the outbound WhatsApp replies and every
+    # projection stay silent while the workers look healthy. Claiming is done
+    # with SKIP LOCKED, so a second worker process publishes nothing twice.
+    dispatcher = OutboxDispatcher(database, broker)
+    dispatch_task = asyncio.create_task(dispatcher.run_forever(), name="outbox-dispatcher")
+    logger.info("outbox_dispatcher_started")
+
     try:
         await stop.wait()
     finally:
+        dispatch_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await dispatch_task
         for consumer in consumers:
             await consumer.stop()
         await broker.close()

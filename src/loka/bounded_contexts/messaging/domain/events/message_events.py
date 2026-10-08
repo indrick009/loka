@@ -67,6 +67,42 @@ class WhatsAppMessageIngested(DomainEvent):
 
 
 @dataclass(frozen=True, slots=True)
+class WhatsAppMessageSendRequested(DomainEvent):
+    """Ask the outbound layer to answer one turn of a conversation.
+
+    The analysis knows *what* is missing, never *how to phrase it*: it emits a
+    stable ``question_key`` and the outbound layer owns the copy, so a
+    rephrasing or a translation never re-runs the model. Staged in the same
+    transaction as the turn it answers, so a committed analysis cannot end with
+    the landlord waiting for a question nobody will ever send.
+
+    The recipient is carried rather than resolved by the consumer: the session
+    that owns the conversation is the only authority on who is being written to.
+    """
+
+    event_type: str = "WhatsAppMessageSendRequested"
+    session_id: uuid.UUID | None = None
+    recipient_phone: str | None = None
+    reply_kind: str = "ACK"
+    question_key: str | None = None
+    intent: str | None = None
+    language: str = "fr"
+
+    def to_payload(self) -> dict[str, Any]:
+        payload = DomainEvent.to_payload(self)
+        payload["metadata"] = {
+            **payload["metadata"],
+            "session_id": str(self.session_id) if self.session_id else None,
+            "recipient_phone": self.recipient_phone,
+            "reply_kind": self.reply_kind,
+            "question_key": self.question_key,
+            "intent": self.intent,
+            "language": self.language,
+        }
+        return payload
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationAnalysisRequested(DomainEvent):
     """Ask the AI context to understand one stored message.
 

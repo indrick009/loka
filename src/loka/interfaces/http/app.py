@@ -23,12 +23,14 @@ from loka.interfaces.http.routers import properties as properties_router
 from loka.interfaces.http.routers import rental as rental_router
 from loka.interfaces.http.routers import reports as reports_router
 from loka.interfaces.http.routers import visit as visit_router
+from loka.interfaces.http.routers import whatsapp as whatsapp_router
 from loka.shared.application.context import (
     new_id,
     reset_request_id,
     set_request_id,
 )
 from loka.shared.infrastructure import metrics
+from loka.shared.infrastructure.broker.topology import Broker
 from loka.shared.infrastructure.config.settings import Settings, get_settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import configure_logging, get_logger
@@ -59,6 +61,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             resolved.redis_url, max_connections=resolved.redis_max_connections
         )
         container.redis = redis
+        # The broker object is always installed: a broker that cannot be
+        # reached right now must degrade the gateway ingress to a 503 the
+        # transport can retry, not take the whole API down with it.
+        broker = Broker(resolved.broker)
+        container.broker = broker
+        try:
+            await broker.connect()
+            await broker.declare_topology()
+        except Exception as exc:  # pragma: no cover - depends on broker uptime
+            logger.warning("api_broker_unavailable", error=str(exc))
         logger.info(
             "api_started",
             environment=resolved.environment,
@@ -67,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            await broker.close()
             await database.dispose()
             await redis.aclose()
             logger.info("api_stopped")
@@ -148,6 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(payments_router.router)
     app.include_router(reports_router.router)
     app.include_router(fraud_router.router)
+    app.include_router(whatsapp_router.router)
 
     @app.get("/", include_in_schema=False)
     async def root() -> PlainTextResponse:

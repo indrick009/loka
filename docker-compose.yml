@@ -98,7 +98,9 @@ services:
     ports: ["5672:5672", "15672:15672"]
 
   minio:
-    image: minio/minio:latest
+    # Docker Hub no longer carries the community image; quay.io is where
+    # MinIO publishes it now.
+    image: quay.io/minio/minio:latest
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY:-minioadmin}
@@ -108,19 +110,22 @@ services:
     ports: ["9000:9000", "9001:9001"]
 
   baileys:
-    image: node:22-alpine
-    working_dir: /app
+    build:
+      context: ./deploy/baileys
+    environment:
+      PORT: "3000"
+      SESSION_NAME: ${WHATSAPP__SESSION_NAME:-loka-main}
+      PLATFORM_URL: http://api:8000/integrations/whatsapp/events
+      PLATFORM_API_KEY: ${WHATSAPP__API_KEY:-}
+      LOG_LEVEL: ${OBSERVABILITY__LOG_LEVEL:-INFO}
     volumes:
-      - baileys-src:/app
-    command:
-      - sh
-      - -c
-      - "npm init -y >/dev/null 2>&1 || true;
-         npm install @whiskeysockets/baileys pino qrcode express pino-pretty;
-         echo 'Baileys sidecar placeholder: implement src/index.js exposing POST /send and POST /events' ;
-         tail -f /dev/null"
-    profiles: [wa]
+      - baileys-auth:/app/auth
+    depends_on:
+      api:
+        condition: service_healthy
     ports: ["3000:3000"]
+    profiles: [wa]
+    restart: unless-stopped
 
   migrate:
     <<: *app
@@ -128,6 +133,7 @@ services:
       context: .
       target: migrate
     command: ["alembic", "upgrade", "head"]
+    restart: "no"
 
   api:
     <<: *app
@@ -140,6 +146,15 @@ services:
       - --port
       - "8000"
     ports: ["8000:8000"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
       interval: 10s
@@ -152,6 +167,15 @@ services:
       context: .
       target: worker
     command: ["python", "-m", "loka.interfaces.workers.main"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   test:
     <<: *app
@@ -171,4 +195,4 @@ volumes:
   redis-data:
   rabbitmq-data:
   minio-data:
-  baileys-src:
+  baileys-auth:

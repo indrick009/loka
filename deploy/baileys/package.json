@@ -1,0 +1,20 @@
+{
+  "name": "loka-whatsapp-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Baileys sidecar: pairs a WhatsApp account and shuttles deliveries to the Loka API",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "express": "^4.21.2",
+    "pino": "^9.5.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

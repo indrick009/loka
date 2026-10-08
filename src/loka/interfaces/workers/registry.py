@@ -33,6 +33,10 @@ from loka.interfaces.worker.whatsapp_inbound_consumer import (
     INBOUND_QUEUE,
     WhatsAppInboundConsumer,
 )
+from loka.interfaces.worker.whatsapp_outbound_consumer import (
+    OUTBOUND_QUEUE,
+    WhatsAppOutboundConsumer,
+)
 from loka.shared.infrastructure.broker.topology import QUEUES
 from loka.shared.infrastructure.worker.consumers import ConsumerFactory
 
@@ -47,6 +51,7 @@ def handler_registry() -> dict[str, ConsumerFactory]:
     """
     registry: dict[str, ConsumerFactory] = {
         INBOUND_QUEUE: WhatsAppInboundConsumer,
+        OUTBOUND_QUEUE: WhatsAppOutboundConsumer,
         AI_REQUEST_QUEUE: ConversationAnalysisConsumer,
         PAYMENTS_EVENTS_QUEUE: PaymentEventsConsumer,
         FRAUD_ANALYSIS_QUEUE: FraudAnalysisConsumer,
