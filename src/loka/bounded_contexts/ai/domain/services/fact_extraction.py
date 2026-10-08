@@ -157,43 +157,57 @@ class FactExtractor:
         facts: dict[str, Any] = {}
         rejected: dict[str, str] = {}
 
+        # A model is told to answer null when unsure, so a null or empty value
+        # is "the field was not extracted", not "extracted as nothing".
+        present = {
+            name: value
+            for name, value in entities.items()
+            if value is not None and str(value).strip() != ""
+        }
+
         def keep(name: str, build: Any) -> None:
             try:
                 facts[name] = build()
             except DomainError as exc:
                 rejected[name] = exc.message
+            except (TypeError, ValueError) as exc:
+                # Value objects raise DomainError when they refuse a value, but
+                # a StrEnum lookup ("property_type": "NONE") raises ValueError:
+                # both are "this candidate is not a valid domain value" and the
+                # field is dropped, never repaired.
+                rejected[name] = str(exc)
 
-        if "property_type" in entities:
+        if "property_type" in present:
             keep(
                 "property_type",
-                lambda: PropertyType(str(entities["property_type"]).upper()).value,
+                lambda: PropertyType(str(present["property_type"]).upper()).value,
             )
-        if "city" in entities:
+        if "city" in present:
             keep("location", lambda: self._build_location(entities))
-        elif "location_hint" in entities:
+        elif "location_hint" in present:
             # A bare neighbourhood ("Bastos") stays a hint. Promoting it to a
             # city would put Douala's Bonapriso into the city column.
-            keep("location_hint", lambda: _clean_hint(entities["location_hint"]))
-        if "price" in entities:
-            keep("rent", lambda: self._build_rent(entities["price"]))
-        if "bedrooms" in entities or "bathrooms" in entities:
+            keep("location_hint", lambda: _clean_hint(present["location_hint"]))
+        if "price" in present:
+            keep("rent", lambda: self._build_rent(present["price"]))
+        if "bedrooms" in present or "bathrooms" in present:
             keep("rooms", lambda: self._build_rooms(entities))
-        if "surface_area" in entities:
+        if "surface_area" in present:
             keep(
                 "surface",
-                lambda: SurfaceArea(square_metres=_as_int(entities["surface_area"])).square_metres,
+                lambda: SurfaceArea(square_metres=_as_int(present["surface_area"])).square_metres,
             )
-        if "charges" in entities:
+        if "charges" in present:
             keep(
                 "charges",
-                lambda: Money(amount=_as_int(entities["charges"]))
+                lambda: Money(amount=_as_int(present["charges"]))
                 .require_positive(reason="charges must be positive")
                 .amount,
             )
-        if "minimum_duration_months" in entities:
-            keep("minimum_duration_months", lambda: _as_int(entities["minimum_duration_months"]))
-        if "availability" in entities:
-            keep("availability", lambda: str(entities["availability"]).upper())
+        if "minimum_duration_months" in present:
+            keep("minimum_duration_months", lambda: _as_int(present["minimum_duration_months"]))
+        if "availability" in present:
+            keep("availability", lambda: str(present["availability"]).upper())
 
         return ExtractedFacts(facts=facts, rejected=rejected)
 

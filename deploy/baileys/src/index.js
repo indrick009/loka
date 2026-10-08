@@ -92,6 +92,24 @@ function jidDigits(jid) {
   return digitsOf(String(jid || '').split('@')[0].split(':')[0]);
 }
 
+/**
+ * The phone number of a sender, or null when WhatsApp does not expose it.
+ *
+ * Since the multi-device migration a conversation is addressed by an opaque
+ * LID (`94480740917312@lid`) whose digits are not a phone number; the platform
+ * keys every conversation on the number, so the PN carried alongside the key is
+ * the only usable identity. Falling back to the LID digits would send an
+ * unmatchable number downstream, which is why there is no fallback at all.
+ */
+function senderPhone(key) {
+  const jid = key.senderPn || key.participantPn || null;
+  if (jid && String(jid).endsWith('@s.whatsapp.net')) return jidDigits(jid);
+  if (key.remoteJid && String(key.remoteJid).endsWith('@s.whatsapp.net')) {
+    return jidDigits(key.remoteJid);
+  }
+  return null;
+}
+
 function extractText(message) {
   if (!message) return null;
   const candidates = [
@@ -203,6 +221,7 @@ function handleIncoming(messages, upsertType) {
     const text = extractText(message);
     const senderJid = key.participant || key.remoteJid;
     const timestamp = Number(entry.messageTimestamp || Math.floor(Date.now() / 1000));
+    const phone = senderPhone(key);
 
     log.info(
       {
@@ -211,6 +230,7 @@ function handleIncoming(messages, upsertType) {
         sender_jid: senderJid,
         upsert_type: upsertType,
         kind: kindOf(message),
+        sender_phone: phone,
         sender_pn: key.senderPn || null,
         sender_lid: key.senderLid || null,
         participant_pn: key.participantPn || null,
@@ -219,11 +239,18 @@ function handleIncoming(messages, upsertType) {
       'delivery accepted'
     );
 
+    // A message with no phone number cannot be attributed to any session, and
+    // the log above is where to look when one disappears.
+    if (!phone) {
+      log.warn({ external_message_id: key.id, remote_jid: key.remoteJid || null }, 'delivery skipped');
+      continue;
+    }
+
     forward({
       provider: 'baileys',
       external_message_id: key.id,
       conversation_ref: key.remoteJid,
-      sender_phone: jidDigits(senderJid),
+      sender_phone: phone,
       message_kind: kindOf(message),
       provider_timestamp: new Date(timestamp * 1000).toISOString(),
       text,
