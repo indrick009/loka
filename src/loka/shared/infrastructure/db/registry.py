@@ -42,6 +42,10 @@ from loka.bounded_contexts.property.infrastructure.persistence.models import (
     PropertyMediaRow,
     PropertyRow,
 )
+from loka.bounded_contexts.rental.infrastructure.persistence.models import (
+    RentalApplicationRow,
+)
+from loka.bounded_contexts.visit.infrastructure.persistence.models import VisitRow
 from loka.shared.infrastructure.db.audit import AuditLog
 from loka.shared.infrastructure.db.base import Base
 from loka.shared.infrastructure.db.idempotency import IdempotencyKey, WebhookReplayGuard
@@ -68,6 +72,7 @@ __all__ = [
     "PropertyMediaRow",
     "PropertyRow",
     "RefreshTokenRow",
+    "RentalApplicationRow",
     "ReportRow",
     "RiskProfileRow",
     "ServiceAccessGrantRow",
@@ -76,5 +81,6 @@ __all__ = [
     "UserRow",
     "VerificationDocumentRow",
     "VerificationRequestRow",
+    "VisitRow",
     "WebhookReplayGuard",
 ]

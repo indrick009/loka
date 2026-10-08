@@ -161,7 +161,7 @@ class SqlAlchemyVerificationRequestRepository:
         )
         return list(result.scalars())
 
-async def _replace_documents(self, request: VerificationRequest) -> None:
+    async def _replace_documents(self, request: VerificationRequest) -> None:
         """Rewrite the evidence set so the rows match the aggregate exactly."""
         await self._session.execute(
             delete(VerificationDocumentRow).where(

@@ -19,12 +19,13 @@ from loka.bounded_contexts.landlord.domain.entities.landlord_profile import Land
 from loka.bounded_contexts.landlord.domain.entities.verification_request import (
     VerificationRequest,
 )
+from loka.bounded_contexts.landlord.domain.repositories.verification_repository import (
+    LANDLORD_PROFILE_REPOSITORY,
+    VERIFICATION_REQUEST_REPOSITORY,
+)
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.application.use_case import UseCase
 from loka.shared.domain.identifiers import new_id
-
-LANDLORD_PROFILE_REPOSITORY = "landlord_profile"
-VERIFICATION_REQUEST_REPOSITORY = "verification_request"
 
 
 @dataclass(frozen=True, slots=True)

@@ -44,6 +44,9 @@ QUEUES: tuple[QueueSpec, ...] = (
     QueueSpec("whatsapp.outgoing", routing_keys=("WhatsAppMessageSendRequested",)),
     QueueSpec("ai.requests", routing_keys=("ConversationAnalysisRequested",)),
     QueueSpec("fraud.analysis", routing_keys=("FraudAnalysisRequested",)),
+    QueueSpec(
+        "landlord.verification", routing_keys=("LandlordVerificationSubmitted",)
+    ),
     QueueSpec("property.verification", routing_keys=("PropertyDataQualityScanRequested",)),
     QueueSpec("notifications", routing_keys=("NotificationRequested",)),
     QueueSpec("payments.events", routing_keys=("PaymentSucceeded", "PaymentFailed")),
