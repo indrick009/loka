@@ -30,6 +30,13 @@ PROPERTY_FLOW = {
     "ask.conditions",
     "ask.confirm_property",
     "confirm.published",
+    # The tenant's side of the same conversation.
+    "ask.search_type",
+    "ask.search_location",
+    "ask.search_budget",
+    "ask.search_criteria",
+    "ask.search_results",
+    "ask.search_choice",
 }
 
 

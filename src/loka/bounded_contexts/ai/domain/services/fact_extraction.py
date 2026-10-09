@@ -62,6 +62,20 @@ PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("conditions", FlowStep.COLLECT_CONDITIONS),
 )
 
+# The tenant's form is a different shape. A search only needs what narrows the
+# catalogue — the type, the place, the budget — and every further field a
+# listing collects (charges, deposit, dates, conditions) is a question a
+# searching tenant cannot answer, because it describes someone else's property.
+# Asking them would stall the search on a field search does not have.
+#
+# The terminal step is ``PRESENT_RESULTS`` rather than a question: reaching it
+# means the criteria are complete, and the next move is to read the catalogue.
+SEARCH_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
+    ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
+    ("location", FlowStep.COLLECT_LOCATION),
+    ("rent", FlowStep.COLLECT_PRICE),
+)
+
 # Intents that concern a listing or a search. Everything else — "merci", "c'est
 # loué", "je vais réfléchir" — records its turn but must never move a listing
 # form forward.
@@ -152,6 +166,19 @@ QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_CONDITIONS: "ask.conditions",
     FlowStep.CONFIRM_PROPERTY: "ask.confirm_property",
     FlowStep.PUBLISHED: "confirm.published",
+}
+
+# The same step asks opposite people opposite things: a landlord is asked where
+# the property *is* and what rent they *want*, a tenant where they want to look
+# and what budget they *have*. No single sentence serves both, so the search
+# flow carries its own keys and the outbound layer words each of them.
+SEARCH_QUESTION_BY_STEP: dict[FlowStep, str] = {
+    FlowStep.COLLECT_PROPERTY_TYPE: "ask.search_type",
+    FlowStep.COLLECT_LOCATION: "ask.search_location",
+    FlowStep.COLLECT_PRICE: "ask.search_budget",
+    FlowStep.COLLECT_SEARCH_CRITERIA: "ask.search_criteria",
+    FlowStep.PRESENT_RESULTS: "ask.search_results",
+    FlowStep.COLLECT_PROPERTY_CHOICE: "ask.search_choice",
 }
 
 
@@ -288,22 +315,33 @@ class FactExtractor:
         computed from the current message alone, so a landlord who gives their
         city after already naming the property type gets asked for the type
         again — the form restarts on every turn instead of advancing.
+
+        The requirements walked are the target flow's, not the session's: the
+        first message of a search arrives in a session whose flow is still
+        SUPPORT, and it must open on the tenant's form rather than on the
+        landlord's.
         """
         if intent not in LISTING_INTENTS:
             return None
-        if intent in FLOW_BY_OPENING_INTENT:
-            return self._first_missing(facts, known)
-        if flow not in LISTING_FLOWS:
+        if intent not in FLOW_BY_OPENING_INTENT and flow not in LISTING_FLOWS:
             return None
-        return self._first_missing(facts, known)
+        target_flow = FLOW_BY_OPENING_INTENT.get(intent, flow)
+        if target_flow is FlowName.PROPERTY_SEARCH:
+            return self._first_missing(facts, known, SEARCH_REQUIREMENTS, FlowStep.PRESENT_RESULTS)
+        return self._first_missing(facts, known, PROPERTY_REQUIREMENTS, FlowStep.CONFIRM_PROPERTY)
 
     @staticmethod
-    def _first_missing(facts: ExtractedFacts, known: dict[str, Any] | None = None) -> FlowStep:
+    def _first_missing(
+        facts: ExtractedFacts,
+        known: dict[str, Any] | None,
+        requirements: tuple[tuple[str, FlowStep], ...],
+        complete: FlowStep,
+    ) -> FlowStep:
         already_known = known or {}
-        for name, step in PROPERTY_REQUIREMENTS:
+        for name, step in requirements:
             if not facts.has(name) and name not in already_known:
                 return step
-        return FlowStep.CONFIRM_PROPERTY
+        return complete
 
     @staticmethod
     def _build_rent(raw: Any) -> int:
@@ -347,8 +385,20 @@ def is_supported_intent(intent: str) -> bool:
     return intent in SUPPORTED_INTENTS
 
 
-def question_key_for(step: FlowStep | None) -> str | None:
-    return None if step is None else QUESTION_BY_STEP.get(step)
+def question_key_for(step: FlowStep | None, flow: FlowName | None = None) -> str | None:
+    """The stable key the outbound layer words for this step *in this flow*.
+
+    ``flow`` may be omitted where only one reading is possible; it must be
+    passed wherever the same step can be asked of either side, because the key
+    is what selects the sentence a tenant reads versus the one a landlord does.
+    """
+    if step is None:
+        return None
+    if flow is FlowName.PROPERTY_SEARCH:
+        search_key = SEARCH_QUESTION_BY_STEP.get(step)
+        if search_key is not None:
+            return search_key
+    return QUESTION_BY_STEP.get(step)
 
 
 def _as_int(raw: Any) -> int:

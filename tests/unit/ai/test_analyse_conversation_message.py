@@ -20,6 +20,8 @@ import pytest
 
 from loka.bounded_contexts.ai.application.ports import (
     BudgetPolicy,
+    ConversationPropertyHit,
+    ConversationSearchQuery,
     ConversationTurn,
     IntentModel,
     TurnSummary,
@@ -294,6 +296,7 @@ def build(
     budget: BudgetPolicy | None = None,
     ledger: FakeLedger | None = None,
     sessions: FakeSessionRepository | None = None,
+    search: Any | None = None,
 ) -> tuple[
     AnalyseConversationMessageUseCase,
     FakeTurnRepository,
@@ -323,6 +326,7 @@ def build(
         model=model,
         response_model=response_model,
         budget=budget,
+        search=search,
     )
     return use_case, turns, usage, session_repo
 
@@ -1573,3 +1577,264 @@ class TestSingleCallReply:
         assert "rent" not in fields
         assert "location" in fields
         assert "next_question" not in payload["conversation"]["known_facts"]
+
+
+class StubSearch:
+    """The catalogue behind the port: what it was asked, and what it holds."""
+
+    def __init__(self, hits: list[ConversationPropertyHit] | None = None) -> None:
+        self.hits = hits or []
+        self.queries: list[ConversationSearchQuery] = []
+
+    async def search_for_conversation(
+        self, query: ConversationSearchQuery, *, limit: int = 5
+    ) -> list[ConversationPropertyHit]:
+        self.queries.append(query)
+        return self.hits
+
+
+def _hit(**overrides: Any) -> ConversationPropertyHit:
+    fields: dict[str, Any] = {
+        "property_id": "11111111-1111-1111-1111-111111111111",
+        "property_type": "APARTMENT",
+        "city": "Yaoundé",
+        "neighbourhood": "Bastos",
+        "price_xaf": 150_000,
+        "bedrooms": 3,
+        "surface_m2": 90,
+    }
+    fields.update(overrides)
+    return ConversationPropertyHit(**fields)
+
+
+class TestConversationSearch:
+    """The tenant's criteria become a catalogue read, and the catalogue answers.
+
+    The reply is the one turn where the platform speaks as itself: the numbers
+    come from the read model, so they are printed deterministically and the
+    model's sentence — however natural — is not allowed to replace them.
+    """
+
+    async def test_complete_criteria_run_the_search_and_present_the_catalogue(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        search = StubSearch(
+            hits=[
+                _hit(),
+                _hit(
+                    property_id="22222222-2222-2222-2222-222222222222",
+                    neighbourhood="Bonapriso",
+                    price_xaf=120_000,
+                    bedrooms=2,
+                    surface_m2=60,
+                ),
+            ]
+        )
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    intent="PROPERTY_SEARCH",
+                    entities={
+                        "property_type": "APARTMENT",
+                        "city": "Yaoundé",
+                        "neighbourhood": "Bastos",
+                        "price": 180_000,
+                    },
+                    reply="Voilà ce que j'ai trouvé.",
+                )
+            ),
+            search=search,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert search.queries == [
+            ConversationSearchQuery(
+                city="Yaoundé",
+                neighbourhoods=("Bastos",),
+                property_types=("APARTMENT",),
+                max_price_xaf=180_000,
+            )
+        ]
+        assert report.next_step == "COLLECT_PROPERTY_CHOICE"
+        assert report.question_key == "ask.search_choice"
+        assert session.flow is FlowName.PROPERTY_SEARCH
+        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
+
+        staged = uow.events.staged
+        assert len(staged) == 1
+        # The catalogue's text wins over the sentence the model wrote: a price
+        # rephrased by a model would be a listing that does not exist.
+        assert staged[0].text == (
+            "J'ai trouvé 2 logements :\n"
+            "1. Appartement 3 chambres 90 m2 - Bastos, Yaoundé - 150 000 FCFA/mois\n"
+            "2. Appartement 2 chambres 60 m2 - Bonapriso, Yaoundé - 120 000 FCFA/mois\n"
+            "Répondez avec le numéro du logement qui vous intéresse."
+        )
+        assert staged[0].reply_kind == "QUESTION"
+        assert staged[0].question_key == "ask.search_choice"
+
+    async def test_the_next_search_question_is_worded_for_a_tenant(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The same step asks a landlord what rent they want and a tenant what
+        budget they have: the key, not the step, carries the difference."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["next_question"] = "ask.search_type"
+        model = StubModel(
+            result=_model_result(
+                intent="COLLECT_LOCATION", entities={"city": "Douala"}
+            )
+        )
+
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="Douala", model=model, search=StubSearch()
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.next_step == "COLLECT_PRICE"
+        assert report.question_key == "ask.search_budget"
+        assert session.context["next_question"] == "ask.search_budget"
+        staged = uow.events.staged
+        assert staged[0].reply_kind == "QUESTION"
+        assert staged[0].question_key == "ask.search_budget"
+
+    async def test_the_tenant_form_is_what_the_model_is_given(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The model must never be shown the landlord's remaining fields during
+        a search: charges and deposit are questions a tenant cannot answer."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["property_type"] = "APARTMENT"
+        session.context["next_question"] = "ask.search_location"
+        model = StubModel(
+            result=_model_result(
+                intent="COLLECT_LOCATION", entities={"city": "Douala"}
+            )
+        )
+
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="Douala", model=model, search=StubSearch()
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        assert [field["field"] for field in payload["required_fields"]] == [
+            "location",
+            "rent",
+        ]
+        assert "tenant" in payload["you_are_helping"]
+
+    async def test_an_empty_catalogue_sends_the_tenant_back_to_the_criteria(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """There is nothing to choose, so the turn offers the one move that can
+        change the outcome: widening the search."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
+        session.context["next_question"] = "ask.search_budget"
+        search = StubSearch(hits=[])
+
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="50 000",
+            model=StubModel(
+                result=_model_result(intent="COLLECT_PRICE", entities={"price": 50_000})
+            ),
+            search=search,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert search.queries[0].max_price_xaf == 50_000
+        assert report.next_step == "COLLECT_SEARCH_CRITERIA"
+        assert report.question_key == "ask.search_criteria"
+        assert session.step is FlowStep.COLLECT_SEARCH_CRITERIA
+        staged = uow.events.staged
+        assert "rien trouvé" in staged[0].text
+
+    async def test_a_search_without_a_port_still_answers_the_thread(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """A deployment that never wired the catalogue must fail as a sentence,
+        not as a silence the tenant waits on."""
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    intent="PROPERTY_SEARCH",
+                    entities={
+                        "property_type": "STUDIO",
+                        "city": "Douala",
+                        "price": 80_000,
+                    },
+                )
+            ),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is True
+        staged = uow.events.staged
+        assert len(staged) == 1
+        assert "recherche" in staged[0].text
+        assert staged[0].question_key == "ask.search_results"
+
+    async def test_without_a_model_the_rules_still_reach_the_catalogue(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The deployment with no AI key must still answer a tenant: the rules
+        read the sentence, the domain validates it, the catalogue replies."""
+        search = StubSearch(hits=[_hit()])
+
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="je cherche un appartement à Bastos pour 150 000 fcfa",
+            search=search,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is True
+        assert report.used_llm is False
+        assert search.queries == [
+            ConversationSearchQuery(
+                city="Yaoundé",
+                neighbourhoods=("Bastos",),
+                property_types=("APARTMENT",),
+                max_price_xaf=150_000,
+            )
+        ]
+        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
+        assert "J'ai trouvé 1 logement :" in uow.events.staged[0].text

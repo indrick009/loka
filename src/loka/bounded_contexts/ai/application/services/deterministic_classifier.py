@@ -208,6 +208,7 @@ LOCATION_HINT_PATTERN = re.compile(
 # the value to its field.
 _BILLABLE_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
     "ask.rent": ("COLLECT_PRICE", "price"),
+    "ask.search_budget": ("COLLECT_PRICE", "price"),
     "ask.deposit": ("COLLECT_DEPOSIT", "deposit"),
     "ask.charges": ("COLLECT_CHARGES", "charges"),
 }

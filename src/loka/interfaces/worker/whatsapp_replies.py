@@ -15,7 +15,9 @@ name. Unknown keys therefore degrade to the generic clarification.
 from __future__ import annotations
 
 # The order of the property flow is decided upstream (see PROPERTY_REQUIREMENTS
-# in the AI context); these are only the sentences that ask for each item.
+# and SEARCH_REQUIREMENTS in the AI context); these are only the sentences that
+# ask for each item. The search keys word the tenant's side of the same steps:
+# a landlord is asked where the property is, a tenant where they want to look.
 QUESTION_TEXT: dict[str, str] = {
     "ask.property_type": (
         "Quel type de logement souhaitez-vous publier ?\n"
@@ -59,6 +61,25 @@ QUESTION_TEXT: dict[str, str] = {
     "confirm.published": (
         "Votre bien est publié. Il apparaîtra dans les recherches des locataires."
     ),
+    # The tenant's side: what to look for, and what to do with what is found.
+    "ask.search_type": (
+        "Quel type de logement cherchez-vous ?\n"
+        "Exemple : appartement, studio, maison, chambre."
+    ),
+    "ask.search_location": (
+        "Où cherchez-vous ?\n"
+        "Indiquez une ville ou un quartier, par exemple : Douala, Bastos."
+    ),
+    "ask.search_budget": "Quel est votre budget maximum de loyer mensuel, en FCFA ?",
+    "ask.search_criteria": (
+        "Quel critère voulez-vous modifier ?\n"
+        "Par exemple : la ville, le quartier, le type de logement ou le budget."
+    ),
+    "ask.search_results": (
+        "Je n'ai pas pu afficher les logements trouvés pour le moment.\n"
+        "Réessayez dans un instant."
+    ),
+    "ask.search_choice": "Indiquez le numéro du logement qui vous intéresse.",
 }
 
 ACK_TEXT = (

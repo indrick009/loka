@@ -68,6 +68,38 @@ Règles :
   le message contient déjà la valeur, `_first_missing` passe simplement au
   suivant.
 
+### Le flux locataire : `PROPERTY_SEARCH`
+
+Le même moteur porte la recherche d'un locataire, avec trois champs seulement :
+
+| # | Champ | Étape | Question |
+| - | ----- | ----- | -------- |
+| 1 | `property_type` | `COLLECT_PROPERTY_TYPE` | `ask.search_type` |
+| 2 | `location` | `COLLECT_LOCATION` | `ask.search_location` |
+| 3 | `rent` (budget) | `COLLECT_PRICE` | `ask.search_budget` |
+| — | bien présentés | `PRESENT_RESULTS` → `COLLECT_PROPERTY_CHOICE` | `ask.search_results`, `ask.search_choice` |
+
+- `SEARCH_REQUIREMENTS` ordonne ces trois champs. `standing`, `charges`,
+  `deposit`, `availability`… ne sont **jamais** demandés à un locataire : il ne
+  peut pas y répondre, et une question sans réponse est un fil qui s'arrête.
+- Une même étape porte deux clés : `question_key_for(step, flow)` renvoie
+  `ask.rent` pour un bailleur et `ask.search_budget` pour un locataire. Le
+  texte sortant ne change pas — c'est la **clé enregistrée** qui dit à qui l'on
+  parlait, et c'est elle qui nourrit `required_fields` au tour suivant.
+- Le budget est un loyer : il part dans `max_price_xaf`. Le prix affiché est
+  le `public_price_xaf` du bien (loyer + charges quand elles sont en sus),
+  c'est-à-dire la somme que le locataire compare vraiment, étiquetée
+  « FCFA/mois ».
+- La lecture passe par le port `PropertySearchGateway`
+  (`ConversationSearchQuery` → `SearchPropertiesUseCase`) : le contexte IA ne
+  touche jamais le dépôt d'un autre contexte.
+- Trois issues : au moins un bien → texte numéroté, étape
+  `COLLECT_PROPERTY_CHOICE` ; aucun bien → « rien trouvé » et retour à
+  `COLLECT_SEARCH_CRITERIA` pour élargir la recherche ; port indisponible →
+  phrase de repli, jamais un fil silencieux.
+- Le texte des résultats **remplace** la phrase du modèle : un prix reformulé
+  par un LLM serait une annonce qui n'existe pas.
+
 ## 3. Résolution du lieu
 
 `_build_location` : si la ville est absente mais qu'un quartier est présent, le
@@ -83,7 +115,8 @@ exactement ainsi qu'une annonce erronée entrerait dans la recherche.
 | Comprendre l'intention, extraire des entités candidates | LLM |
 | Ouvrir un flux (`CREATE_PROPERTY`, `PROPERTY_SEARCH`) | intention, mappée en code |
 | Valider chaque valeur via les value objects du domaine | `FactExtractor` |
-| Ordre des questions, étape suivante | `PROPERTY_REQUIREMENTS` (code) |
+| Ordre des questions, étape suivante | `PROPERTY_REQUIREMENTS` / `SEARCH_REQUIREMENTS` (code) |
+| Lecture du catalogue, présentation des résultats | code (`_present_results`), données du dépôt de biens |
 | Reformulation du message sortant | couche outbound (`whatsapp_replies`) |
 
 Le LLM n'est jamais cru sur parole :
@@ -120,7 +153,12 @@ invariants pour qu'une refonte ne réintroduise pas silencieusement la charge.
   formulaire, résolution des quartiers, refus d'un lieu inconnu.
 - `tests/unit/ai/test_analyse_conversation_message.py` : progression, voie
   rapide (salutation), clôture de la question de lieu sur un quartier nu,
-  invariants de taille du prompt.
+  invariants de taille du prompt, et le flux de recherche (`TestConversationSearch`) :
+  critères complets, question posée avec les mots du locataire, catalogue vide,
+  port absent, tour complet sans modèle.
+- `tests/unit/ai/test_conversation_property_search.py` : la traduction
+  critères → requête du contexte propriété, et la projection → tranche
+  affichable (les colonnes internes ne sortent jamais).
 - `tests/unit/property/test_conversation_listing_facts.py` : les faits
   confirmés hydratent l'agrégat et **laissent uniquement les photos manquantes**
   — la preuve que le formulaire collecte assez pour publier.

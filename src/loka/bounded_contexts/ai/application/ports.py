@@ -75,6 +75,54 @@ class PropertyListing(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class ConversationSearchQuery:
+    """One tenant search, stated in the facts the conversation accepted.
+
+    Deliberately not the Property context's search criteria: the pipeline knows
+    a city, a budget and a type, and a widening of the query language (a sort,
+    a cursor, a date filter) must not silently change what a conversation can
+    ask for. The adapter translates.
+    """
+
+    city: str
+    neighbourhoods: tuple[str, ...] = ()
+    property_types: tuple[str, ...] = ()
+    max_price_xaf: int | None = None
+    min_bedrooms: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationPropertyHit:
+    """The slice of a listing a WhatsApp reply is allowed to show.
+
+    Enough to name the property and its monthly cost; never the landlord's
+    identity, never an internal status — the reply is sent to a stranger who
+    has not been shown anything yet.
+    """
+
+    property_id: str
+    property_type: str
+    city: str
+    neighbourhood: str | None
+    price_xaf: int
+    bedrooms: int | None = None
+    surface_m2: int | None = None
+
+
+class PropertySearchGateway(Protocol):
+    """The catalogue read the search flow triggers.
+
+    The single read this pipeline performs. Returning typed hits rather than
+    the projection's dictionaries keeps the reply formatting independent of how
+    the read model is shaped, and keeps the port stubbable in a test.
+    """
+
+    async def search_for_conversation(
+        self, query: ConversationSearchQuery, *, limit: int = 5
+    ) -> list[ConversationPropertyHit]: ...
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationTurn:
     """One analysed message, recorded whatever the outcome."""
 
@@ -178,12 +226,15 @@ __all__ = [
     "AiUsageLedger",
     "BudgetDecision",
     "BudgetPolicy",
+    "ConversationPropertyHit",
+    "ConversationSearchQuery",
     "ConversationTurn",
     "ConversationTurnRepository",
     "IntentModel",
     "IntentResult",
     "Prompt",
     "PropertyListing",
+    "PropertySearchGateway",
     "ResponseModel",
     "TurnSummary",
     "UsageEntry",

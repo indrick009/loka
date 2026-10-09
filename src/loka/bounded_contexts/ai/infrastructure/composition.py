@@ -18,6 +18,9 @@ from loka.bounded_contexts.ai.application.ports import BudgetPolicy
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
+from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
+    ConversationPropertySearch,
+)
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
@@ -97,4 +100,7 @@ def analyse_conversation_message_use_case(
         # The one write the analysis triggers: a confirmed listing becomes a
         # property draft. Injected here so the pipeline depends on the port.
         listing=create_property_from_conversation_use_case(uow),
+        # The one read it triggers: a tenant's completed criteria become a
+        # catalogue search whose results the reply prints.
+        search=ConversationPropertySearch(uow),
     )

@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -31,10 +32,13 @@ from loka.bounded_contexts.ai.application.ports import (
     AiUsageLedger,
     BudgetDecision,
     BudgetPolicy,
+    ConversationPropertyHit,
+    ConversationSearchQuery,
     ConversationTurn,
     ConversationTurnRepository,
     IntentModel,
     PropertyListing,
+    PropertySearchGateway,
     ResponseModel,
     TurnSummary,
     UsageEntry,
@@ -49,6 +53,7 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     LISTING_FLOWS,
     MIN_ACCEPTED_CONFIDENCE,
     PROPERTY_REQUIREMENTS,
+    SEARCH_REQUIREMENTS,
     SUPPORTED_INTENTS,
     ExtractedFacts,
     FactExtractor,
@@ -142,6 +147,14 @@ QUESTION_TOPICS: dict[str, str] = {
     ),
     "ask.confirm_property": "confirmation of the summary before publishing",
     "confirm.published": "confirmation that the property has been published",
+    # The tenant's side: a search asks its own questions, and these glosses are
+    # what the reply model reads instead of the outbound copy.
+    "ask.search_type": "the type of property the tenant is looking for",
+    "ask.search_location": "the city and neighbourhood the tenant wants",
+    "ask.search_budget": "the maximum monthly rent the tenant is willing to pay, in XAF",
+    "ask.search_criteria": "which search criterion the tenant wants to change",
+    "ask.search_results": "the list of properties matching the tenant's criteria",
+    "ask.search_choice": "which property from the list the tenant picks",
 }
 
 # What a month of rent costs here, by property type, in XAF. A model with no
@@ -212,6 +225,24 @@ def _opens_new_flow(session: ConversationSession, intent: str) -> bool:
     return not (session.flow in LISTING_FLOWS and _has_listing_facts(session.context))
 
 
+def _target_flow(session: ConversationSession, intent: str) -> FlowName:
+    """The flow this turn belongs to, including one it is about to open.
+
+    Needed wherever the answer must be phrased *before* the session moves: the
+    first search message still reads as SUPPORT in the session, but its next
+    question is a tenant's.
+    """
+    opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
+    if opening_flow is not None and _opens_new_flow(session, intent):
+        return opening_flow
+    return session.flow
+
+
+def _known_facts(session: ConversationSession, intent: str) -> dict[str, Any]:
+    """What this turn may build on: nothing from an abandoned attempt."""
+    return {} if _opens_new_flow(session, intent) else dict(session.context)
+
+
 def question_topic(next_key: str | None, flow: FlowName) -> str | None:
     """The plain-words gloss of the next question, phrased for this flow."""
     if not next_key:
@@ -234,6 +265,11 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.minimum_duration": "minimum_duration_months",
     "ask.availability": "availability",
     "ask.conditions": "conditions",
+    # The search questions bind to the same entities: a tenant answering a
+    # budget question with "150" is giving a price, exactly as a landlord is.
+    "ask.search_type": "property_type",
+    "ask.search_location": "city and neighbourhood",
+    "ask.search_budget": "price",
 }
 
 RESPONSE_SCHEMA: dict[str, Any] = {
@@ -347,6 +383,7 @@ class AnalyseConversationMessageUseCase:
         budget: BudgetPolicy | None = None,
         provider_name: str = "openrouter",
         listing: PropertyListing | None = None,
+        search: PropertySearchGateway | None = None,
     ) -> None:
         self._uow = uow
         self._inbound = inbound
@@ -360,6 +397,7 @@ class AnalyseConversationMessageUseCase:
         self._budget = budget
         self._provider = provider_name
         self._listing = listing
+        self._search = search
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
         moment = ensure_utc(now)
@@ -624,10 +662,11 @@ class AnalyseConversationMessageUseCase:
         # step further, not back at the type question. When this message opens a
         # *new* flow, the old facts belong to the abandoned attempt and are
         # deliberately ignored — matching the reset ``_advance_session`` does.
-        starts_new_flow = _opens_new_flow(session, intent)
-        known = {} if starts_new_flow else dict(session.context)
+        known = _known_facts(session, intent)
         next_step = (
-            self._extractor.next_step(intent, facts, flow=session.flow, known=known)
+            self._extractor.next_step(
+                intent, facts, flow=_target_flow(session, intent), known=known
+            )
             if reason is None
             else None
         )
@@ -658,7 +697,11 @@ class AnalyseConversationMessageUseCase:
         if self._response_model is None or not text.strip():
             return None, None
 
-        next_key = question_key_for(verdict.next_step) if verdict.accepted else None
+        next_key = (
+            question_key_for(verdict.next_step, _target_flow(session, verdict.intent))
+            if verdict.accepted
+            else None
+        )
         prompt = build_reply_prompt(
             text=text,
             language=session.language,
@@ -733,20 +776,30 @@ class AnalyseConversationMessageUseCase:
                 )
             )
 
+        # The model's sentence is swept for decoding loops here: the
+        # deterministic copy that may replace it is written by the platform and
+        # needs no such handling.
+        reply_text = _collapse_repeats(reply_text) if reply_text else reply_text
+
         if accepted:
             listing_text, next_step, listing_id = await self._confirm_listing(
                 session, intent=intent, next_step=next_step, now=now
             )
+            search_text, next_step = await self._present_results(
+                session, intent=intent, facts=facts, next_step=next_step
+            )
             await self._advance_session(
                 session, intent, facts, next_step, now=now, attach_property_id=listing_id
             )
-            reply_text = listing_text or reply_text
+            # The catalogue's numbers are data, not prose: they win over both
+            # the model's sentence and the listing summary, which cannot apply
+            # to the same turn.
+            reply_text = search_text or listing_text or reply_text
 
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
         # notice a reply that was never staged.
-        reply_text = _collapse_repeats(reply_text) if reply_text else reply_text
-        question = question_key_for(next_step) if accepted else None
+        question = question_key_for(next_step, session.flow) if accepted else None
         await self._stage_reply(
             session,
             intent=intent,
@@ -844,6 +897,41 @@ class AnalyseConversationMessageUseCase:
             return None, FlowStep.PUBLISHED, result.property_id
         return _missing_listing_reply(result.missing), FlowStep.COLLECT_MEDIA, result.property_id
 
+    async def _present_results(
+        self,
+        session: ConversationSession,
+        *,
+        intent: str,
+        facts: ExtractedFacts,
+        next_step: FlowStep | None,
+    ) -> tuple[str | None, FlowStep | None]:
+        """Run the tenant's search once its criteria are complete.
+
+        Only ``PRESENT_RESULTS`` reaches this, and the extractor hands that step
+        over exactly when the tenant's form is filled — the same "when" rule
+        ``_confirm_listing`` uses for a landlord's publication. The reply is
+        written here rather than by the model because it is the catalogue
+        speaking: a price or a neighbourhood a model rephrased would be a
+        listing that does not exist.
+
+        An empty result moves back to the criteria step, not to a choice: there
+        is nothing to choose, and the tenant's next move is to widen the search.
+        """
+        if next_step is not FlowStep.PRESENT_RESULTS:
+            return None, next_step
+        if self._search is None:
+            return _SEARCH_UNAVAILABLE_TEXT, next_step
+        query = _search_query({**_known_facts(session, intent), **facts.as_context()})
+        if query is None:
+            # The form reported complete but the facts describe no place to
+            # search: calling that "no match" would be a lie the tenant cannot
+            # act on, so it is reported as a failure instead.
+            return _SEARCH_UNAVAILABLE_TEXT, next_step
+        hits = await self._search.search_for_conversation(query, limit=SEARCH_RESULT_LIMIT)
+        if not hits:
+            return _NO_RESULTS_TEXT, FlowStep.COLLECT_SEARCH_CRITERIA
+        return _results_text(hits), FlowStep.COLLECT_PROPERTY_CHOICE
+
     async def _advance_session(
         self,
         session: ConversationSession,
@@ -878,7 +966,7 @@ class AnalyseConversationMessageUseCase:
         # expected_revision equal to the value read from the row.
         if attach_property_id is not None:
             session.attach_property(attach_property_id, now=now)
-        question = question_key_for(next_step)
+        question = question_key_for(next_step, session.flow)
         if question:
             session.context["next_question"] = question
         await self._sessions.save(session, expected_revision=observed)
@@ -948,6 +1036,97 @@ def _join_fr(items: list[str]) -> str:
     if len(items) == 1:
         return items[0]
     return ", ".join(items[:-1]) + " et " + items[-1]
+
+
+# A WhatsApp thread is not a results page: five properties is already a long
+# message, and the catalogue is read again on the next criteria anyway.
+SEARCH_RESULT_LIMIT = 5
+
+_SEARCH_UNAVAILABLE_TEXT = (
+    "Je n'ai pas pu lancer la recherche pour le moment. "
+    "Réessayez dans un instant, ou reformulez votre demande."
+)
+
+_NO_RESULTS_TEXT = (
+    "Je n'ai rien trouvé pour le moment avec ces critères. "
+    "Vous pouvez élargir la recherche : changez le quartier, la ville ou le budget."
+)
+
+_SEARCH_OUTRO = "Répondez avec le numéro du logement qui vous intéresse."
+
+_PROPERTY_TYPE_LABELS_FR: dict[str, str] = {
+    "APARTMENT": "Appartement",
+    "COMMERCIAL": "Local commercial",
+    "DUPLEX": "Duplex",
+    "HOUSE": "Maison",
+    "LAND": "Terrain",
+    "LOFT": "Loft",
+    "ROOM": "Chambre",
+    "STUDIO": "Studio",
+}
+
+
+def _format_xaf(amount: int) -> str:
+    """"150 000" — grouped the way it is read out loud here."""
+    return f"{amount:,}".replace(",", " ")
+
+
+def _hit_line(index: int, hit: ConversationPropertyHit) -> str:
+    kind = _PROPERTY_TYPE_LABELS_FR.get(hit.property_type, hit.property_type.title())
+    details = [kind]
+    if hit.bedrooms:
+        details.append(f"{hit.bedrooms} chambre{'s' if hit.bedrooms > 1 else ''}")
+    if hit.surface_m2:
+        details.append(f"{hit.surface_m2} m2")
+    place = ", ".join(part for part in (hit.neighbourhood, hit.city) if part)
+    # The price is the public one: rent plus charges when they are billed on
+    # top, which is the number a tenant actually compares.
+    return f"{index}. {' '.join(details)} - {place} - {_format_xaf(hit.price_xaf)} FCFA/mois"
+
+
+def _results_text(hits: Sequence[ConversationPropertyHit]) -> str:
+    count = len(hits)
+    lines = [f"J'ai trouvé {count} {'logement' if count == 1 else 'logements'} :"]
+    lines.extend(_hit_line(index, hit) for index, hit in enumerate(hits, start=1))
+    lines.append(_SEARCH_OUTRO)
+    return "\n".join(lines)
+
+
+def _search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
+    """The catalogue query these facts describe, or ``None``.
+
+    ``None`` means the facts cannot describe a search at all — no city, the one
+    criterion the read model cannot do without. The caller reports that as a
+    failure, because "nothing matches your budget" and "there was nothing to
+    search with" are different answers.
+    """
+    location = facts.get("location")
+    if not isinstance(location, dict):
+        return None
+    city = str(location.get("city") or "").strip()
+    if not city:
+        return None
+    neighbourhood = str(location.get("neighbourhood") or "").strip()
+
+    property_type = facts.get("property_type")
+    rent = facts.get("rent")
+    rooms = facts.get("rooms")
+    bedrooms = rooms.get("bedrooms") if isinstance(rooms, dict) else None
+
+    return ConversationSearchQuery(
+        city=city,
+        neighbourhoods=(neighbourhood,) if neighbourhood else (),
+        property_types=(str(property_type),) if property_type else (),
+        max_price_xaf=_optional_amount(rent),
+        min_bedrooms=_optional_amount(bedrooms, minimum=1),
+    )
+
+
+def _optional_amount(value: Any, *, minimum: int = 0) -> int | None:
+    """An int that is not a bool and not below ``minimum``, else ``None``."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= minimum else None
 
 
 def _collapse_repeats(text: str) -> str:
@@ -1060,14 +1239,19 @@ def _missing_fields(flow: FlowName, known: dict[str, Any]) -> list[dict[str, str
 
     Making the model decide the next question is expensive in tokens *and*
     fragile; handing it only the remaining fields lets it do both jobs (read the
-    message, ask the next question) while the code still owns the order.
+    message, ask the next question) while the code still owns the order. Each
+    flow walks its own form: a tenant is never shown the landlord's charges and
+    deposit as fields still to come.
     """
+    requirements = (
+        SEARCH_REQUIREMENTS if flow is FlowName.PROPERTY_SEARCH else PROPERTY_REQUIREMENTS
+    )
     fields: list[dict[str, str]] = []
-    for name, step in PROPERTY_REQUIREMENTS:
+    for name, step in requirements:
         if name in known:
             continue
         fields.append(
-            {"field": name, "ask": question_topic(question_key_for(step), flow) or ""}
+            {"field": name, "ask": question_topic(question_key_for(step, flow), flow) or ""}
         )
     return fields
 

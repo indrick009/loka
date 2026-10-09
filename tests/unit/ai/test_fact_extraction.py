@@ -355,6 +355,89 @@ class TestFlowOpening:
         )
 
 
+class TestTenantSearchForm:
+    """A search is the tenant's form.
+
+    It asks only what narrows the catalogue — type, place, budget — and every
+    field a listing collects is a question a searching tenant cannot answer,
+    because it describes someone else's property.
+    """
+
+    def test_the_first_search_message_opens_on_the_tenant_form(
+        self, extractor: FactExtractor
+    ) -> None:
+        """The first message arrives in a session whose flow is still SUPPORT:
+        the tenant's form must open from the intent, not from the session."""
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("PROPERTY_SEARCH", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_LOCATION
+
+    def test_a_complete_criteria_set_reaches_the_results(
+        self, extractor: FactExtractor
+    ) -> None:
+        """Type, place and rent fill the search: the landlord's confirmation —
+        and the charges, deposit and dates before it — must never appear."""
+        facts = extractor.validate(
+            {
+                "property_type": "APARTMENT",
+                "city": "Douala",
+                "price": 150_000,
+                "standing": "MODERN",
+            }
+        )
+
+        step = extractor.next_step("PROPERTY_SEARCH", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.PRESENT_RESULTS
+
+    def test_the_message_supplying_the_last_fact_completes_the_search(
+        self, extractor: FactExtractor
+    ) -> None:
+        """The budget arriving last must not restart the form: what the session
+        already holds counts towards the same criteria."""
+        facts = extractor.validate({"price": 150_000})
+
+        step = extractor.next_step(
+            "COLLECT_PRICE",
+            facts,
+            flow=FlowName.PROPERTY_SEARCH,
+            known={
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+            },
+        )
+
+        assert step is FlowStep.PRESENT_RESULTS
+
+    def test_the_search_questions_are_worded_for_a_tenant(self) -> None:
+        tenant = FlowName.PROPERTY_SEARCH
+
+        assert question_key_for(FlowStep.COLLECT_PROPERTY_TYPE, tenant) == "ask.search_type"
+        assert question_key_for(FlowStep.COLLECT_LOCATION, tenant) == "ask.search_location"
+        assert question_key_for(FlowStep.COLLECT_PRICE, tenant) == "ask.search_budget"
+        assert question_key_for(FlowStep.PRESENT_RESULTS, tenant) == "ask.search_results"
+
+    def test_the_landlord_keeps_the_listing_wording(self) -> None:
+        assert question_key_for(FlowStep.COLLECT_PRICE, FlowName.PROPERTY_CREATION) == "ask.rent"
+        assert question_key_for(FlowStep.COLLECT_PRICE, FlowName.SUPPORT) == "ask.rent"
+
+    def test_the_listing_form_is_untouched(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_STANDING
+
+    def test_a_support_message_still_moves_nothing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step("SUPPORT", facts, flow=FlowName.PROPERTY_SEARCH)
+
+        assert step is None
+
+
 class TestAmountShorthand:
     def test_mil_means_thousands_not_millions(self) -> None:
         classifier = DeterministicClassifier()
@@ -409,6 +492,17 @@ class TestPendingAnswerBinding:
         assert match is not None
         assert match.intent == "COLLECT_DEPOSIT"
         assert match.entities == {"deposit": 500_000}
+
+    def test_an_open_budget_question_binds_the_answer_as_a_price(self) -> None:
+        """A tenant's budget is priced like a rent: the open question, not the
+        wording of the reply, decides which field the number lands in."""
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("200 000 par mois", pending="ask.search_budget")
+
+        assert match is not None
+        assert match.intent == "COLLECT_PRICE"
+        assert match.entities == {"price": 200_000}
 
     def test_a_short_immediate_answer_binds_to_availability(self) -> None:
         classifier = DeterministicClassifier()
