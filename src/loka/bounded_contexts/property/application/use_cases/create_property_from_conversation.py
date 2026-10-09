@@ -26,7 +26,7 @@ from loka.bounded_contexts.landlord.domain.entities.landlord_profile import Land
 from loka.bounded_contexts.landlord.domain.repositories.verification_repository import (
     LANDLORD_PROFILE_REPOSITORY,
 )
-from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.bounded_contexts.property.domain.entities.property import Amenities, Property
 from loka.bounded_contexts.property.domain.repositories.property_repository import (
     PropertyRepository,
 )
@@ -172,9 +172,38 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
         guard(lambda: prop.set_minimum_duration(Duration(months=duration), now=now))
 
     charges = facts.get("charges")
+    breakdown_note: str | None = None
     if isinstance(charges, int) and not isinstance(charges, bool):
         policy = _charging_policy(facts.get("charging_policy"))
         guard(lambda: prop.set_charges(Money(amount=charges), policy, now=now))
+        breakdown = facts.get("charges_breakdown")
+        if isinstance(breakdown, Mapping):
+            parts = []
+            water_amount = breakdown.get("water")
+            electricity_amount = breakdown.get("electricity")
+            if isinstance(water_amount, int) and not isinstance(water_amount, bool):
+                parts.append(f"eau : {water_amount} FCFA/mois")
+            if isinstance(electricity_amount, int) and not isinstance(electricity_amount, bool):
+                parts.append(f"électricité : {electricity_amount} FCFA/mois")
+            if parts:
+                breakdown_note = "charges détaillées — " + ", ".join(parts)
+
+    amenities = facts.get("amenities")
+    if isinstance(amenities, Mapping):
+        current = prop.amenities
+        guard(
+            lambda: prop.update_amenities(
+                Amenities(
+                    parking=amenities.get("parking", current.parking),
+                    water=amenities.get("water", current.water),
+                    electricity=amenities.get("electricity", current.electricity),
+                    internet=amenities.get("internet", current.internet),
+                    security=amenities.get("security", current.security),
+                    extras=frozenset(str(extra) for extra in amenities.get("extras") or ()),
+                ),
+                now=now,
+            )
+        )
 
     deposit = facts.get("deposit")
     if isinstance(deposit, int) and not isinstance(deposit, bool):
@@ -185,8 +214,15 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
         guard(lambda: prop.set_availability(window, now=now))
 
     conditions = facts.get("conditions")
+    merged_conditions = ""
     if isinstance(conditions, str) and conditions.strip():
-        guard(lambda: prop.set_conditions(conditions, now=now))
+        merged_conditions = conditions.strip()
+        if breakdown_note:
+            merged_conditions = f"{merged_conditions}\n{breakdown_note}"
+    elif breakdown_note:
+        merged_conditions = breakdown_note
+    if merged_conditions:
+        guard(lambda: prop.set_conditions(merged_conditions, now=now))
 
 
 def _charging_policy(raw: object) -> ChargingPolicy:

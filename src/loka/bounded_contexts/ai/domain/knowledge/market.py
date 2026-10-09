@@ -258,38 +258,139 @@ def price_reference(
 ) -> PriceBand | None:
     """The monthly-rent band for a type, widened at known premium addresses.
 
-    ``city`` is accepted for future per-city tuning; today the bands are national
-    and only the neighbourhood changes the magnitude, which keeps the data honest
-    about what the sources actually support.
+    Backwards-compatible alias of :func:`plausibility_window`, except that an
+    *unknown* type has no band (``None``), where :func:`plausibility_window`
+    falls back to the wide default for anomaly gating. See it for the
+    configurable city/quartier/category/period overrides.
     """
-    band = PRICE_BANDS_XAF.get((property_type or "").upper())
-    if band is None:
+    category = (property_type or "").upper()
+    window = plausibility_window(
+        property_type,
+        city=city,
+        neighbourhood=neighbourhood,
+    )
+    if window is None:
         return None
+    if category not in _CATEGORY_WINDOWS and category not in {
+        key[2] for key in PLAUSIBILITY_OVERRIDES
+    }:
+        return None
+    return PriceBand(
+        low_xaf=window.min_xaf,
+        high_xaf=window.max_xaf,
+        source=window.source,
+        confidence=window.confidence,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class PlausibilityWindow:
+    """A configurable price-plausibility band for one category.
+
+    Unlike the *rejection* bounds (which are deliberately loose so a real price
+    is never refused), this is the *reference* band used to flag anomalies
+    (`PRICE_ANOMALY` / `SUSPICIOUS_PRICE`) and to anchor the model's idea of a
+    normal rent. It is tuned per city / quartier / category, defaulting to the
+    type band below.
+    """
+
+    min_xaf: int
+    max_xaf: int
+    source: str
+    confidence: Confidence = Confidence.OBSERVED
+
+
+# Every plausible window in XAF. They double as the per-category baseline and
+# are intentionally loose: a real rent must never be refused, only flagged.
+DEFAULT_PLAUSIBILITY_WINDOW = PlausibilityWindow(10_000, 500_000_000, "njikam")
+
+# Category baseline, derived from the sourced price bands. These mirror
+# ``PRICE_BANDS_XAF`` but are explicitly priced as plausibility references.
+_CATEGORY_WINDOWS: dict[str, PlausibilityWindow] = {
+    "ROOM": PlausibilityWindow(10_000, 60_000, "njikam"),
+    "STUDIO": PlausibilityWindow(20_000, 150_000, "njikam"),
+    "APARTMENT": PlausibilityWindow(40_000, 400_000, "njikam", Confidence.TO_CONFIRM),
+    "HOUSE": PlausibilityWindow(80_000, 800_000, "njikam", Confidence.TO_CONFIRM),
+    "DUPLEX": PlausibilityWindow(150_000, 1_500_000, "lanation", Confidence.TO_CONFIRM),
+    "COMMERCIAL": PlausibilityWindow(50_000, 1_000_000, "njikam", Confidence.TO_CONFIRM),
+}
+
+# City / quartier / category calibrations. Keyed (city, quartier, category);
+# an empty string means "any". This is the config seam operators extend without
+# touching code. Only entries the sources actually support belong here: today
+# the data is national and per-neighbourhood only, so the table stays empty and
+# the premium mechanism below does the quartier widening.
+PLAUSIBILITY_OVERRIDES: dict[tuple[str, str, str], PlausibilityWindow] = {}
+
+
+def plausibility_window(
+    property_type: str | None,
+    *,
+    city: str | None = None,
+    neighbourhood: str | None = None,
+    period_months: int = 1,
+) -> PlausibilityWindow | None:
+    """The plausibility reference for a type, at a place, for a period.
+
+    Resolution order: an explicit (city, quartier, category) override, then the
+    category baseline, then the wide default. Premium quartiers widen the window
+    the same way :func:`price_reference` always did. ``period_months`` scales the
+    band to a whole lease (e.g. 12 for a yearly comparator); it defaults to the
+    monthly rent the conversation and the market speak in. The resulting window
+    is a *reference*: it flags anomalies, it never refuses a price a landlord is
+    sure about.
+    """
+    category = (property_type or "").upper()
+    if period_months < 1:
+        raise ValueError("period_months must be a positive number of months")
+
+    window = PLAUSIBILITY_OVERRIDES.get(
+        (normalize(city or ""), normalize(neighbourhood or ""), category)
+    )
+    if window is None:
+        window = PLAUSIBILITY_OVERRIDES.get((normalize(city or ""), "", category))
+    if window is None:
+        window = _CATEGORY_WINDOWS.get(category)
+    if window is None:
+        window = DEFAULT_PLAUSIBILITY_WINDOW
+
+    widened_high = window.max_xaf
     if neighbourhood and is_premium(neighbourhood):
-        return PriceBand(
-            low_xaf=band.low_xaf * _PREMIUM_FACTOR,
-            high_xaf=band.high_xaf * _PREMIUM_FACTOR,
-            source=band.source,
-            confidence=Confidence.TO_CONFIRM,
+        widened_high = window.max_xaf * _PREMIUM_FACTOR
+    if period_months != 1:
+        return PlausibilityWindow(
+            min_xaf=window.min_xaf * period_months,
+            max_xaf=widened_high * period_months,
+            source=window.source,
+            confidence=window.confidence,
         )
-    return band
+    return PlausibilityWindow(
+        min_xaf=window.min_xaf,
+        max_xaf=widened_high,
+        source=window.source,
+        confidence=window.confidence,
+    )
 
 
 __all__ = [
     "ADVANCE_MONTHS_TYPICAL",
     "CAUTION_MONTHS_TYPICAL",
     "CITY_ALIASES",
+    "DEFAULT_PLAUSIBILITY_WINDOW",
     "EXPRESSIONS",
     "NEIGHBOURHOODS",
+    "PLAUSIBILITY_OVERRIDES",
     "PRICE_BANDS_XAF",
     "SOURCES",
     "Confidence",
     "Expression",
     "Neighbourhood",
+    "PlausibilityWindow",
     "PriceBand",
     "canonical_neighbourhood",
     "is_premium",
     "normalize",
+    "plausibility_window",
     "price_reference",
     "resolve_city",
     "resolve_neighbourhood",

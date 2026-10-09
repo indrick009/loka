@@ -257,10 +257,37 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "surface_area": {"type": "integer"},
                 "charges": {"type": "integer"},
                 "charging_policy": {"type": "string", "enum": ["INCLUDED", "EXTRA"]},
+                # The mission wants eau and électricité stated separately when
+                # the landlord gives both; the code sums them for ``charges``.
+                "water_charges": {"type": "integer"},
+                "electricity_charges": {"type": "integer"},
                 "deposit": {"type": "integer"},
                 "minimum_duration_months": {"type": "integer"},
                 "availability": {"type": "string"},
                 "conditions": {"type": "string"},
+                # Anything the landlord *said* about these five axes. Hints are
+                # the probable readings, which never become facts on a listing.
+                "amenities": {
+                    "type": "object",
+                    "properties": {
+                        "parking": {"type": "boolean"},
+                        "water": {"type": "boolean"},
+                        "electricity": {"type": "boolean"},
+                        "internet": {"type": "boolean"},
+                        "security": {"type": "boolean"},
+                        "extras": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+                "amenities_hints": {
+                    "type": "object",
+                    "properties": {
+                        "parking": {"type": "boolean"},
+                        "water": {"type": "boolean"},
+                        "electricity": {"type": "boolean"},
+                        "internet": {"type": "boolean"},
+                        "security": {"type": "boolean"},
+                    },
+                },
             },
         },
     },
@@ -524,6 +551,7 @@ class AnalyseConversationMessageUseCase:
                 cost_usd=Decimal("0"),
                 now=now,
             )
+
         ai_bypass_total.labels(stage="budget").inc()
         return await self._finish(
             session=session,

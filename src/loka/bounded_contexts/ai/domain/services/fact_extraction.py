@@ -231,15 +231,27 @@ class FactExtractor:
                 "surface",
                 lambda: SurfaceArea(square_metres=_as_int(present["surface_area"])).square_metres,
             )
-        if "charges" in present or "charges_included" in present or "charging_policy" in present:
+        if (
+            "charges" in present
+            or "charges_included" in present
+            or "charging_policy" in present
+            or "water_charges" in present
+            or "electricity_charges" in present
+        ):
             try:
-                amount, policy = _build_charges(entities)
+                amount, policy, breakdown = _build_charges(entities)
                 facts["charges"] = amount
                 facts["charging_policy"] = policy
+                if breakdown is not None:
+                    facts["charges_breakdown"] = breakdown
             except DomainError as exc:
                 rejected["charges"] = exc.message
             except (TypeError, ValueError) as exc:
                 rejected["charges"] = str(exc)
+        if "amenities" in present:
+            keep("amenities", lambda: _build_amenities(entities))
+        if "amenities_hints" in present:
+            keep("amenities_hints", lambda: _build_amenities(entities, hints=True))
         if "deposit" in present:
             keep(
                 "deposit",
@@ -385,12 +397,16 @@ def _resolve_location_hint(raw: Any) -> dict[str, str] | None:
     return None
 
 
-def _build_charges(entities: dict[str, Any]) -> tuple[int, str]:
+def _build_charges(entities: dict[str, Any]) -> tuple[int, str, dict[str, int] | None]:
     """The monthly charges and whether they are included in the rent.
 
     A landlord who says "charges incluses" states a *policy*, not an amount; one
     who says "15 000 de charges" states an amount. Both must produce a value the
     Property quality gate accepts, otherwise it reports MISSING_CHARGES forever.
+
+    When the landlord splits the breakdown ("eau 5 000, électricité 10 000"),
+    the two amounts are summed into ``charges`` and the split is returned
+    separately so the published listing can state it without a schema change.
     """
     included = entities.get("charges_included")
     policy_raw = entities.get("charging_policy")
@@ -398,14 +414,64 @@ def _build_charges(entities: dict[str, Any]) -> tuple[int, str]:
         policy = ChargingPolicy(str(policy_raw).strip().upper().replace(" ", "_"))
     elif isinstance(included, bool):
         policy = ChargingPolicy.INCLUDED if included else ChargingPolicy.EXTRA
-    elif "charges" in entities:
+    elif "charges" in entities or "water_charges" in entities or "electricity_charges" in entities:
         policy = ChargingPolicy.EXTRA
     else:
         policy = ChargingPolicy.INCLUDED
-    amount = _as_int(entities["charges"]) if "charges" in entities else 0
-    if amount < 0:
-        raise ValidationFailed("charges cannot be negative", context={"value": amount})
-    return amount, policy.value
+
+    breakdown: dict[str, int] | None = None
+    water = entities.get("water_charges")
+    electricity = entities.get("electricity_charges")
+    if water is not None or electricity is not None:
+        water_amount = _as_int(water) if water is not None else 0
+        electricity_amount = _as_int(electricity) if electricity is not None else 0
+        if min(water_amount, electricity_amount) < 0:
+            raise ValidationFailed(
+                "charges cannot be negative",
+                context={"water": water_amount, "electricity": electricity_amount},
+            )
+        breakdown = {"water": water_amount, "electricity": electricity_amount}
+        amount = water_amount + electricity_amount
+    else:
+        amount = _as_int(entities["charges"]) if "charges" in entities else 0
+        if amount < 0:
+            raise ValidationFailed("charges cannot be negative", context={"value": amount})
+    return amount, policy.value, breakdown
+
+
+_AMENITY_AXES = ("parking", "water", "electricity", "internet", "security")
+
+
+def _build_amenities(entities: dict[str, Any], *, hints: bool = False) -> dict[str, object]:
+    """Normalise amenity candidates to the five axes plus extras.
+
+    Only recognised axes with a real boolean become facts; a possible negated
+    or nonsense value is dropped, never repaired. ``hints=True`` reads the
+    ``amenities_hints`` entity instead — the probable deductions that must NOT
+    become facts on a listing but are kept so the conversation can offer to
+    confirm them.
+    """
+    raw = entities.get("amenities_hints" if hints else "amenities")
+    if not isinstance(raw, dict):
+        raise ValidationFailed(
+            "amenities must be an object",
+            context={"entity": "amenities_hints" if hints else "amenities", "value": repr(raw)},
+        )
+    normalised: dict[str, object] = {}
+    for axis in _AMENITY_AXES:
+        value = raw.get(axis)
+        if isinstance(value, bool):
+            normalised[axis] = value
+    extras = raw.get("extras")
+    if not hints and isinstance(extras, list):
+        clean_extras: list[str] = []
+        for extra in extras:
+            label = str(extra).strip()
+            if label and len(label) <= 80:
+                clean_extras.append(label)
+        if clean_extras:
+            normalised["extras"] = clean_extras
+    return normalised
 
 
 _IMMEDIATE_AVAILABILITY = (

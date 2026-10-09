@@ -561,3 +561,78 @@ class TestTrustBoundary:
 
     def test_the_two_rent_bounds_are_ordered(self) -> None:
         assert MIN_PLAUSIBLE_RENT_XAF < MAX_PLAUSIBLE_RENT_XAF
+
+
+class TestAmenityFacts:
+    def test_confirmed_amenities_survive_validation(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {"amenities": {"parking": True, "water": True, "internet": False}}
+        )
+
+        assert facts.get("amenities") == {"parking": True, "water": True, "internet": False}
+        assert facts.rejected == {}
+
+    def test_only_the_five_axes_with_real_booleans_are_kept(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "amenities": {
+                    "swimming_pool": True,
+                    "water": "maybe",
+                    "security": False,
+                    "extras": ["balcon", "climatiseur"],
+                }
+            }
+        )
+
+        assert facts.get("amenities") == {"security": False, "extras": ["balcon", "climatiseur"]}
+
+    def test_an_amenity_payload_that_is_not_an_object_is_refused(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"amenities": "parc"})
+
+        assert not facts.has("amenities")
+        assert "amenities" in facts.rejected
+
+    def test_hints_keep_no_extras_so_they_can_never_become_facts(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {"amenities_hints": {"parking": True, "extras": ["cour"]}}
+        )
+
+        assert facts.get("amenities_hints") == {"parking": True}
+
+
+class TestChargesBreakdown:
+    def test_the_charges_breakdown_reaches_the_facts(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {
+                "water_charges": 5_000,
+                "electricity_charges": 10_000,
+                "charges": 15_000,
+                "charging_policy": "EXTRA",
+            }
+        )
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charging_policy") == "EXTRA"
+        assert facts.get("charges_breakdown") == {"water": 5_000, "electricity": 10_000}
+
+    def test_a_breakdown_without_a_total_is_still_summed(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {"water_charges": 5_000, "electricity_charges": 10_000}
+        )
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charges_breakdown") == {"water": 5_000, "electricity": 10_000}
+
+    def test_a_negative_breakdown_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"water_charges": -5_000, "electricity_charges": 10_000})
+
+        assert not facts.has("charges")
+        assert "charges" in facts.rejected
