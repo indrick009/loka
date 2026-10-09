@@ -30,6 +30,7 @@ class PropertyRow(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     property_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    standing: Mapped[str | None] = mapped_column(String(16), nullable=True)
     city: Mapped[str | None] = mapped_column(String(64), nullable=True)
     neighbourhood: Mapped[str | None] = mapped_column(String(96), nullable=True)
     address_hint: Mapped[str | None] = mapped_column(String(255), nullable=True)

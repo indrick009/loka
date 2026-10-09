@@ -9,16 +9,22 @@ narrow port keeps every test double honest about what is actually used.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from loka.bounded_contexts.ai.domain.services.ai_provider import (
     IntentResult,
     LlmResponse,
     Prompt,
 )
+
+if TYPE_CHECKING:
+    from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (  # noqa: E501
+        ConversationListingResult,
+    )
 
 
 class IntentModel(Protocol):
@@ -47,6 +53,25 @@ class ResponseModel(Protocol):
     def model(self) -> str: ...
 
     async def generate_response(self, prompt: Prompt) -> LlmResponse: ...
+
+
+class PropertyListing(Protocol):
+    """Turns a confirmed listing conversation into a real property draft.
+
+    Kept as a narrow port so the analysis pipeline depends on the *act* of
+    registering a listing, not on the Property context's use cases. The AI
+    context already reads the property domain's value objects; this is the one
+    write it triggers, and it stays behind a boundary a test can stub.
+    """
+
+    async def register_from_conversation(
+        self,
+        *,
+        user_id: uuid.UUID | None,
+        facts: Mapping[str, Any],
+        existing_property_id: uuid.UUID | None = None,
+        now: datetime,
+    ) -> ConversationListingResult | None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,6 +183,7 @@ __all__ = [
     "IntentModel",
     "IntentResult",
     "Prompt",
+    "PropertyListing",
     "ResponseModel",
     "TurnSummary",
     "UsageEntry",

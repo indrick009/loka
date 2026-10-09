@@ -16,6 +16,11 @@ x-app: &app
     target: api
   env_file: [.env]
   environment: *network-env
+  # The install is editable, so mounting the source makes a restart enough to
+  # pick up a code change: a rebuild re-runs the whole dependency install and
+  # needs the network, which is exactly what a hot code change should not.
+  volumes:
+    - ./src:/app/src
   depends_on:
     postgres:
       condition: service_healthy

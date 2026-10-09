@@ -24,6 +24,9 @@ from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyConversationTurnRepository,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.infrastructure.composition import (
+    create_property_from_conversation_use_case,
+)
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 
@@ -91,4 +94,7 @@ def analyse_conversation_message_use_case(
         response_model=model,
         budget=budget_policy(settings),
         provider_name=settings.ai.provider,
+        # The one write the analysis triggers: a confirmed listing becomes a
+        # property draft. Injected here so the pipeline depends on the port.
+        listing=create_property_from_conversation_use_case(uow),
     )

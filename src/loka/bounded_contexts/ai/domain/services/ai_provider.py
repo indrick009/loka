@@ -48,6 +48,11 @@ class IntentResult:
     entities: dict[str, Any]
     language: str = "fr"
     raw: str | None = None
+    # The reply the model wrote *in the same call*, when the deployment asks for
+    # it. One round-trip answers the message and phrases the answer; a provider
+    # that does not inline it leaves this empty and the pipeline falls back to a
+    # second call or a stable template.
+    reply: str | None = None
     # What the call cost. Optional because a provider that cannot report usage
     # must leave it empty rather than invent a price: the ledger records zero,
     # and under-reporting stays visible in the metrics instead of being hidden.
@@ -69,11 +74,13 @@ class IntentResult:
         entities = payload.get("entities")
         if not isinstance(entities, dict):
             raise ExternalServiceUnavailable("AI returned a malformed entity map")
+        reply = payload.get("reply")
         return cls(
             intent=str(payload.get("intent", "UNKNOWN")),
             confidence=confidence,
             entities=entities,
             language=language,
+            reply=reply.strip() if isinstance(reply, str) and reply.strip() else None,
         )
 
 

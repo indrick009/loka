@@ -22,6 +22,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     DataQualityIssue,
     Duration,
     PropertyDraftData,
+    PropertyStanding,
     PropertyStatus,
     PropertyType,
     SurfaceArea,
@@ -55,6 +56,7 @@ def to_row(prop: Property) -> dict[str, Any]:
         "status": prop.status.value,
         "version": prop.version,
         "property_type": prop.property_type.value if prop.property_type else None,
+        "standing": prop.standing.value if prop.standing else None,
         "city": location.city if location else None,
         "neighbourhood": location.neighbourhood if location else None,
         "address_hint": location.address_hint if location else None,
@@ -134,6 +136,7 @@ def from_row(row: PropertyRow, media_rows: list[PropertyMediaRow] | None = None)
     prop._assign_id(row.id)
     prop.status = PropertyStatus(row.status)
     prop.property_type = PropertyType(row.property_type) if row.property_type else None
+    prop.standing = PropertyStanding(row.standing) if row.standing else None
     if row.city:
         coordinates = (
             Coordinates(latitude=row.latitude, longitude=row.longitude)

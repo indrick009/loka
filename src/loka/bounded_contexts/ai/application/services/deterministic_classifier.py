@@ -87,6 +87,12 @@ BATHROOM_PATTERN = re.compile(
     re.IGNORECASE,
 )
 SURFACE_PATTERN = re.compile(r"(?P<area>\d{2,4})\s*m(?:2|²|sup)?(?![a-z])", re.IGNORECASE)
+MODERN_PATTERN = re.compile(
+    r"\b(moderne|modernes|neuf|neuve|recent|recente|standing)\b", re.IGNORECASE
+)
+NON_MODERN_PATTERN = re.compile(
+    r"\b(non[\s-]?moderne|ancien|ancienne|vieux|vieille|vetuste|a refaire)\b", re.IGNORECASE
+)
 
 PROPERTY_TYPE_PATTERNS: dict[str, re.Pattern[str]] = {
     "APARTMENT": re.compile(r"\b(appartement|appart|apt|immeuble|appartement[s]?)\b", re.I),
@@ -186,7 +192,7 @@ class DeterministicMatch:
 class DeterministicClassifier:
     """Pure function from message text to a candidate intent."""
 
-    def classify(self, text: str) -> DeterministicMatch | None:
+    def classify(self, text: str, *, pending: str | None = None) -> DeterministicMatch | None:
         normalized = self._normalize(text)
         if not normalized:
             return None
@@ -237,6 +243,14 @@ class DeterministicClassifier:
                 intent="COLLECT_FEATURES", confidence=0.9, entities=entities
             )
 
+        standing = self._standing_reply(normalized, pending)
+        if standing is not None:
+            return standing
+        if "standing" in entities:
+            return DeterministicMatch(
+                intent="COLLECT_STANDING", confidence=0.9, entities=entities
+            )
+
         if normalized in AFFIRMATIVE:
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
@@ -244,7 +258,9 @@ class DeterministicClassifier:
 
         return None
 
-    def shortcut(self, text: str) -> DeterministicMatch | None:
+    def shortcut(
+        self, text: str, *, pending: str | None = None
+    ) -> DeterministicMatch | None:
         """The unambiguous replies that must never cost a model call.
 
         Strictly narrower than :meth:`classify`: when a model is available the
@@ -252,10 +268,17 @@ class DeterministicClassifier:
         and a message whose only content is a price are the cases where the
         model can add nothing; "je cherche un appartement à Bastos" is not,
         because the intent (search vs listing) is exactly what the model is for.
+
+        ``pending`` is the question the user is answering. It matters for
+        "moderne ou non", where a bare "non" is a *value* for the field and not a
+        refusal: without it the fast lane would re-ask the question.
         """
         normalized = self._normalize(text)
         if not normalized:
             return None
+        standing = self._standing_reply(normalized, pending)
+        if standing is not None:
+            return standing
         if normalized in AFFIRMATIVE:
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
@@ -266,6 +289,27 @@ class DeterministicClassifier:
                 intent="COLLECT_PRICE",
                 confidence=0.92,
                 entities={"price": entities["price"]},
+            )
+        return None
+
+    @staticmethod
+    def _standing_reply(
+        normalized: str, pending: str | None
+    ) -> DeterministicMatch | None:
+        """Read "oui"/"non" as MODERN/NON_MODERN when that is the open question."""
+        if pending != "ask.standing":
+            return None
+        if normalized in AFFIRMATIVE:
+            return DeterministicMatch(
+                intent="COLLECT_STANDING",
+                confidence=0.95,
+                entities={"standing": "MODERN"},
+            )
+        if normalized in NEGATIVE:
+            return DeterministicMatch(
+                intent="COLLECT_STANDING",
+                confidence=0.95,
+                entities={"standing": "NON_MODERN"},
             )
         return None
 
@@ -312,6 +356,10 @@ class DeterministicClassifier:
         surface = SURFACE_PATTERN.search(normalized)
         if surface:
             entities["surface_area"] = int(surface.group("area"))
+        if NON_MODERN_PATTERN.search(normalized):
+            entities["standing"] = "NON_MODERN"
+        elif MODERN_PATTERN.search(normalized):
+            entities["standing"] = "MODERN"
         location = LOCATION_HINT_PATTERN.search(normalized)
         if location:
             entities["location_hint"] = location.group(0).title()

@@ -34,6 +34,7 @@ from loka.bounded_contexts.ai.application.ports import (
     ConversationTurn,
     ConversationTurnRepository,
     IntentModel,
+    PropertyListing,
     ResponseModel,
     TurnSummary,
     UsageEntry,
@@ -45,6 +46,7 @@ from loka.bounded_contexts.ai.domain.services.ai_provider import LlmUsage, Promp
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
     MIN_ACCEPTED_CONFIDENCE,
+    PROPERTY_REQUIREMENTS,
     SUPPORTED_INTENTS,
     ExtractedFacts,
     FactExtractor,
@@ -86,12 +88,20 @@ SYSTEM_PROMPT = (
     "Never invent a value that is not in the message: use null when unsure. "
     "Amounts are in XAF. Numbers must be plain integers."
     " You are given the state of the conversation (flow, step, the question the "
-    "user is answering, and the facts already known). Use it: a short reply like "
-    "a neighbourhood or a number is an answer to that question, so set the "
-    "matching entity instead of asking again."
+    "user is answering, the facts already known, the ordered required_fields, and "
+    "the typical price_reference_monthly_xaf). Use them: a short reply like a "
+    "neighbourhood or a number is an answer to that question, so set the matching "
+    "entity instead of asking again."
+    " A bare number given as a rent is in FCFA: '50' means 50000, not 50."
     " Set 'intent' to exactly one value from 'allowed_intents' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
     "applies at all."
+    " Also set 'reply': the next WhatsApp message to send, in the conversation's "
+    "language, one to three short sentences of plain text (no markdown, no emoji, "
+    "no signature). Acknowledge the message briefly, then ask for the first field "
+    "in 'required_fields' that is not already in known_facts; if none is missing, "
+    "confirm the summary. If the message was not understood, ask the user to "
+    "rephrase instead of posing a question."
 )
 
 # The closed set the model may choose from. Exposed in the prompt so the model
@@ -114,6 +124,7 @@ REPLY_SYSTEM_PROMPT = (
 # what it is asking for without reading the outbound layer's copy.
 QUESTION_TOPICS: dict[str, str] = {
     "ask.property_type": "the type of property (apartment, studio, house, ...)",
+    "ask.standing": "whether the property is modern or not",
     "ask.location": "the city and neighbourhood",
     "ask.rent": "the monthly rent, in XAF",
     "ask.features": "the number of bedrooms and bathrooms, and the surface in m2",
@@ -125,6 +136,51 @@ QUESTION_TOPICS: dict[str, str] = {
     "confirm.published": "confirmation that the property has been published",
 }
 
+# What a month of rent costs here, by property type, in XAF. A model with no
+# Cameroonian grounding reads a bare "50" as fifty francs; these wide bands anchor
+# the magnitude only — they never reject a price the user is sure about.
+PRICE_REFERENCES_XAF: dict[str, tuple[int, int]] = {
+    "ROOM": (10_000, 60_000),
+    "STUDIO": (20_000, 150_000),
+    "APARTMENT": (40_000, 400_000),
+    "HOUSE": (80_000, 800_000),
+    "DUPLEX": (150_000, 1_500_000),
+}
+
+# The same question is asked from opposite sides: a landlord lists a property, a
+# tenant looks for one. The neutral gloss lets the model default to the tenant
+# reading ("le loyer que vous recherchez") even in a listing, which reads as if
+# the platform had mixed the two roles up. These overlays fix the wording.
+_LANDLORD_TOPICS: dict[str, str] = {
+    "ask.property_type": "the type of property the landlord is listing",
+    "ask.standing": "whether the property the landlord is listing is modern or not",
+    "ask.location": "the city and neighbourhood where the property is",
+    "ask.rent": "the monthly rent the landlord is asking, in XAF",
+}
+_TENANT_TOPICS: dict[str, str] = {
+    "ask.property_type": "the type of property the tenant is looking for",
+    "ask.standing": "whether the tenant wants a modern property or not",
+    "ask.location": "the city and neighbourhood the tenant wants",
+    "ask.rent": "the maximum monthly rent the tenant is willing to pay, in XAF",
+}
+_FLOW_TOPICS: dict[FlowName, dict[str, str]] = {
+    FlowName.PROPERTY_CREATION: _LANDLORD_TOPICS,
+    FlowName.PROPERTY_SEARCH: _TENANT_TOPICS,
+}
+_FLOW_ROLES: dict[FlowName, str] = {
+    FlowName.PROPERTY_CREATION: "a landlord listing a property for rent",
+    FlowName.PROPERTY_SEARCH: "a tenant looking for a property to rent",
+    FlowName.SUPPORT: "a user who needs help with the platform",
+}
+
+
+def question_topic(next_key: str | None, flow: FlowName) -> str | None:
+    """The plain-words gloss of the next question, phrased for this flow."""
+    if not next_key:
+        return None
+    overlay = _FLOW_TOPICS.get(flow, {})
+    return overlay.get(next_key) or QUESTION_TOPICS.get(next_key)
+
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["intent", "confidence", "entities"],
@@ -132,10 +188,12 @@ RESPONSE_SCHEMA: dict[str, Any] = {
         "intent": {"type": "string", "enum": list(ALLOWED_INTENTS)},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "language": {"type": "string"},
+        "reply": {"type": "string"},
         "entities": {
             "type": "object",
             "properties": {
                 "property_type": {"type": "string"},
+                "standing": {"type": "string", "enum": ["MODERN", "NON_MODERN"]},
                 "city": {"type": "string"},
                 "neighbourhood": {"type": "string"},
                 "price": {"type": "integer"},
@@ -200,6 +258,7 @@ class AnalyseConversationMessageUseCase:
         extractor: FactExtractor | None = None,
         budget: BudgetPolicy | None = None,
         provider_name: str = "openrouter",
+        listing: PropertyListing | None = None,
     ) -> None:
         self._uow = uow
         self._inbound = inbound
@@ -212,6 +271,7 @@ class AnalyseConversationMessageUseCase:
         self._extractor = extractor or FactExtractor()
         self._budget = budget
         self._provider = provider_name
+        self._listing = listing
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
         moment = ensure_utc(now)
@@ -240,15 +300,23 @@ class AnalyseConversationMessageUseCase:
         await self._uow.commit()
 
         text = message.text or ""
+        pending = session.context.get("next_question")
+        pending_key = pending if isinstance(pending, str) else None
 
         if self._model is None:
             return await self._without_a_model(
-                session, message_id=command.message_id, text=text, now=moment
+                session,
+                message_id=command.message_id,
+                text=text,
+                pending=pending_key,
+                now=moment,
             )
 
         # The rules are a fast lane now, not the primary reader: only replies a
-        # model could not improve ("oui", "250 000 fcfa") skip the call.
-        shortcut = self._classifier.shortcut(text)
+        # model could not improve ("oui", "250 000 fcfa") skip the call. The open
+        # question is passed along so a bare "non" answers "moderne ou non"
+        # instead of being read as a refusal.
+        shortcut = self._classifier.shortcut(text, pending=pending_key)
         if shortcut is not None:
             ai_bypass_total.labels(stage="regex").inc()
             return await self._finish(
@@ -280,14 +348,13 @@ class AnalyseConversationMessageUseCase:
             )
 
         ai_bypass_total.labels(stage="llm").inc()
-        pending = session.context.get("next_question")
         prompt = build_analysis_prompt(
             text=message.text,
             language=session.language,
             history=history,
             flow=session.flow,
             step=session.step,
-            pending_question=pending if isinstance(pending, str) else None,
+            pending_question=pending_key,
             known_facts=dict(session.context),
         )
         result = await self._model.understand_intent(prompt)
@@ -309,13 +376,21 @@ class AnalyseConversationMessageUseCase:
         # The reply is written before the write transaction opens: an LLM call
         # must never hold a database connection, and a reply that fails degrades
         # to a template rather than to silence.
-        reply_text, reply_usage = await self._compose_reply(
-            verdict=verdict,
-            text=text,
-            session=session,
-            history=history,
-            now=moment,
-        )
+
+        # Preferred path: the classification call already wrote the reply in its
+        # JSON, so the whole turn costs one round-trip. Only a model that left
+        # ``reply`` empty pays for a second call; a deployment that never asks
+        # for an inline reply degrades to the same behaviour as before.
+        reply_text: str | None = result.reply
+        reply_usage: LlmUsage | None = None
+        if reply_text is None:
+            reply_text, reply_usage = await self._compose_reply(
+                verdict=verdict,
+                text=text,
+                session=session,
+                history=history,
+                now=moment,
+            )
 
         # Both calls are one turn: the ledger records their sum, so reply traffic
         # cannot spend past a budget that only counted intent calls.
@@ -360,7 +435,13 @@ class AnalyseConversationMessageUseCase:
         )
 
     async def _without_a_model(
-        self, session: ConversationSession, *, message_id: uuid.UUID, text: str, now: datetime
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        text: str,
+        pending: str | None,
+        now: datetime,
     ) -> AnalysisReport:
         """The deployment has no AI key: fall back to regexes and templates.
 
@@ -368,7 +449,7 @@ class AnalyseConversationMessageUseCase:
         is now the only reader. An unresolved message still records its turn and
         asks the user to rephrase instead of leaving the thread silent.
         """
-        match = self._classifier.classify(text)
+        match = self._classifier.classify(text, pending=pending)
         if match is not None:
             ai_bypass_total.labels(stage="regex").inc()
             return await self._finish(
@@ -496,6 +577,7 @@ class AnalyseConversationMessageUseCase:
             verdict=verdict,
             next_key=next_key,
             history=history,
+            flow=session.flow,
         )
         try:
             response = await self._response_model.generate_response(prompt)
@@ -564,7 +646,13 @@ class AnalyseConversationMessageUseCase:
             )
 
         if accepted:
-            await self._advance_session(session, intent, facts, next_step, now=now)
+            listing_text, next_step, listing_id = await self._confirm_listing(
+                session, intent=intent, next_step=next_step, now=now
+            )
+            await self._advance_session(
+                session, intent, facts, next_step, now=now, attach_property_id=listing_id
+            )
+            reply_text = listing_text or reply_text
 
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
@@ -631,6 +719,42 @@ class AnalyseConversationMessageUseCase:
             correlation_id=current_context().get("correlation_id") or "unknown",
         )
 
+    async def _confirm_listing(
+        self,
+        session: ConversationSession,
+        *,
+        intent: str,
+        next_step: FlowStep | None,
+        now: datetime,
+    ) -> tuple[str | None, FlowStep | None, uuid.UUID | None]:
+        """Register the listing when the landlord confirms the summary.
+
+        A confirmation only means something at ``CONFIRM_PROPERTY``; anywhere
+        else it is ordinary small talk and the flow is left untouched. The
+        property is *not* attached here: attaching bumps the session revision
+        and would break the optimistic-concurrency baseline ``_advance_session``
+        captures, so the id is handed to it instead.
+        """
+        if (
+            self._listing is None
+            or intent != "AFFIRMATIVE"
+            or session.step is not FlowStep.CONFIRM_PROPERTY
+        ):
+            return None, next_step, None
+
+        result = await self._listing.register_from_conversation(
+            user_id=session.user_id,
+            facts=dict(session.context),
+            existing_property_id=session.assigned_property_id,
+            now=now,
+        )
+        if result is None:
+            return _LISTING_UNSAVED_TEXT, next_step, None
+
+        if result.published:
+            return None, FlowStep.PUBLISHED, result.property_id
+        return _missing_listing_reply(result.missing), FlowStep.COLLECT_MEDIA, result.property_id
+
     async def _advance_session(
         self,
         session: ConversationSession,
@@ -639,6 +763,7 @@ class AnalyseConversationMessageUseCase:
         next_step: FlowStep | None,
         *,
         now: datetime,
+        attach_property_id: uuid.UUID | None = None,
     ) -> None:
         """Open the flow if needed, merge the facts, move to the chosen step.
 
@@ -660,6 +785,10 @@ class AnalyseConversationMessageUseCase:
         if next_step is not None:
             session.transition(next_step, now=now, expected_revision=session.revision)
         session.merge_context(facts.as_context(), now=now)
+        # Attaching after the baseline is captured keeps the save's
+        # expected_revision equal to the value read from the row.
+        if attach_property_id is not None:
+            session.attach_property(attach_property_id, now=now)
         question = question_key_for(next_step)
         if question:
             session.context["next_question"] = question
@@ -697,6 +826,41 @@ def _reply_kind(*, reason: str | None, question_key: str | None) -> str:
     return "QUESTION" if question_key else "ACK"
 
 
+# The quality gate reports stable codes; the user gets words. Kept here rather
+# than in the outbound layer because the list is dynamic and cannot be a fixed
+# ``question_key``.
+_MISSING_LABELS_FR: dict[str, str] = {
+    "MISSING_PHOTOS": "des photos",
+    "MISSING_CHARGES": "les charges mensuelles",
+    "MISSING_MINIMUM_DURATION": "la durée minimale de location",
+    "MISSING_AVAILABILITY_DATE": "la date de disponibilité",
+    "VAGUE_LOCATION": "le quartier précis",
+    "MISSING_DEPOSIT": "le dépôt de garantie",
+    "AMBIGUOUS_CONDITIONS": "les conditions de location",
+    "SUSPICIOUS_PRICE": "le prix, qui semble anormal",
+}
+
+_LISTING_UNSAVED_TEXT = (
+    "Je n'ai pas pu enregistrer l'annonce pour le moment. Réessayez dans un instant."
+)
+
+
+def _missing_listing_reply(missing: tuple[str, ...]) -> str:
+    labels = [_MISSING_LABELS_FR.get(code, code) for code in missing]
+    return (
+        "C'est enregistré, votre annonce est créée. "
+        "Pour pouvoir la publier, il manque encore : " + _join_fr(labels) + "."
+    )
+
+
+def _join_fr(items: list[str]) -> str:
+    if not items:
+        return "rien"
+    if len(items) == 1:
+        return items[0]
+    return ", ".join(items[:-1]) + " et " + items[-1]
+
+
 def build_analysis_prompt(
     *,
     text: str | None,
@@ -722,11 +886,19 @@ def build_analysis_prompt(
             {
                 "message": text or "",
                 "language": language if language in SUPPORTED_LANGUAGES else "fr",
+                "you_are_helping": _FLOW_ROLES.get(flow, _FLOW_ROLES[FlowName.SUPPORT]),
                 "conversation": {
                     "flow": flow.value,
                     "step": step.value,
                     "awaiting_answer_to": pending_question,
                     "known_facts": known_facts,
+                },
+                # What the form still needs, in order, so the model can both read
+                # this message and ask the next question in the same reply.
+                "required_fields": _required_fields(flow),
+                "price_reference_monthly_xaf": {
+                    name: {"min": low, "max": high}
+                    for name, (low, high) in PRICE_REFERENCES_XAF.items()
                 },
                 "recent_turns": _turns_as_json(history),
                 "schema": RESPONSE_SCHEMA,
@@ -738,6 +910,14 @@ def build_analysis_prompt(
     )
 
 
+def _required_fields(flow: FlowName) -> list[dict[str, str]]:
+    """The ordered form fields, glossed for the model, in this flow's wording."""
+    fields: list[dict[str, str]] = []
+    for name, step in PROPERTY_REQUIREMENTS:
+        fields.append({"field": name, "ask": question_topic(question_key_for(step), flow) or ""})
+    return fields
+
+
 def build_reply_prompt(
     *,
     text: str,
@@ -745,12 +925,15 @@ def build_reply_prompt(
     verdict: _Verdict,
     next_key: str | None,
     history: list[TurnSummary],
+    flow: FlowName,
 ) -> Prompt:
     """Ask the model to write the sentence this turn sends back.
 
     Only accepted facts are shown, and the next question is described in plain
     words rather than by its internal key: the model tailors the phrasing, it
-    does not get to decide what is asked — the code already did.
+    does not get to decide what is asked — the code already did. The flow is
+    passed too, so the wording matches the side of the conversation: a landlord
+    is asked the rent they *want*, a tenant the rent they *seek*.
     """
     return Prompt(
         system=REPLY_SYSTEM_PROMPT,
@@ -758,6 +941,7 @@ def build_reply_prompt(
             {
                 "message": text,
                 "language": language if language in SUPPORTED_LANGUAGES else "fr",
+                "you_are_helping": _FLOW_ROLES.get(flow, _FLOW_ROLES[FlowName.SUPPORT]),
                 "understood": {
                     "intent": verdict.intent,
                     "accepted": verdict.accepted,
@@ -765,7 +949,7 @@ def build_reply_prompt(
                 },
                 # None means "the message was not understood": ask for a rephrase
                 # rather than posing a question the platform never reached.
-                "ask_about": QUESTION_TOPICS.get(next_key or ""),
+                "ask_about": question_topic(next_key, flow),
                 "recent_turns": _turns_as_json(history),
             },
             ensure_ascii=False,

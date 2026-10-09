@@ -19,7 +19,11 @@ from __future__ import annotations
 QUESTION_TEXT: dict[str, str] = {
     "ask.property_type": (
         "Quel type de logement souhaitez-vous publier ?\n"
-        "Exemple : appartement, studio, maison, duplex, chambre, local."
+        "Exemple : appartement, studio, chambre, maison, local."
+    ),
+    "ask.standing": (
+        "Le logement est-il moderne ou non ?\n"
+        "Répondez : moderne, ou non."
     ),
     "ask.location": (
         "Dans quelle ville et dans quel quartier se trouve le logement ?\n"
@@ -27,7 +31,7 @@ QUESTION_TEXT: dict[str, str] = {
     ),
     "ask.rent": "Quel est le loyer mensuel, en FCFA ?",
     "ask.features": (
-        "Combien de chambres et de salles de bain ?\n"
+        "Combien de chambres ?\n"
         "Vous pouvez aussi indiquer la superficie en m2."
     ),
     "ask.charges": (

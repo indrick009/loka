@@ -246,11 +246,13 @@ def _model_result(
     confidence: float = 0.9,
     entities: dict[str, Any] | None = None,
     cost: float = 0.0002,
+    reply: str | None = None,
 ) -> IntentResult:
     return IntentResult(
         intent=intent,
         confidence=confidence,
         entities=entities if entities is not None else {"property_type": "APARTMENT"},
+        reply=reply,
         usage=LlmUsage(
             input_tokens=100,
             output_tokens=40,
@@ -376,6 +378,31 @@ class TestDeterministicShortCircuit:
 
         assert session.context["rent"] == 250_000
         assert sessions.saved
+
+    async def test_a_bare_non_answers_the_standing_question(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Once the platform asked "moderne ou non", a bare "non" is a value for
+        the field, not a refusal: the fast lane must read the open question."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_STANDING
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["next_question"] = "ask.standing"
+        model = StubModel(result=_model_result())
+
+        use_case, _, _, _ = build(uow, session, message_id, text="non", model=model)
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert session.context["standing"] == "NON_MODERN"
+        assert report.next_step == "COLLECT_LOCATION"
 
 
 class TestModelPath:
@@ -580,7 +607,11 @@ class TestModelWrittenReply:
             model=StubModel(
                 result=_model_result(
                     intent="COLLECT_PRICE",
-                    entities={"property_type": "APARTMENT", "city": "Douala"},
+                    entities={
+                        "property_type": "APARTMENT",
+                        "standing": "MODERN",
+                        "city": "Douala",
+                    },
                 )
             ),
             response_model=responder,
@@ -593,6 +624,46 @@ class TestModelWrittenReply:
         payload = json.loads(responder.prompts[0].user)
         assert payload["understood"]["accepted"] is True
         assert "rent" in payload["ask_about"]
+        # A listing is the landlord's side: the wording must say so, otherwise
+        # the model asks for "le loyer que vous recherchez" and reads as if the
+        # platform had mistaken a landlord for a tenant.
+        assert "landlord" in payload["you_are_helping"]
+        assert "ask" in payload["ask_about"]
+
+    async def test_the_reply_prompt_knows_the_tenant_side(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_PRICE",
+                    entities={
+                        "property_type": "APARTMENT",
+                        "standing": "MODERN",
+                        "city": "Douala",
+                    },
+                )
+            ),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(responder.prompts[0].user)
+        assert "tenant" in payload["you_are_helping"]
+        assert "willing to pay" in payload["ask_about"]
 
     async def test_a_failed_reply_falls_back_to_the_template(
         self,
@@ -969,7 +1040,11 @@ class TestSessionAdvancement:
             uow, session, message_id, text="une phrase indeterminate",
             model=StubModel(
                 result=_model_result(
-                    entities={"property_type": "APARTMENT", "city": "Douala"}
+                    entities={
+                        "property_type": "APARTMENT",
+                        "standing": "MODERN",
+                        "city": "Douala",
+                    }
                 )
             ),
         )
@@ -1015,6 +1090,7 @@ class TestSessionAdvancement:
             FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_LOCATION
         )
         session.context["property_type"] = "STUDIO"
+        session.context["standing"] = "MODERN"
 
         use_case, _, _, _ = build(
             uow,
@@ -1049,6 +1125,7 @@ class TestSessionAdvancement:
                 result=_model_result(
                     entities={
                         "property_type": "APARTMENT",
+                        "standing": "MODERN",
                         "city": "Douala",
                         "price": 250_000,
                         "bedrooms": 2,
@@ -1094,7 +1171,11 @@ class TestTheStagedReply:
             text="une phrase indeterminate",
             model=StubModel(
                 result=_model_result(
-                    entities={"property_type": "APARTMENT", "city": "Douala"}
+                    entities={
+                        "property_type": "APARTMENT",
+                        "standing": "MODERN",
+                        "city": "Douala",
+                    }
                 )
             ),
         )
@@ -1169,3 +1250,86 @@ class TestTheStagedReply:
 
         assert uow.events.staged == []
         assert uow.commits == 0
+
+
+class TestSingleCallReply:
+    """One round-trip answers the message and phrases the answer.
+
+    The reply is only asked for a second time when the model left it empty, so a
+    provider that inlines it halves the latency without changing any guarantee.
+    """
+
+    async def test_an_inline_reply_avoids_the_second_call(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(reply="Parfait, quel est le loyer mensuel ?")
+            ),
+            response_model=responder,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is True
+        assert responder.calls == 0
+        staged = uow.events.staged
+        assert staged[0].text == "Parfait, quel est le loyer mensuel ?"
+
+    async def test_an_empty_inline_reply_falls_back_to_the_writer(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(result=_model_result(reply=None)),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert responder.calls == 1
+
+    async def test_the_analysis_prompt_carries_the_form_and_price_context(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The single call can only ask the right next question and read a bare
+        number if the prompt hands it the ordered form and the local rents."""
+        model = StubModel(result=_model_result())
+        use_case, _, _, _ = build(uow, session, message_id, model=model)
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        assert [f["field"] for f in payload["required_fields"]] == [
+            "property_type",
+            "standing",
+            "location",
+            "rent",
+        ]
+        studio = payload["price_reference_monthly_xaf"]["STUDIO"]
+        assert studio["min"] < studio["max"]
+        assert "reply" in payload["schema"]["properties"]
+        assert "standing" in payload["schema"]["properties"]["entities"]["properties"]
+        assert payload["you_are_helping"]

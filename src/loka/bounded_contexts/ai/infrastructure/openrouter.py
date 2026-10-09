@@ -8,6 +8,7 @@ this repository reaches the network.
 
 from __future__ import annotations
 
+import functools
 import json
 import time
 from dataclasses import replace
@@ -29,6 +30,17 @@ log = get_logger(__name__)
 
 RETRYABLE_STATUS = frozenset({408, 500, 502, 503, 504})
 _MAX_ERROR_BODY = 400
+
+
+@functools.lru_cache(maxsize=8)
+def _pooled_client(base_url: str, timeout: float) -> httpx.AsyncClient:
+    """One HTTP client per process, not per message.
+
+    A use case is built for each inbound message, so a client created per model
+    would pay a fresh TLS handshake on every WhatsApp message. Keying the client
+    on the endpoint keeps connections warm across turns.
+    """
+    return httpx.AsyncClient(base_url=base_url, timeout=timeout)
 
 
 class OpenRouterIntentModel:
@@ -112,7 +124,7 @@ class OpenRouterIntentModel:
         self, prompt: Prompt, *, model: str, api_key: str, json_mode: bool = True
     ) -> tuple[str, str, dict[str, Any], int] | None:
         """One attempt. ``None`` means "retryable, try the next model"."""
-        client, owns_client = self._client_for()
+        client = self._client_for()
         started = time.monotonic()
         try:
             response = await client.post(
@@ -123,9 +135,6 @@ class OpenRouterIntentModel:
         except httpx.HTTPError as exc:
             log.warning("openrouter_transport_error", error=str(exc))
             return None
-        finally:
-            if owns_client:
-                await client.aclose()
 
         latency_ms = int((time.monotonic() - started) * 1000)
         if response.status_code == 429:
@@ -154,15 +163,13 @@ class OpenRouterIntentModel:
         content, usage = self._read(response, model=model)
         return model, content, usage, latency_ms
 
-    def _client_for(self) -> tuple[httpx.AsyncClient, bool]:
+    def _client_for(self) -> httpx.AsyncClient:
         if self._client is not None:
-            return self._client, False
-        return (
-            httpx.AsyncClient(
-                base_url=self._settings.base_url,
-                timeout=self._settings.request_timeout_seconds,
-            ),
-            True,
+            return self._client
+        # Never closed here: it is shared across the process and lives as long as
+        # the worker does.
+        return _pooled_client(
+            self._settings.base_url, self._settings.request_timeout_seconds
         )
 
     @staticmethod

@@ -28,6 +28,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     DataQualityIssue,
     Duration,
     PropertyDraftData,
+    PropertyStanding,
     PropertyStatus,
     PropertyType,
     SurfaceArea,
@@ -128,6 +129,7 @@ class Property(AggregateRoot):
         "property_type",
         "published_at",
         "rent",
+        "standing",
         "status",
         "surface_area",
         "updated_at",
@@ -146,6 +148,7 @@ class Property(AggregateRoot):
         self.landlord_id = landlord_id
         self.status = PropertyStatus.DRAFT
         self.property_type: PropertyType | None = None
+        self.standing: PropertyStanding | None = None
         self.location: Location | None = None
         self.rent: Money | None = None
         self.charges: Money | None = None
@@ -192,6 +195,11 @@ class Property(AggregateRoot):
         self._assert_editable()
         self.property_type = property_type
         self.pending_draft_steps.discard(PropertyDraftData.TYPE)
+        self._touch(now)
+
+    def set_standing(self, standing: PropertyStanding, *, now: datetime) -> None:
+        self._assert_editable()
+        self.standing = standing
         self._touch(now)
 
     def set_location(self, location: Location, *, now: datetime) -> None:

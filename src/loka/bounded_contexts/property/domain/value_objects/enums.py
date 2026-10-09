@@ -20,6 +20,17 @@ class PropertyType(StrEnum):
     LAND = "LAND"
 
 
+class PropertyStanding(StrEnum):
+    """Whether the place is modern or not.
+
+    In this market the second question after the type is not the bathroom count
+    or the surface, it is "moderne ou non": it is how tenants actually filter.
+    """
+
+    MODERN = "MODERN"
+    NON_MODERN = "NON_MODERN"
+
+
 class PropertyStatus(StrEnum):
     DRAFT = "DRAFT"
     AVAILABLE = "AVAILABLE"

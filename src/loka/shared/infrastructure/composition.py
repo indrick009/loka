@@ -76,6 +76,9 @@ from loka.bounded_contexts.payment.infrastructure.composition import (
 from loka.bounded_contexts.payment.infrastructure.gateways.mock_gateway import (
     MockPaymentGateway,
 )
+from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (
+    CreatePropertyFromConversationUseCase,
+)
 from loka.bounded_contexts.property.application.use_cases.publish_property import (
     PublishPropertyUseCase,
 )
@@ -164,6 +167,20 @@ def publish_property_use_case(
         uow,
         landlords=uow.repository(LANDLORD_DIRECTORY),
         max_active_properties=max_active_properties,
+    )
+
+
+def create_property_from_conversation_use_case(
+    uow: SqlAlchemyUnitOfWork,
+) -> CreatePropertyFromConversationUseCase:
+    """Turn a confirmed WhatsApp listing conversation into a property draft.
+
+    Resolves the landlord directory from the caller's unit of work, so the
+    profile lookup, the draft write and the session update share one transaction
+    — the confirmation is atomic or it did not happen.
+    """
+    return CreatePropertyFromConversationUseCase(
+        uow, landlords=uow.repository(LANDLORD_DIRECTORY)
     )
 
 

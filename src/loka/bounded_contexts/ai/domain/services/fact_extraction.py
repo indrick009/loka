@@ -20,6 +20,7 @@ from loka.bounded_contexts.messaging.domain.entities.conversation_session import
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     BedroomCount,
+    PropertyStanding,
     PropertyType,
     SurfaceArea,
 )
@@ -33,12 +34,16 @@ from loka.shared.domain.errors import DomainError, ValidationFailed
 MIN_PLAUSIBLE_RENT_XAF = 10_000
 MAX_PLAUSIBLE_RENT_XAF = 500_000_000
 
-# The order is the conversation order: it decides what is asked next.
+# The order is the conversation order: it decides what is asked next. It matches
+# how people describe a home here: the type first ("appart", "studio", "chambre"),
+# then modern or not, then where it is, then the rent. The bathroom count and the
+# surface are deliberately *not* asked: they are rarely known and rarely used,
+# and the answer that sells the place is the photos.
 PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
+    ("standing", FlowStep.COLLECT_STANDING),
     ("location", FlowStep.COLLECT_LOCATION),
     ("rent", FlowStep.COLLECT_PRICE),
-    ("rooms", FlowStep.COLLECT_FEATURES),
 )
 
 # Intents that concern a listing or a search. Everything else — "merci", "c'est
@@ -52,6 +57,7 @@ LISTING_INTENTS = frozenset(
         "COLLECT_LOCATION",
         "COLLECT_PRICE",
         "COLLECT_FEATURES",
+        "COLLECT_STANDING",
         "COLLECT_CHARGES",
         "COLLECT_MINIMUM_DURATION",
         "COLLECT_AVAILABILITY",
@@ -83,6 +89,7 @@ SUPPORTED_INTENTS = frozenset(
         "COLLECT_PROPERTY_TYPE",
         "COLLECT_PRICE",
         "COLLECT_FEATURES",
+        "COLLECT_STANDING",
         "COLLECT_ACQUISITION_SOURCE",
         "AVAILABILITY_STILL_AVAILABLE",
         "AVAILABILITY_RENTED",
@@ -116,6 +123,7 @@ MIN_ACCEPTED_CONFIDENCE = 0.75
 # layer. This stage decides *what* is missing, not how to phrase it.
 QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_PROPERTY_TYPE: "ask.property_type",
+    FlowStep.COLLECT_STANDING: "ask.standing",
     FlowStep.COLLECT_LOCATION: "ask.location",
     FlowStep.COLLECT_PRICE: "ask.rent",
     FlowStep.COLLECT_FEATURES: "ask.features",
@@ -182,6 +190,8 @@ class FactExtractor:
                 "property_type",
                 lambda: PropertyType(str(present["property_type"]).upper()).value,
             )
+        if "standing" in present or "modern" in present:
+            keep("standing", lambda: _build_standing(entities))
         if "city" in present:
             keep("location", lambda: self._build_location(entities))
         elif "location_hint" in present:
@@ -310,3 +320,34 @@ def _clean_hint(raw: Any) -> str:
     if len(hint) < 2:
         raise ValidationFailed("location hint is too vague", context={"value": raw})
     return hint
+
+
+_STANDING_ALIASES: dict[str, PropertyStanding] = {
+    "MODERN": PropertyStanding.MODERN,
+    "MODERNE": PropertyStanding.MODERN,
+    "NON_MODERN": PropertyStanding.NON_MODERN,
+    "NON_MODERNE": PropertyStanding.NON_MODERN,
+    "ANCIEN": PropertyStanding.NON_MODERN,
+    "ANCIENNE": PropertyStanding.NON_MODERN,
+}
+
+
+def _build_standing(entities: dict[str, Any]) -> str:
+    """Read "moderne ou non" from either spelling the model may produce.
+
+    A model handed a French message often answers ``"modern": true`` rather than
+    the ``standing`` enum; both are accepted and normalised to one value, so the
+    rest of the form never has to know which wording arrived.
+    """
+    raw = entities.get("standing")
+    if raw is None and "modern" in entities:
+        modern = entities["modern"]
+        if isinstance(modern, bool):
+            return (
+                PropertyStanding.MODERN.value if modern else PropertyStanding.NON_MODERN.value
+            )
+        raw = modern
+    text = str(raw).strip().upper().replace(" ", "_").replace("-", "_")
+    if text in _STANDING_ALIASES:
+        return _STANDING_ALIASES[text].value
+    return PropertyStanding(text).value

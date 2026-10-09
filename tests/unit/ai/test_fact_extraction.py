@@ -55,6 +55,22 @@ class TestAcceptedFacts:
 
         assert facts.get("location") == {"city": "Douala", "neighbourhood": "Bonapriso"}
 
+    def test_a_standing_is_kept_from_either_spelling(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A model handed a French message may answer "modern": true instead of
+        the enum; both are normalised to one value the form can read."""
+        assert extractor.validate({"standing": "MODERNE"}).get("standing") == "MODERN"
+        assert extractor.validate({"modern": True}).get("standing") == "MODERN"
+        assert extractor.validate({"modern": False}).get("standing") == "NON_MODERN"
+        assert extractor.validate({"standing": "ancien"}).get("standing") == "NON_MODERN"
+
+    def test_an_unknown_standing_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"standing": "peut-etre"})
+
+        assert not facts.has("standing")
+        assert "standing" in facts.rejected
+
 
 class TestRefusedFacts:
     def test_a_negative_rent_is_refused(self, extractor: FactExtractor) -> None:
@@ -135,24 +151,27 @@ class TestConversationOrder:
 
         step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
 
-        assert step is FlowStep.COLLECT_LOCATION
+        assert step is FlowStep.COLLECT_STANDING
 
-    def test_the_order_is_property_location_price_rooms(
+    def test_the_order_is_type_standing_location_price(
         self, extractor: FactExtractor
     ) -> None:
         cases = [
-            ({"property_type": "APARTMENT"}, FlowStep.COLLECT_LOCATION),
-            ({"property_type": "APARTMENT", "city": "Douala"}, FlowStep.COLLECT_PRICE),
+            ({"property_type": "APARTMENT"}, FlowStep.COLLECT_STANDING),
             (
-                {"property_type": "APARTMENT", "city": "Douala", "price": 250_000},
-                FlowStep.COLLECT_FEATURES,
+                {"property_type": "APARTMENT", "standing": "MODERN"},
+                FlowStep.COLLECT_LOCATION,
+            ),
+            (
+                {"property_type": "APARTMENT", "standing": "MODERN", "city": "Douala"},
+                FlowStep.COLLECT_PRICE,
             ),
             (
                 {
                     "property_type": "APARTMENT",
+                    "standing": "MODERN",
                     "city": "Douala",
                     "price": 250_000,
-                    "bedrooms": 2,
                 },
                 FlowStep.CONFIRM_PROPERTY,
             ),
@@ -168,12 +187,12 @@ class TestConversationOrder:
         """A landlord who says everything in one message must not be asked for
         the type of property they just named."""
         facts = extractor.validate(
-            {"property_type": "APARTMENT", "city": "Douala", "price": 250_000}
+            {"property_type": "APARTMENT", "standing": "MODERN", "city": "Douala"}
         )
 
         step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
 
-        assert step is FlowStep.COLLECT_FEATURES
+        assert step is FlowStep.COLLECT_PRICE
 
     def test_a_support_conversation_is_not_hijacked_by_a_stray_amount(
         self, extractor: FactExtractor
@@ -206,7 +225,7 @@ class TestConversationOrder:
             "COLLECT_LOCATION",
             facts,
             flow=FlowName.PROPERTY_CREATION,
-            known={"property_type": "STUDIO"},
+            known={"property_type": "STUDIO", "standing": "MODERN"},
         )
 
         assert step is FlowStep.COLLECT_PRICE
@@ -227,7 +246,7 @@ class TestConversationOrder:
 
         step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
 
-        assert question_key_for(step) == "ask.location"
+        assert question_key_for(step) == "ask.standing"
 
     def test_no_step_means_no_question(self) -> None:
         assert question_key_for(None) is None
