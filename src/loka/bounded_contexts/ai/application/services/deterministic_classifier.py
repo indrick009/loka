@@ -1,9 +1,16 @@
 """Deterministic intent classification.
 
-Runs before any LLM call. Most replies are short and unambiguous
-("oui", "250 000", "Bastos") and must not cost a model call. Anything the
-rules cannot resolve returns ``None``, which is the signal to fall back to
-the LLM rather than guess.
+Two entry points, with different jobs:
+
+* :meth:`DeterministicClassifier.shortcut` is the cheap path used when a model
+  is available. It only fires on messages that carry no ambiguity at all — an
+  exact "oui"/"non" or a bare amount — where spending a model call would be
+  pure waste. Everything else goes to the model first.
+* :meth:`DeterministicClassifier.classify` is the fuller rule set used when no
+  model is configured, so the platform still answers with regexes alone.
+
+Anything neither can resolve returns ``None``, which is the signal to fall back
+rather than guess.
 """
 
 from __future__ import annotations
@@ -61,6 +68,17 @@ AMOUNT_PATTERN = re.compile(
 )
 GROUPED_AMOUNT_PATTERN = re.compile(r"(?<![\d.])(\d{1,3}(?:[ .\u202f]\d{3})+)(?![\d.])")
 PLAIN_AMOUNT_PATTERN = re.compile(r"(?<![\d.])(\d{5,9})(?![\d.])")
+# Local shorthand: in Cameroonian French "50 mil" is 50 000, but "mil" reads as
+# "million" in most of a model's training data. The model is a bad place to
+# settle a locale convention, so the meaning is owned here, in a rule.
+SHORTHAND_MILLION_PATTERN = re.compile(
+    r"(?<![\d.])(?P<amount>\d[\d\s.\u202f]{0,12}?)\s*(?:millions?|miyons?|mio)\b",
+    re.IGNORECASE,
+)
+SHORTHAND_THOUSAND_PATTERN = re.compile(
+    r"(?<![\d.])(?P<amount>\d[\d\s.\u202f]{0,12}?)\s*(?:milles?|mil|k)\b",
+    re.IGNORECASE,
+)
 BEDROOM_PATTERN = re.compile(
     r"(?P<count>\d{1,2})\s*(?:chambres?|pieces?|pi[eè]ces?|bed\s?rooms?)", re.IGNORECASE
 )
@@ -226,6 +244,51 @@ class DeterministicClassifier:
 
         return None
 
+    def shortcut(self, text: str) -> DeterministicMatch | None:
+        """The unambiguous replies that must never cost a model call.
+
+        Strictly narrower than :meth:`classify`: when a model is available the
+        rules are only a fast lane, not the primary reader. An exact "oui"/"non"
+        and a message whose only content is a price are the cases where the
+        model can add nothing; "je cherche un appartement à Bastos" is not,
+        because the intent (search vs listing) is exactly what the model is for.
+        """
+        normalized = self._normalize(text)
+        if not normalized:
+            return None
+        if normalized in AFFIRMATIVE:
+            return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
+        if normalized in NEGATIVE:
+            return DeterministicMatch(intent="NEGATIVE", confidence=0.98)
+        entities = self._extract_entities(normalized)
+        if "price" in entities and len(normalized.split()) <= 4:
+            return DeterministicMatch(
+                intent="COLLECT_PRICE",
+                confidence=0.92,
+                entities={"price": entities["price"]},
+            )
+        return None
+
+    def shorthand_amount(self, text: str) -> int | None:
+        """The amount when the message spells it as local shorthand, else None.
+
+        Only the shorthand case is returned: it is exactly where the model's
+        prior ("mil" = million) is wrong for this market, so the code owns the
+        meaning and overrides the model's number. A plain "250 000" is left to
+        the model, which reads it reliably.
+        """
+        normalized = self._normalize(text)
+        for pattern, multiplier in (
+            (SHORTHAND_MILLION_PATTERN, 1_000_000),
+            (SHORTHAND_THOUSAND_PATTERN, 1_000),
+        ):
+            match = pattern.search(normalized)
+            if match:
+                value = _parse_amount(match.group("amount")) * multiplier
+                if value >= MIN_PLAUSIBLE_RENT_XAF:
+                    return value
+        return None
+
     def to_intent_result(self, match: DeterministicMatch) -> IntentResult:
         return IntentResult(
             intent=match.intent,
@@ -235,15 +298,9 @@ class DeterministicClassifier:
 
     def _extract_entities(self, normalized: str) -> dict[str, object]:
         entities: dict[str, object] = {}
-        amount = AMOUNT_PATTERN.search(normalized)
-        raw_amount = amount.group("amount") if amount else None
-        if raw_amount is None:
-            bare = GROUPED_AMOUNT_PATTERN.search(normalized)
-            if bare is None:
-                bare = PLAIN_AMOUNT_PATTERN.search(normalized)
-            raw_amount = bare.group(1) if bare else None
+        raw_amount, multiplier = self._find_amount(normalized)
         if raw_amount is not None:
-            value = _parse_amount(raw_amount)
+            value = _parse_amount(raw_amount) * multiplier
             if value >= MIN_PLAUSIBLE_RENT_XAF:
                 entities["price"] = value
         bedrooms = BEDROOM_PATTERN.search(normalized)
@@ -259,6 +316,28 @@ class DeterministicClassifier:
         if location:
             entities["location_hint"] = location.group(0).title()
         return entities
+
+    @staticmethod
+    def _find_amount(normalized: str) -> tuple[str | None, int]:
+        """The first amount in the message, with its locale multiplier.
+
+        Ordered most-specific first: an explicit "fcfa" beats a shorthand, and a
+        million ("million"/"mio") beats a thousand ("mil"/"k") so "50 million is
+        not read as 50 000.
+        """
+        for pattern, multiplier in (
+            (AMOUNT_PATTERN, 1),
+            (SHORTHAND_MILLION_PATTERN, 1_000_000),
+            (SHORTHAND_THOUSAND_PATTERN, 1_000),
+        ):
+            match = pattern.search(normalized)
+            if match:
+                return match.group("amount"), multiplier
+        for pattern in (GROUPED_AMOUNT_PATTERN, PLAIN_AMOUNT_PATTERN):
+            match = pattern.search(normalized)
+            if match:
+                return match.group(1), 1
+        return None, 1
 
     @staticmethod
     def _first_match(patterns: dict[str, re.Pattern[str]], normalized: str) -> str | None:

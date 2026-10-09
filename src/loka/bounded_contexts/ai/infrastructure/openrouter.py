@@ -17,6 +17,7 @@ import httpx
 
 from loka.bounded_contexts.ai.domain.services.ai_provider import (
     IntentResult,
+    LlmResponse,
     LlmUsage,
     Prompt,
 )
@@ -31,7 +32,7 @@ _MAX_ERROR_BODY = 400
 
 
 class OpenRouterIntentModel:
-    """Understands an intent through OpenRouter's chat completions API."""
+    """Talks to OpenRouter: understands intents and writes replies."""
 
     def __init__(
         self,
@@ -74,8 +75,41 @@ class OpenRouterIntentModel:
             usage=self._usage(model, usage, latency_ms),
         )
 
+    async def generate_response(self, prompt: Prompt) -> LlmResponse:
+        """Write the assistant's next message, in plain text.
+
+        No ``response_format``: this call produces prose, not a machine-readable
+        object, and forcing JSON here would make the model wrap a sentence in
+        braces that the outbound layer would then send verbatim.
+        """
+        api_key = self._settings.api_key.get_secret_value()
+        if not api_key:
+            raise ExternalServiceUnavailable(
+                "OpenRouter API key is not configured",
+                context={"provider": self._settings.provider},
+            )
+
+        answer = await self._complete(
+            prompt, model=self._default, api_key=api_key, json_mode=False
+        )
+        if answer is None and self._fallback != self._default:
+            log.warning("openrouter_primary_model_failed", model=self._default)
+            answer = await self._complete(
+                prompt, model=self._fallback, api_key=api_key, json_mode=False
+            )
+        if answer is None:
+            raise ExternalServiceUnavailable(
+                "no OpenRouter model could write the reply",
+                context={"models": [self._default, self._fallback]},
+            )
+        model, content, usage, latency_ms = answer
+        return LlmResponse(
+            content=content.strip(),
+            usage=self._usage(model, usage, latency_ms),
+        )
+
     async def _complete(
-        self, prompt: Prompt, *, model: str, api_key: str
+        self, prompt: Prompt, *, model: str, api_key: str, json_mode: bool = True
     ) -> tuple[str, str, dict[str, Any], int] | None:
         """One attempt. ``None`` means "retryable, try the next model"."""
         client, owns_client = self._client_for()
@@ -83,7 +117,7 @@ class OpenRouterIntentModel:
         try:
             response = await client.post(
                 "/chat/completions",
-                json=self._body(prompt, model),
+                json=self._body(prompt, model, json_mode=json_mode),
                 headers=self._headers(api_key),
             )
         except httpx.HTTPError as exc:
@@ -180,8 +214,8 @@ class OpenRouterIntentModel:
             model=model,
         )
 
-    def _body(self, prompt: Prompt, model: str) -> dict[str, Any]:
-        return {
+    def _body(self, prompt: Prompt, model: str, *, json_mode: bool = True) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "model": model,
             "temperature": prompt.temperature,
             "max_tokens": prompt.max_output_tokens,
@@ -189,12 +223,14 @@ class OpenRouterIntentModel:
                 {"role": "system", "content": prompt.system},
                 {"role": "user", "content": prompt.user},
             ],
+            **prompt.extra,
+        }
+        if json_mode:
             # Plain JSON mode rather than a vendor schema: the shape is already
             # enforced twice downstream (the prompt, then the value objects), so
             # a stricter contract here would only add a failure mode.
-            "response_format": {"type": "json_object"},
-            **prompt.extra,
-        }
+            body["response_format"] = {"type": "json_object"}
+        return body
 
 
 def _parse_json_object(content: str) -> dict[str, Any]:

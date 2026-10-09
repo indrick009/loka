@@ -1,9 +1,11 @@
-"""Copy for outbound WhatsApp replies.
+"""Fallback copy for outbound WhatsApp replies.
 
-The analysis decides *what* is missing and hands over a stable
-``question_key``; this module owns *how it is phrased*. Keeping the sentences
-here rather than next to the question keys means a rewording, a translation or
-a tone change never re-runs the model and never touches conversation state.
+When a response model is configured the analysis writes the sentence itself and
+this module is only the safety net; when it is not, this is the whole voice of
+the assistant. Either way the analysis hands over a stable ``question_key`` and
+this module owns *how it is phrased* without a model. Keeping the sentences here
+rather than next to the question keys means a rewording, a translation or a tone
+change never re-runs the model and never touches conversation state.
 
 A key with no sentence must not be sent: an untranslated key leaking into a
 thread is worse than a fallback, because the landlord cannot answer a variable

@@ -1,17 +1,21 @@
-"""Understand one inbound message, at the lowest possible cost.
+"""Understand one inbound message, with the conversation as context.
 
 The pipeline is deliberately boring:
 
 1. Read the message and its session, then **commit** so no transaction is held
    while a network call runs.
-2. Try the deterministic rules. A short, unambiguous reply ("oui", "250 000")
-   must never cost a model call.
-3. Only if the rules abstain, ask the model — and only if the budget allows it.
-4. Validate whatever came back through the domain value objects, then write
-   the turn, the usage and the session state in one transaction.
+2. Ask the model first, handing it the state of the conversation — the flow, the
+   step, the question the user is answering and the facts already known — so a
+   bare "Bastos" is understood as an answer and not as noise.
+3. Keep a deterministic fast lane for the replies where a model adds nothing: an
+   exact "oui"/"non" and a message whose only content is a price.
+4. Validate whatever came back through the domain value objects, then write the
+   turn, the usage and the session state in one transaction.
 
 The model never decides what happens next: it proposes facts, the code decides
-whether they are good enough to move the conversation forward.
+whether they are good enough to move the conversation forward. When a
+``ResponseModel`` is configured the same turn also gets a natural-language
+reply; otherwise the outbound layer renders a stable template from the key.
 """
 
 from __future__ import annotations
@@ -30,16 +34,18 @@ from loka.bounded_contexts.ai.application.ports import (
     ConversationTurn,
     ConversationTurnRepository,
     IntentModel,
+    ResponseModel,
     TurnSummary,
     UsageEntry,
 )
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     DeterministicClassifier,
 )
-from loka.bounded_contexts.ai.domain.services.ai_provider import Prompt
+from loka.bounded_contexts.ai.domain.services.ai_provider import LlmUsage, Prompt
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
     MIN_ACCEPTED_CONFIDENCE,
+    SUPPORTED_INTENTS,
     ExtractedFacts,
     FactExtractor,
     is_supported_intent,
@@ -47,6 +53,7 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
 )
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
+    FlowName,
     FlowStep,
 )
 from loka.bounded_contexts.messaging.domain.events.message_events import (
@@ -61,6 +68,7 @@ from loka.bounded_contexts.messaging.domain.repositories.inbound_message_reposit
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
+from loka.shared.domain.errors import DomainError
 from loka.shared.infrastructure.metrics import (
     ai_bypass_total,
     llm_calls_total,
@@ -77,13 +85,51 @@ SYSTEM_PROMPT = (
     "Reply with one JSON object and nothing else. "
     "Never invent a value that is not in the message: use null when unsure. "
     "Amounts are in XAF. Numbers must be plain integers."
+    " You are given the state of the conversation (flow, step, the question the "
+    "user is answering, and the facts already known). Use it: a short reply like "
+    "a neighbourhood or a number is an answer to that question, so set the "
+    "matching entity instead of asking again."
+    " Set 'intent' to exactly one value from 'allowed_intents' and nothing else. "
+    "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
+    "applies at all."
 )
+
+# The closed set the model may choose from. Exposed in the prompt so the model
+# never invents a state the platform does not have: an unsupported intent is
+# discarded as untrusted, which would turn a simple "bonjour" into a confusing
+# rephrase request.
+ALLOWED_INTENTS: tuple[str, ...] = tuple(sorted(SUPPORTED_INTENTS))
+
+REPLY_SYSTEM_PROMPT = (
+    "You are Loka, a warm WhatsApp assistant for a Cameroonian real-estate "
+    "platform. Write the next message the assistant sends to the user. "
+    "Answer in the conversation's language. One to three short sentences, plain "
+    "text: no markdown, no emoji, no letter salutation and no signature. "
+    "If a question is given, ask it naturally in your own words. "
+    "Never invent a listing, a price or a fact that is not in the context, and "
+    "never promise anything the platform did not confirm."
+)
+
+# A short, provider-neutral gloss for each question, so the reply model knows
+# what it is asking for without reading the outbound layer's copy.
+QUESTION_TOPICS: dict[str, str] = {
+    "ask.property_type": "the type of property (apartment, studio, house, ...)",
+    "ask.location": "the city and neighbourhood",
+    "ask.rent": "the monthly rent, in XAF",
+    "ask.features": "the number of bedrooms and bathrooms, and the surface in m2",
+    "ask.charges": "whether charges are included and, if not, their monthly amount",
+    "ask.minimum_duration": "the minimum rental duration",
+    "ask.availability": "whether the property is still available",
+    "ask.conditions": "the tenant conditions (deposit, duration, tenant type)",
+    "ask.confirm_property": "confirmation of the summary before publishing",
+    "confirm.published": "confirmation that the property has been published",
+}
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["intent", "confidence", "entities"],
     "properties": {
-        "intent": {"type": "string"},
+        "intent": {"type": "string", "enum": list(ALLOWED_INTENTS)},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "language": {"type": "string"},
         "entities": {
@@ -126,6 +172,17 @@ class AnalysisReport:
     cost_usd: Decimal = Decimal("0")
 
 
+@dataclass(frozen=True, slots=True)
+class _Verdict:
+    """What the domain accepted from one proposed intent."""
+
+    intent: str
+    facts: ExtractedFacts
+    accepted: bool
+    reason: str | None
+    next_step: FlowStep | None
+
+
 class AnalyseConversationMessageUseCase:
     name = USE_CASE
 
@@ -139,6 +196,7 @@ class AnalyseConversationMessageUseCase:
         usage: AiUsageLedger,
         classifier: DeterministicClassifier | None = None,
         model: IntentModel | None = None,
+        response_model: ResponseModel | None = None,
         extractor: FactExtractor | None = None,
         budget: BudgetPolicy | None = None,
         provider_name: str = "openrouter",
@@ -150,6 +208,7 @@ class AnalyseConversationMessageUseCase:
         self._usage = usage
         self._classifier = classifier or DeterministicClassifier()
         self._model = model
+        self._response_model = response_model
         self._extractor = extractor or FactExtractor()
         self._budget = budget
         self._provider = provider_name
@@ -175,48 +234,39 @@ class AnalyseConversationMessageUseCase:
             )
 
         history = await self._turns.recent(session.id, limit=5)
-        prompt = build_analysis_prompt(
-            text=message.text, language=session.language, history=history
-        )
 
         # Nothing has been written yet, so releasing the transaction costs
         # nothing and the model call never holds a database connection.
         await self._uow.commit()
 
-        match = self._classifier.classify(message.text or "")
-        if match is not None:
-            ai_bypass_total.labels(stage="regex").inc()
-            return await self._apply(
-                session=session,
-                message_id=command.message_id,
-                intent=match.intent,
-                confidence=match.confidence,
-                entities=dict(match.entities),
-                used_llm=False,
-                latency_ms=0,
-                cost_usd=Decimal("0"),
-                now=moment,
-            )
-
-        ai_bypass_total.labels(stage="budget" if self._model is None else "llm").inc()
+        text = message.text or ""
 
         if self._model is None:
-            return await self._apply(
+            return await self._without_a_model(
+                session, message_id=command.message_id, text=text, now=moment
+            )
+
+        # The rules are a fast lane now, not the primary reader: only replies a
+        # model could not improve ("oui", "250 000 fcfa") skip the call.
+        shortcut = self._classifier.shortcut(text)
+        if shortcut is not None:
+            ai_bypass_total.labels(stage="regex").inc()
+            return await self._finish(
                 session=session,
                 message_id=command.message_id,
-                intent="UNKNOWN",
-                confidence=0.0,
-                entities={},
+                intent=shortcut.intent,
+                confidence=shortcut.confidence,
+                entities=dict(shortcut.entities),
                 used_llm=False,
                 latency_ms=0,
                 cost_usd=Decimal("0"),
                 now=moment,
-                reason="no_model_configured",
             )
 
         decision = await self._budget_decision(session.user_id, moment)
         if not decision.allowed:
-            return await self._apply(
+            ai_bypass_total.labels(stage="budget").inc()
+            return await self._finish(
                 session=session,
                 message_id=command.message_id,
                 intent="UNKNOWN",
@@ -229,18 +279,61 @@ class AnalyseConversationMessageUseCase:
                 reason=decision.reason,
             )
 
-        model = self._model
-        result = await model.understand_intent(prompt)
-        llm_usage = result.usage
-        model_name = llm_usage.model if llm_usage is not None else model.model
-        input_tokens = llm_usage.input_tokens if llm_usage is not None else 0
-        output_tokens = llm_usage.output_tokens if llm_usage is not None else 0
-        latency_ms = llm_usage.latency_ms if llm_usage is not None else 0
+        ai_bypass_total.labels(stage="llm").inc()
+        pending = session.context.get("next_question")
+        prompt = build_analysis_prompt(
+            text=message.text,
+            language=session.language,
+            history=history,
+            flow=session.flow,
+            step=session.step,
+            pending_question=pending if isinstance(pending, str) else None,
+            known_facts=dict(session.context),
+        )
+        result = await self._model.understand_intent(prompt)
+        entities = dict(result.entities)
+        # The locale shorthand ("50 mil") is a rule, not a guess: when the
+        # message spells one it overrides whatever number the model proposed,
+        # because the model's prior reads "mil" as a million.
+        shorthand = self._classifier.shorthand_amount(text)
+        if shorthand is not None:
+            entities["price"] = shorthand
+        verdict = self._verdict(
+            session=session,
+            intent=result.intent,
+            confidence=result.confidence,
+            entities=entities,
+            reason=None,
+        )
+
+        # The reply is written before the write transaction opens: an LLM call
+        # must never hold a database connection, and a reply that fails degrades
+        # to a template rather than to silence.
+        reply_text, reply_usage = await self._compose_reply(
+            verdict=verdict,
+            text=text,
+            session=session,
+            history=history,
+            now=moment,
+        )
+
+        # Both calls are one turn: the ledger records their sum, so reply traffic
+        # cannot spend past a budget that only counted intent calls.
+        call_usage = result.usage
+        model_name = call_usage.model if call_usage is not None else self._model.model
+        input_tokens = call_usage.input_tokens if call_usage is not None else 0
+        output_tokens = call_usage.output_tokens if call_usage is not None else 0
+        latency_ms = call_usage.latency_ms if call_usage is not None else 0
         cost_usd = (
-            Decimal(str(llm_usage.estimated_cost_usd))
-            if llm_usage is not None
+            Decimal(str(call_usage.estimated_cost_usd))
+            if call_usage is not None
             else Decimal("0")
         )
+        if reply_usage is not None:
+            input_tokens += reply_usage.input_tokens
+            output_tokens += reply_usage.output_tokens
+            latency_ms += reply_usage.latency_ms
+            cost_usd += Decimal(str(reply_usage.estimated_cost_usd))
 
         llm_calls_total.labels(use_case=USE_CASE, model=model_name, outcome="ok").inc()
         llm_tokens_total.labels(model=model_name, direction="input").inc(input_tokens)
@@ -254,9 +347,8 @@ class AnalyseConversationMessageUseCase:
         return await self._apply(
             session=session,
             message_id=command.message_id,
-            intent=result.intent,
+            verdict=verdict,
             confidence=result.confidence,
-            entities=dict(result.entities),
             used_llm=True,
             latency_ms=latency_ms,
             cost_usd=cost_usd,
@@ -264,9 +356,47 @@ class AnalyseConversationMessageUseCase:
             model_name=model_name,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
+            reply_text=reply_text,
         )
 
-    async def _apply(
+    async def _without_a_model(
+        self, session: ConversationSession, *, message_id: uuid.UUID, text: str, now: datetime
+    ) -> AnalysisReport:
+        """The deployment has no AI key: fall back to regexes and templates.
+
+        The rule set here is the full classifier, not the fast lane, because it
+        is now the only reader. An unresolved message still records its turn and
+        asks the user to rephrase instead of leaving the thread silent.
+        """
+        match = self._classifier.classify(text)
+        if match is not None:
+            ai_bypass_total.labels(stage="regex").inc()
+            return await self._finish(
+                session=session,
+                message_id=message_id,
+                intent=match.intent,
+                confidence=match.confidence,
+                entities=dict(match.entities),
+                used_llm=False,
+                latency_ms=0,
+                cost_usd=Decimal("0"),
+                now=now,
+            )
+        ai_bypass_total.labels(stage="budget").inc()
+        return await self._finish(
+            session=session,
+            message_id=message_id,
+            intent="UNKNOWN",
+            confidence=0.0,
+            entities={},
+            used_llm=False,
+            latency_ms=0,
+            cost_usd=Decimal("0"),
+            now=now,
+            reason="no_model_configured",
+        )
+
+    async def _finish(
         self,
         *,
         session: ConversationSession,
@@ -279,15 +409,39 @@ class AnalyseConversationMessageUseCase:
         cost_usd: Decimal,
         now: datetime,
         reason: str | None = None,
-        model_name: str | None = None,
-        input_tokens: int = 0,
-        output_tokens: int = 0,
     ) -> AnalysisReport:
-        """Validate, record, and only then move the conversation.
+        """Close a call that did not reach the model: no reply is written."""
+        return await self._apply(
+            session=session,
+            message_id=message_id,
+            verdict=self._verdict(
+                session=session,
+                intent=intent,
+                confidence=confidence,
+                entities=entities,
+                reason=reason,
+            ),
+            confidence=confidence,
+            used_llm=used_llm,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            now=now,
+        )
 
-        Extraction runs even for a rejected outcome: knowing *what* the model
-        proposed and which value objects refused it is what makes a bad answer
-        debuggable instead of mysterious.
+    def _verdict(
+        self,
+        *,
+        session: ConversationSession,
+        intent: str,
+        confidence: float,
+        entities: dict[str, Any],
+        reason: str | None,
+    ) -> _Verdict:
+        """Validate a proposal through the domain, before anything is written.
+
+        Split out of ``_apply`` so the reply can be written from the *outcome*
+        of the turn — the next question, or the fact it was refused — while the
+        write transaction is still closed.
         """
         if not is_supported_intent(intent):
             intent, reason = "UNKNOWN", reason or "unsupported_intent"
@@ -295,12 +449,90 @@ class AnalyseConversationMessageUseCase:
             reason = "low_confidence"
 
         facts = self._extractor.validate(entities)
+        # The next step must consider the whole form, not just this message: a
+        # landlord who gives their city after naming the property type is one
+        # step further, not back at the type question. When this message opens a
+        # *new* flow, the old facts belong to the abandoned attempt and are
+        # deliberately ignored — matching the reset ``_advance_session`` does.
+        opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
+        starts_new_flow = opening_flow is not None and session.flow is not opening_flow
+        known = {} if starts_new_flow else dict(session.context)
         next_step = (
-            self._extractor.next_step(intent, facts, flow=session.flow)
+            self._extractor.next_step(intent, facts, flow=session.flow, known=known)
             if reason is None
             else None
         )
-        accepted = reason is None
+        return _Verdict(
+            intent=intent,
+            facts=facts,
+            accepted=reason is None,
+            reason=reason,
+            next_step=next_step,
+        )
+
+    async def _compose_reply(
+        self,
+        *,
+        verdict: _Verdict,
+        text: str,
+        session: ConversationSession,
+        history: list[TurnSummary],
+        now: datetime,
+    ) -> tuple[str | None, LlmUsage | None]:
+        """Let the model phrase the answer, or return ``(None, None)``.
+
+        ``None`` means "use the template": either no response model is
+        configured, or writing it failed. A reply failure must never cost the
+        user their turn, so the exception is swallowed here and the outbound
+        layer falls back to its stable copy.
+        """
+        if self._response_model is None or not text.strip():
+            return None, None
+
+        next_key = question_key_for(verdict.next_step) if verdict.accepted else None
+        prompt = build_reply_prompt(
+            text=text,
+            language=session.language,
+            verdict=verdict,
+            next_key=next_key,
+            history=history,
+        )
+        try:
+            response = await self._response_model.generate_response(prompt)
+        except DomainError:
+            return None, None
+        sentence = response.content.strip()
+        if not sentence:
+            return None, None
+        return sentence, response.usage
+
+    async def _apply(
+        self,
+        *,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+        verdict: _Verdict,
+        confidence: float,
+        used_llm: bool,
+        latency_ms: int,
+        cost_usd: Decimal,
+        now: datetime,
+        model_name: str | None = None,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        reply_text: str | None = None,
+    ) -> AnalysisReport:
+        """Record the turn, move the conversation, and stage the answer.
+
+        Extraction already happened in ``_verdict``; a rejected outcome is still
+        recorded, so "the model was unsure" stays measurable instead of being
+        silently converted into a wrong listing.
+        """
+        intent = verdict.intent
+        facts = verdict.facts
+        next_step = verdict.next_step
+        reason = verdict.reason
+        accepted = verdict.accepted
 
         await self._turns.add(
             ConversationTurn(
@@ -339,7 +571,12 @@ class AnalyseConversationMessageUseCase:
         # notice a reply that was never staged.
         question = question_key_for(next_step) if accepted else None
         await self._stage_reply(
-            session, intent=intent, reason=reason, question_key=question, now=now
+            session,
+            intent=intent,
+            reason=reason,
+            question_key=question,
+            text=reply_text,
+            now=now,
         )
 
         await self._uow.commit()
@@ -366,13 +603,14 @@ class AnalyseConversationMessageUseCase:
         reason: str | None,
         question_key: str | None,
         now: datetime,
+        text: str | None = None,
     ) -> None:
         """Request the one reply this turn owes the user.
 
         Which question comes next is decided above; this only records that an
-        answer is due and what kind it is. The copy itself belongs to the
-        outbound layer, so rewording a question never touches the model or the
-        conversation state.
+        answer is due and, when the model wrote one, the sentence to send. A
+        missing ``text`` is not a silent thread: the outbound layer renders the
+        stable copy for the ``question_key``, which is the deterministic path.
         """
         self._uow.events.stage(
             [
@@ -385,6 +623,8 @@ class AnalyseConversationMessageUseCase:
                     recipient_phone=session.phone.e164,
                     reply_kind=_reply_kind(reason=reason, question_key=question_key),
                     question_key=question_key,
+                    intent=intent,
+                    text=text,
                     language=session.language,
                 )
             ],
@@ -462,8 +702,16 @@ def build_analysis_prompt(
     text: str | None,
     language: str,
     history: list[TurnSummary],
+    flow: FlowName,
+    step: FlowStep,
+    pending_question: str | None,
+    known_facts: dict[str, Any],
 ) -> Prompt:
-    """Assemble the request, with the recent turns as context.
+    """Assemble the request, with the state of the conversation as context.
+
+    The context is what turns "Bastos" from noise into an answer: the model can
+    see that it is replying to the location question of an open listing, and
+    fill the matching entity instead of guessing an intent from three words.
 
     The phone number is never part of the prompt: the model has no business
     knowing who it is talking to, and prompts end up in vendor logs.
@@ -474,18 +722,66 @@ def build_analysis_prompt(
             {
                 "message": text or "",
                 "language": language if language in SUPPORTED_LANGUAGES else "fr",
-                "recent_turns": [
-                    {
-                        "direction": turn.direction,
-                        "intent": turn.intent,
-                        "confidence": round(turn.confidence, 2),
-                        "used_llm": turn.used_llm,
-                    }
-                    for turn in history
-                ],
+                "conversation": {
+                    "flow": flow.value,
+                    "step": step.value,
+                    "awaiting_answer_to": pending_question,
+                    "known_facts": known_facts,
+                },
+                "recent_turns": _turns_as_json(history),
                 "schema": RESPONSE_SCHEMA,
+                "allowed_intents": list(ALLOWED_INTENTS),
             },
             ensure_ascii=False,
         ),
         response_schema=RESPONSE_SCHEMA,
     )
+
+
+def build_reply_prompt(
+    *,
+    text: str,
+    language: str,
+    verdict: _Verdict,
+    next_key: str | None,
+    history: list[TurnSummary],
+) -> Prompt:
+    """Ask the model to write the sentence this turn sends back.
+
+    Only accepted facts are shown, and the next question is described in plain
+    words rather than by its internal key: the model tailors the phrasing, it
+    does not get to decide what is asked — the code already did.
+    """
+    return Prompt(
+        system=REPLY_SYSTEM_PROMPT,
+        user=json.dumps(
+            {
+                "message": text,
+                "language": language if language in SUPPORTED_LANGUAGES else "fr",
+                "understood": {
+                    "intent": verdict.intent,
+                    "accepted": verdict.accepted,
+                    "known_facts": verdict.facts.as_context() if verdict.accepted else {},
+                },
+                # None means "the message was not understood": ask for a rephrase
+                # rather than posing a question the platform never reached.
+                "ask_about": QUESTION_TOPICS.get(next_key or ""),
+                "recent_turns": _turns_as_json(history),
+            },
+            ensure_ascii=False,
+        ),
+        temperature=0.4,
+        max_output_tokens=256,
+    )
+
+
+def _turns_as_json(history: list[TurnSummary]) -> list[dict[str, Any]]:
+    return [
+        {
+            "direction": turn.direction,
+            "intent": turn.intent,
+            "confidence": round(turn.confidence, 2),
+            "used_llm": turn.used_llm,
+        }
+        for turn in history
+    ]

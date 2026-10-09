@@ -70,11 +70,14 @@ class WhatsAppMessageIngested(DomainEvent):
 class WhatsAppMessageSendRequested(DomainEvent):
     """Ask the outbound layer to answer one turn of a conversation.
 
-    The analysis knows *what* is missing, never *how to phrase it*: it emits a
-    stable ``question_key`` and the outbound layer owns the copy, so a
-    rephrasing or a translation never re-runs the model. Staged in the same
-    transaction as the turn it answers, so a committed analysis cannot end with
-    the landlord waiting for a question nobody will ever send.
+    The analysis decides *what* is missing; the outbound layer owns *how to
+    phrase it*. ``text`` optionally carries a model-written sentence composed
+    while the analysis ran: when present the outbound layer sends it verbatim,
+    and when absent it renders ``question_key`` from its own copy. That keeps
+    the deterministic path (and every deployment without an AI key) working
+    from stable keys, while still allowing a natural reply when a model is
+    configured — without ever leaving the landlord waiting for a question
+    nobody will send.
 
     The recipient is carried rather than resolved by the consumer: the session
     that owns the conversation is the only authority on who is being written to.
@@ -85,6 +88,7 @@ class WhatsAppMessageSendRequested(DomainEvent):
     recipient_phone: str | None = None
     reply_kind: str = "ACK"
     question_key: str | None = None
+    text: str | None = None
     intent: str | None = None
     language: str = "fr"
 
@@ -96,6 +100,7 @@ class WhatsAppMessageSendRequested(DomainEvent):
             "recipient_phone": self.recipient_phone,
             "reply_kind": self.reply_kind,
             "question_key": self.question_key,
+            "text": self.text,
             "intent": self.intent,
             "language": self.language,
         }

@@ -138,6 +138,22 @@ class TestTheSentence:
         )
         assert captured["text"] == "Quel est le loyer mensuel, en FCFA ?"
 
+    async def test_a_model_written_text_is_sent_verbatim(
+        self, settings: Settings
+    ) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+
+        await consumer.handle(
+            outbound(
+                reply_kind="QUESTION",
+                question_key="ask.rent",
+                text="Alors, ce loyer ?",
+            )
+        )
+
+        assert captured["text"] == "Alors, ce loyer ?"
+
     async def test_an_untranslated_question_key_sends_prose_not_a_key(
         self, settings: Settings
     ) -> None:

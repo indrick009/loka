@@ -14,7 +14,11 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Protocol
 
-from loka.bounded_contexts.ai.domain.services.ai_provider import IntentResult, Prompt
+from loka.bounded_contexts.ai.domain.services.ai_provider import (
+    IntentResult,
+    LlmResponse,
+    Prompt,
+)
 
 
 class IntentModel(Protocol):
@@ -24,6 +28,25 @@ class IntentModel(Protocol):
     def model(self) -> str: ...
 
     async def understand_intent(self, prompt: Prompt) -> IntentResult: ...
+
+
+class ResponseModel(Protocol):
+    """Natural-language reply generation, and what the call cost.
+
+    Deliberately a separate port from :class:`IntentModel`: writing the reply and
+    reading the message are different jobs, and a deployment may want to use a
+    different model — or none at all — for one of them. The pipeline falls back
+    to fixed templates when no ``ResponseModel`` is configured.
+
+    It returns ``LlmResponse`` rather than a bare string so the reply's tokens
+    reach the ledger: a reply written by a model is a real cost, and a budget
+    that only counted intent calls would under-report every conversation.
+    """
+
+    @property
+    def model(self) -> str: ...
+
+    async def generate_response(self, prompt: Prompt) -> LlmResponse: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +158,7 @@ __all__ = [
     "IntentModel",
     "IntentResult",
     "Prompt",
+    "ResponseModel",
     "TurnSummary",
     "UsageEntry",
 ]

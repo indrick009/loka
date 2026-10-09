@@ -78,13 +78,17 @@ def analyse_conversation_message_use_case(
 ) -> AnalyseConversationMessageUseCase:
     if not isinstance(uow, SqlAlchemyUnitOfWork):
         raise TypeError("analyse_conversation_message_use_case requires a SqlAlchemyUnitOfWork")
+    model = intent_model(settings)
     return AnalyseConversationMessageUseCase(
         uow,
         inbound=uow.repository("inbound_messages"),
         sessions=uow.repository("conversation_sessions"),
         turns=SqlAlchemyConversationTurnRepository(uow.session),
         usage=SqlAlchemyAiUsageLedger(uow.session),
-        model=intent_model(settings),
+        model=model,
+        # The same OpenRouter client parses and writes: one adapter, two ports.
+        # When the pipeline is off both are ``None`` and the fallbacks take over.
+        response_model=model,
         budget=budget_policy(settings),
         provider_name=settings.ai.provider,
     )

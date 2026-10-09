@@ -366,10 +366,16 @@ class TestBudgetAgainstTheLedger:
     async def test_a_deterministic_message_costs_nothing_at_all(
         self, database: Database, integration_settings: Settings
     ) -> None:
-        message_id, session_id = await _seed(database, integration_settings)
+        # A bare amount is the fast lane: even with a model configured it must
+        # not spend a call, so the ledger stays empty.
+        message_id, session_id = await _seed(
+            database, integration_settings, text="250 000 fcfa"
+        )
+        model = StubModel(result())
 
-        await _analyse(database, message_id, session_id, model=StubModel(result()))
+        await _analyse(database, message_id, session_id, model=model)
 
+        assert model.calls == 0
         async with database.session() as session:
             entries = await session.scalar(
                 select(func.count()).select_from(AiUsageLedgerRow)

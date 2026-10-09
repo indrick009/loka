@@ -211,7 +211,14 @@ class FactExtractor:
 
         return ExtractedFacts(facts=facts, rejected=rejected)
 
-    def next_step(self, intent: str, facts: ExtractedFacts, *, flow: FlowName) -> FlowStep | None:
+    def next_step(
+        self,
+        intent: str,
+        facts: ExtractedFacts,
+        *,
+        flow: FlowName,
+        known: dict[str, Any] | None = None,
+    ) -> FlowStep | None:
         """Where the conversation goes next, decided here and nowhere else.
 
         A model may propose facts; the order in which they are asked is a
@@ -219,21 +226,25 @@ class FactExtractor:
         required rather than optional on purpose: an amount dropped into a
         support conversation must be recorded, not treated as the first answer
         to a listing form the user never started.
+
+        ``known`` is what the session already holds. Without it the next step is
+        computed from the current message alone, so a landlord who gives their
+        city after already naming the property type gets asked for the type
+        again — the form restarts on every turn instead of advancing.
         """
         if intent not in LISTING_INTENTS:
             return None
         if intent in FLOW_BY_OPENING_INTENT:
-            # The caller starts the flow, which resets the state; it picks the
-            # step afterwards from what is actually already known.
-            return self._first_missing(facts)
+            return self._first_missing(facts, known)
         if flow not in LISTING_FLOWS:
             return None
-        return self._first_missing(facts)
+        return self._first_missing(facts, known)
 
     @staticmethod
-    def _first_missing(facts: ExtractedFacts) -> FlowStep:
+    def _first_missing(facts: ExtractedFacts, known: dict[str, Any] | None = None) -> FlowStep:
+        already_known = known or {}
         for name, step in PROPERTY_REQUIREMENTS:
-            if not facts.has(name):
+            if not facts.has(name) and name not in already_known:
                 return step
         return FlowStep.CONFIRM_PROPERTY
 

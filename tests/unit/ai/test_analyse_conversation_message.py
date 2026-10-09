@@ -8,6 +8,7 @@ reached the session.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
@@ -29,10 +30,16 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
 )
-from loka.bounded_contexts.ai.domain.services.ai_provider import IntentResult, LlmUsage, Prompt
+from loka.bounded_contexts.ai.domain.services.ai_provider import (
+    IntentResult,
+    LlmResponse,
+    LlmUsage,
+    Prompt,
+)
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
+    FlowName,
     FlowStep,
 )
 from loka.bounded_contexts.messaging.domain.events.message_events import (
@@ -42,7 +49,11 @@ from loka.bounded_contexts.messaging.domain.repositories.inbound_message_reposit
     StoredInboundMessage,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
-from loka.shared.domain.errors import ConcurrencyConflict, InvalidStateTransition
+from loka.shared.domain.errors import (
+    ConcurrencyConflict,
+    ExternalServiceUnavailable,
+    InvalidStateTransition,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -150,6 +161,7 @@ class StubModel:
 
     result: IntentResult
     calls: int = 0
+    prompts: list[Prompt] = field(default_factory=list)
 
     @property
     def model(self) -> str:
@@ -157,7 +169,39 @@ class StubModel:
 
     async def understand_intent(self, prompt: Prompt) -> IntentResult:
         self.calls += 1
+        self.prompts.append(prompt)
         return self.result
+
+
+@dataclass
+class StubResponseModel:
+    """A reply writer: returns a canned sentence, or raises on demand."""
+
+    text: str = "Très bien, quel est le loyer mensuel ?"
+    cost: float = 0.0001
+    error: Exception | None = None
+    calls: int = 0
+    prompts: list[Prompt] = field(default_factory=list)
+
+    @property
+    def model(self) -> str:
+        return TEST_MODEL
+
+    async def generate_response(self, prompt: Prompt) -> LlmResponse:
+        self.calls += 1
+        self.prompts.append(prompt)
+        if self.error is not None:
+            raise self.error
+        return LlmResponse(
+            content=self.text,
+            usage=LlmUsage(
+                input_tokens=50,
+                output_tokens=20,
+                latency_ms=120,
+                estimated_cost_usd=self.cost,
+                model=TEST_MODEL,
+            ),
+        )
 
 
 class FakeUnitOfWork(UnitOfWork):
@@ -244,6 +288,7 @@ def build(
     *,
     text: str = AMBIGUOUS_TEXT,
     model: IntentModel | None = None,
+    response_model: Any | None = None,
     budget: BudgetPolicy | None = None,
     ledger: FakeLedger | None = None,
     sessions: FakeSessionRepository | None = None,
@@ -274,6 +319,7 @@ def build(
         turns=turns,
         usage=usage,
         model=model,
+        response_model=response_model,
         budget=budget,
     )
     return use_case, turns, usage, session_repo
@@ -431,6 +477,192 @@ class TestModelPath:
         # at load time, not the one this analysis produced.
         assert uow.commits == 2
         assert sessions.saved == [(session.id, before)]
+
+
+class TestLlmFirst:
+    async def test_a_rule_readable_message_still_reaches_the_model(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The rules are a fast lane, not the primary reader.
+
+        A full sentence the regexes could classify must still go to the model,
+        because only the model reads it together with the conversation state.
+        """
+
+        model = StubModel(result=_model_result(intent="PROPERTY_SEARCH"))
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="je cherche un appartement à Bastos",
+            model=model,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 1
+        assert report.used_llm is True
+
+    async def test_the_prompt_carries_the_conversation_state(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """A bare answer is only intelligible with the question it answers."""
+
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["next_question"] = "ask.location"
+        session.context["property_type"] = "APARTMENT"
+
+        model = StubModel(result=_model_result(intent="COLLECT_LOCATION"))
+        use_case, _, _, _ = build(uow, session, message_id, text="Bastos", model=model)
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        conversation = payload["conversation"]
+        assert conversation["flow"] == "PROPERTY_CREATION"
+        assert conversation["step"] == "COLLECT_LOCATION"
+        assert conversation["awaiting_answer_to"] == "ask.location"
+        assert conversation["known_facts"]["property_type"] == "APARTMENT"
+
+
+class TestModelWrittenReply:
+    async def test_the_model_sentence_is_what_gets_staged(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        responder = StubResponseModel(text="Parfait, quel est le loyer mensuel ?")
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(result=_model_result()),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        staged = uow.events.staged
+        assert len(staged) == 1
+        assert isinstance(staged[0], WhatsAppMessageSendRequested)
+        assert staged[0].text == "Parfait, quel est le loyer mensuel ?"
+        assert responder.calls == 1
+
+    async def test_the_reply_prompt_is_told_what_to_ask(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_PRICE",
+                    entities={"property_type": "APARTMENT", "city": "Douala"},
+                )
+            ),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(responder.prompts[0].user)
+        assert payload["understood"]["accepted"] is True
+        assert "rent" in payload["ask_about"]
+
+    async def test_a_failed_reply_falls_back_to_the_template(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        responder = StubResponseModel(error=ExternalServiceUnavailable("provider down"))
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(result=_model_result()),
+            response_model=responder,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is True
+        assert uow.events.staged[0].text is None
+
+    async def test_the_reply_call_is_added_to_the_ledger(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        use_case, _, usage, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(result=_model_result(cost=0.0004)),
+            response_model=StubResponseModel(cost=0.0001),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert usage.entries[0].cost_usd == Decimal("0.0005")
+        assert report.cost_usd == Decimal("0.0005")
+
+    async def test_the_fast_lane_does_not_write_a_reply(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """A bare amount is answered from the template: no second model call."""
+
+        model = StubModel(result=_model_result())
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="250 000 fcfa",
+            model=model,
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert responder.calls == 0
+        assert uow.events.staged[0].text is None
 
 
 class TestRefusals:
@@ -750,6 +982,60 @@ class TestSessionAdvancement:
         assert report.next_step == "COLLECT_PRICE"
         assert report.question_key == "ask.rent"
         assert session.context["next_question"] == "ask.rent"
+
+    async def test_a_local_shorthand_amount_overrides_the_model(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The model reads "50 mil" as fifty million; the code knows it is fifty
+        thousand, and the rule wins over the guess."""
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="le loyer est 50 mil",
+            model=StubModel(
+                result=_model_result(
+                    entities={"property_type": "STUDIO", "price": 50_000_000}
+                )
+            ),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.context["rent"] == 50_000
+
+    async def test_facts_already_in_the_session_advance_the_form(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The landlord already named the studio; giving the city next must move
+        to the rent question instead of restarting at the property type."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["property_type"] = "STUDIO"
+
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Cameroun Yaoundé",
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_LOCATION", entities={"city": "Yaoundé"}
+                )
+            ),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.next_step == "COLLECT_PRICE"
+        assert report.question_key == "ask.rent"
+        assert session.step is FlowStep.COLLECT_PRICE
+        assert session.context["property_type"] == "STUDIO"
 
     async def test_a_complete_listing_asks_for_confirmation(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID

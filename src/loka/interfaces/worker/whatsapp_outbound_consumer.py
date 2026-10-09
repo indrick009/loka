@@ -77,7 +77,9 @@ class WhatsAppOutboundConsumer(ConsumerBase):
 
         recipient = _require_str(metadata, "recipient_phone")
         reply_kind = str(metadata.get("reply_kind") or "ACK")
-        text = render_reply(
+        # A model-written sentence wins; the template is the fallback for the
+        # deterministic path and for every deployment without an AI key.
+        text = _optional_str(metadata, "text") or render_reply(
             reply_kind=reply_kind,
             question_key=_optional_str(metadata, "question_key"),
             intent=_optional_str(metadata, "intent"),

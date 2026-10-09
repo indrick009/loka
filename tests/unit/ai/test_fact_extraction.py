@@ -195,6 +195,22 @@ class TestConversationOrder:
 
         assert step is FlowStep.COLLECT_PROPERTY_TYPE
 
+    def test_facts_already_in_the_session_do_not_get_asked_again(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A landlord who answers the location question after naming the type
+        moves to the rent question, not back to the type question."""
+        facts = extractor.validate({"city": "Yaoundé"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO"},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
+
     def test_an_unrelated_intent_does_not_move_a_listing(
         self, extractor: FactExtractor
     ) -> None:
@@ -229,6 +245,32 @@ class TestFlowOpening:
             FLOW_BY_OPENING_INTENT["PROPERTY_SEARCH"]
             is not FLOW_BY_OPENING_INTENT["CREATE_PROPERTY"]
         )
+
+
+class TestAmountShorthand:
+    def test_mil_means_thousands_not_millions(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("50 mil") == 50_000
+
+    def test_plain_amounts_are_not_treated_as_shorthand(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("250 000 fcfa") is None
+        assert classifier.shorthand_amount("250000") is None
+
+    def test_a_shorthand_amount_is_read_as_a_price(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("je vends un studio a 50 mil")
+
+        assert match is not None
+        assert match.entities["price"] == 50_000
+
+    def test_million_beats_thousand_in_the_same_message(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("2 millions") == 2_000_000
 
 
 class TestTrustBoundary:

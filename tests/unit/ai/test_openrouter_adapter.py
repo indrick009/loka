@@ -273,6 +273,62 @@ class TestTypedFailures:
         assert seen == []
 
 
+class TestGenerateResponse:
+    async def test_prose_is_returned_without_json_mode(self) -> None:
+        model, seen = model_for(
+            lambda _: completion(chat("  Très bien, quel est le loyer ?  "))
+        )
+
+        response = await model.generate_response(prompt())
+
+        assert response.content == "Très bien, quel est le loyer ?"
+        body = body_of(seen[0])
+        assert "response_format" not in body
+
+    async def test_the_reply_usage_is_priced(self) -> None:
+        model, _ = model_for(lambda _: completion(chat("ok")))
+
+        response = await model.generate_response(prompt())
+
+        assert response.usage.estimated_cost_usd == pytest.approx(0.00155)
+        assert response.usage.model == FAST
+
+    async def test_a_retryable_status_falls_back_for_prose_too(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            if body_of(request)["model"] == FAST:
+                return completion({}, status=503)
+            return completion(chat("Loyer ?"))
+
+        model, seen = model_for(handler)
+
+        response = await model.generate_response(prompt())
+
+        assert response.content == "Loyer ?"
+        assert [body_of(r)["model"] for r in seen] == [FAST, SLOW]
+
+    async def test_both_models_failing_raises(self) -> None:
+        model, seen = model_for(lambda _: completion({}, status=502))
+
+        with pytest.raises(ExternalServiceUnavailable):
+            await model.generate_response(prompt())
+
+        assert len(seen) == 2
+
+    async def test_an_empty_completion_is_refused(self) -> None:
+        model, _ = model_for(lambda _: completion(chat("   ")))
+
+        with pytest.raises(ExternalServiceUnavailable):
+            await model.generate_response(prompt())
+
+    async def test_a_missing_api_key_never_reaches_the_network(self) -> None:
+        model, seen = model_for(lambda _: completion(chat("ok")), settings(api_key=""))
+
+        with pytest.raises(ExternalServiceUnavailable):
+            await model.generate_response(prompt())
+
+        assert seen == []
+
+
 class TestUnpricedModel:
     async def test_an_unpriced_model_records_zero_rather_than_a_guess(self) -> None:
         """Composition refuses to enable the pipeline in this state, so this is

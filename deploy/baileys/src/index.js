@@ -27,6 +27,7 @@ const makeWASocket = require('@whiskeysockets/baileys').default;
 const {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
   DisconnectReason,
 } = require('@whiskeysockets/baileys');
 
@@ -58,6 +59,37 @@ const gateway = {
   reconnectTimer: null,
   restarts: 0,
 };
+
+// WhatsApp asks us to re-send a message when the recipient could not decrypt it
+// (a "retry receipt"). Serving that request means handing Baileys the original
+// message back through `getMessage`; without it the recipient stays stuck on
+// "waiting for this message" for ever. A bounded cache of what we sent is all
+// the state this transport is allowed to keep.
+const RETRY_CACHE_LIMIT = 200;
+const retryCache = new Map();
+
+function rememberForRetry(message) {
+  if (!message || !message.key || !message.key.id) return;
+  retryCache.set(message.key.id, message);
+  if (retryCache.size > RETRY_CACHE_LIMIT) {
+    retryCache.delete(retryCache.keys().next().value);
+  }
+}
+
+// WhatsApp addresses a contact by an opaque LID since the multi-device
+// migration, while the platform keys conversations on the phone number. The
+// inbound delivery carries both, so the mapping is learned here and reused to
+// answer on the same address WhatsApp used. Replying to the `@s.whatsapp.net`
+// form when the chat is LID-addressed is what leaves the recipient on
+// "waiting for this message".
+const lidByPhone = new Map();
+
+function rememberLid(phone, key) {
+  if (!phone || !key) return;
+  const lid =
+    key.senderLid || (key.remoteJid && String(key.remoteJid).endsWith('@lid') ? key.remoteJid : null);
+  if (lid) lidByPhone.set(digitsOf(phone), lid);
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -246,6 +278,8 @@ function handleIncoming(messages, upsertType) {
       continue;
     }
 
+    rememberLid(phone, key);
+
     forward({
       provider: 'baileys',
       external_message_id: key.id,
@@ -351,13 +385,23 @@ async function startSocket() {
   }
 
   const sock = makeWASocket({
-    auth: state,
+    auth: {
+      creds: state.creds,
+      // The cacheable store serialises key lookups and writes. Without it two
+      // concurrent decryptions race on the same signal key and corrupt the
+      // ratchet, which surfaces as "Bad MAC" and unreadable messages.
+      keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
+    },
     version,
     logger: baileysLogger,
     printQRInTerminal: false,
     browser: [SESSION_NAME, 'chrome', '1.0.0'],
     markOnlineOnConnect: false,
     syncFullHistory: false,
+    getMessage: async (key) => {
+      const cached = key && key.id ? retryCache.get(key.id) : undefined;
+      return cached ? cached.message : undefined;
+    },
   });
 
   gateway.sock = sock;
@@ -497,11 +541,13 @@ app.post('/send', async (req, res) => {
     res.status(503).json({ error: 'whatsapp is not connected' });
     return;
   }
+  const digits = digitsOf(to);
   const jid = String(to).includes('@')
     ? String(to)
-    : `${digitsOf(to)}@s.whatsapp.net`;
+    : lidByPhone.get(digits) || `${digits}@s.whatsapp.net`;
   try {
     const sent = await gateway.sock.sendMessage(jid, { text: String(text) });
+    rememberForRetry(sent);
     res.status(200).json({ ok: true, id: sent.key.id });
   } catch (error) {
     log.error({ error: error.message, jid }, 'send failed');
