@@ -201,6 +201,35 @@ LOCATION_HINT_PATTERN = re.compile(
     re.I,
 )
 
+# A short answer means whatever the open question asked for. A bare "5" is five
+# *months* under the minimum-duration question, five *francs* under the rent
+# one; "immédiat" answers availability. Deciding this from the message alone is
+# impossible, which is why the pending question — not the model's prior — binds
+# the value to its field.
+_BILLABLE_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
+    "ask.rent": ("COLLECT_PRICE", "price"),
+    "ask.deposit": ("COLLECT_DEPOSIT", "deposit"),
+    "ask.charges": ("COLLECT_CHARGES", "charges"),
+}
+_DURATION_ANSWER_PATTERN = re.compile(
+    r"^\s*(?P<count>\d{1,2})\s*(?:mois|month[s]?)?\s*$", re.IGNORECASE
+)
+_IMMEDIATE_ANSWER_WORDS = (
+    "immediat",
+    "immédiat",
+    "maintenant",
+    "tout de suite",
+    "disponible",
+    "dispo",
+    "asap",
+    "des que possible",
+    "dès que possible",
+)
+_DATE_ANSWER_PATTERN = re.compile(r"\b\d{1,2}[/.\-]\d{1,2}[/.\-]\d{2,4}\b")
+# Only a short message is a bare answer: a full sentence ("je veux un appart à
+# 50 000") carries facts of its own and must still be read by the model.
+_MAX_ANSWER_WORDS = 4
+
 
 @dataclass(frozen=True, slots=True)
 class DeterministicMatch:
@@ -216,6 +245,10 @@ class DeterministicClassifier:
         normalized = self._normalize(text)
         if not normalized:
             return None
+
+        answer = self.pending_answer(normalized, pending)
+        if answer is not None:
+            return answer
 
         availability = self._first_match(AVAILABILITY_PATTERNS, normalized)
         if availability:
@@ -301,6 +334,9 @@ class DeterministicClassifier:
         standing = self._standing_reply(normalized, pending)
         if standing is not None:
             return standing
+        answer = self.pending_answer(normalized, pending)
+        if answer is not None:
+            return answer
         if normalized in AFFIRMATIVE:
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
@@ -337,6 +373,68 @@ class DeterministicClassifier:
                 confidence=0.95,
                 entities={"standing": "NON_MODERN"},
             )
+        return None
+
+    def pending_answer(
+        self, normalized: str, pending: str | None
+    ) -> DeterministicMatch | None:
+        """Bind a short answer to the field the platform actually asked for.
+
+        The model is told the same thing (see ``awaiting_field`` in the analysis
+        prompt), but a value whose meaning depends entirely on the open question
+        is a rule, not a guess: a bare "5" answered to the rent question is five
+        francs and answered to the minimum-duration question is five months.
+        Deciding it here keeps the number out of the wrong field and keeps the
+        turn off the model entirely.
+        """
+        if not pending or not normalized:
+            return None
+        if len(normalized.split()) > _MAX_ANSWER_WORDS:
+            return None
+
+        billable = _BILLABLE_ANSWER_FIELDS.get(pending)
+        if billable is not None:
+            raw, multiplier = self._find_amount(normalized)
+            if raw is None:
+                return None
+            value = _parse_amount(raw) * multiplier
+            if value < MIN_PLAUSIBLE_RENT_XAF:
+                return None
+            intent, field = billable
+            entities: dict[str, object] = {field: value}
+            if field == "charges":
+                # An amount given for the charges question is money asked on top
+                # of the rent; "incluses" stays a model job because it carries no
+                # number to bind.
+                entities["charging_policy"] = "EXTRA"
+            return DeterministicMatch(intent=intent, confidence=0.95, entities=entities)
+
+        if pending == "ask.minimum_duration":
+            match = _DURATION_ANSWER_PATTERN.match(normalized)
+            if match:
+                months = int(match.group("count"))
+                if months > 0:
+                    return DeterministicMatch(
+                        intent="COLLECT_MINIMUM_DURATION",
+                        confidence=0.95,
+                        entities={"minimum_duration_months": months},
+                    )
+            return None
+
+        if pending == "ask.availability":
+            if any(word in normalized for word in _IMMEDIATE_ANSWER_WORDS):
+                return DeterministicMatch(
+                    intent="COLLECT_AVAILABILITY",
+                    confidence=0.95,
+                    entities={"availability": "IMMEDIATE"},
+                )
+            date_match = _DATE_ANSWER_PATTERN.search(normalized)
+            if date_match:
+                return DeterministicMatch(
+                    intent="COLLECT_AVAILABILITY",
+                    confidence=0.95,
+                    entities={"availability": date_match.group(0)},
+                )
         return None
 
     def shorthand_amount(self, text: str) -> int | None:

@@ -381,6 +381,58 @@ class TestAmountShorthand:
         assert classifier.shorthand_amount("2 millions") == 2_000_000
 
 
+class TestPendingAnswerBinding:
+    """A short answer means the open question, never the field of the month."""
+
+    def test_a_bare_number_answers_the_minimum_duration(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("5", pending="ask.minimum_duration")
+
+        assert match is not None
+        assert match.intent == "COLLECT_MINIMUM_DURATION"
+        assert match.entities == {"minimum_duration_months": 5}
+
+    def test_months_wording_is_read_the_same_way(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("5 mois", pending="ask.minimum_duration")
+
+        assert match is not None
+        assert match.entities["minimum_duration_months"] == 5
+
+    def test_a_deposit_answer_is_not_stored_as_rent(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("500 000", pending="ask.deposit")
+
+        assert match is not None
+        assert match.intent == "COLLECT_DEPOSIT"
+        assert match.entities == {"deposit": 500_000}
+
+    def test_a_short_immediate_answer_binds_to_availability(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("immédiat", pending="ask.availability")
+
+        assert match is not None
+        assert match.entities == {"availability": "IMMEDIATE"}
+
+    def test_a_short_date_answer_binds_to_availability(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("01/11/2026", pending="ask.availability")
+
+        assert match is not None
+        assert match.entities == {"availability": "01/11/2026"}
+
+    def test_a_lone_number_with_no_open_question_is_not_a_price(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shortcut("5") is None
+        assert classifier.classify("5") is None
+
+
 class TestEntryConditions:
     """The move-in cost is part of the price here, so it must survive validation."""
 

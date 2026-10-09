@@ -1,0 +1,177 @@
+# Production stack for the "kora" deployment.
+#
+# Standalone on purpose: it does NOT merge with docker-compose.yml, so the
+# published ports of the dev stack (5432, 5672, 6380, 9000, 3000) can never
+# collide with other applications already running on the server. Only the API is
+# published, and only on loopback, so it is reachable through an SSH tunnel
+# while nothing else on the host can see it.
+#
+# Deploy with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+name: kora
+
+x-network-env: &network-env
+  DATABASE__HOST: postgres
+  BROKER__URL: amqp://${RABBITMQ_USER:-kora}:${RABBITMQ_PASS:-kora}@rabbitmq:5672/
+  REDIS_URL: redis://redis:6379/0
+  OBJECT_STORAGE__ENDPOINT: http://minio:9000
+  WHATSAPP__GATEWAY_URL: http://baileys:3000
+
+x-app: &app
+  build:
+    context: .
+    target: api
+  env_file: [.env]
+  environment: *network-env
+  restart: unless-stopped
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-kora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kora}
+      POSTGRES_DB: ${POSTGRES_DB:-kora}
+    command:
+      - postgres
+      - -c
+      - max_connections=300
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - log_min_duration_statement=500
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kora} -d ${POSTGRES_DB:-kora}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-kora}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-kora}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: quay.io/minio/minio:latest
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE__ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE__SECRET_KEY:-minioadmin}
+    volumes:
+      - minio-data:/data
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    build:
+      context: .
+      target: migrate
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *app
+    command:
+      - uvicorn
+      - loka.interfaces.http.app:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      # Loopback only: reachable via SSH tunnel, invisible to other apps.
+      - "127.0.0.1:18080:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/live"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  worker:
+    <<: *app
+    build:
+      context: .
+      target: worker
+    command: ["python", "-m", "loka.interfaces.workers.main"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  baileys:
+    build:
+      context: ./deploy/baileys
+    environment:
+      PORT: "3000"
+      SESSION_NAME: ${WHATSAPP__SESSION_NAME:-kora-main}
+      PLATFORM_URL: http://api:8000/integrations/whatsapp/events
+      PLATFORM_API_KEY: ${WHATSAPP__API_KEY:-}
+      LOG_LEVEL: ${OBSERVABILITY__LOG_LEVEL:-INFO}
+    volumes:
+      - baileys-auth:/app/auth
+    ports:
+      # Loopback only: open http://localhost:13000/qr through an SSH tunnel to
+      # scan the pairing QR. The API talks to the gateway over the compose
+      # network regardless.
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  rabbitmq-data:
+  minio-data:
+  baileys-auth:

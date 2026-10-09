@@ -1,6 +1,7 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 .venv/
 venv/
 __pycache__/
@@ -16,3 +17,4 @@ htmlcov/
 media/
 wa-sessions/
 node_modules/
+*.tar.gz

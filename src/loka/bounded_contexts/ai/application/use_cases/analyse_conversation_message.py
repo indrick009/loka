@@ -46,6 +46,7 @@ from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import LlmUsage, Prompt
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
+    LISTING_FLOWS,
     MIN_ACCEPTED_CONFIDENCE,
     PROPERTY_REQUIREMENTS,
     SUPPORTED_INTENTS,
@@ -92,7 +93,9 @@ SYSTEM_PROMPT = (
     "user is answering, the facts already known, the ordered required_fields, and "
     "the typical price_reference_monthly_xaf). Use them: a short reply like a "
     "neighbourhood or a number is an answer to that question, so set the matching "
-    "entity instead of asking again."
+    "entity instead of asking again. When 'conversation.awaiting_field' is set, a "
+    "short bare answer (a number, 'immédiat', a date) belongs to exactly that "
+    "entity and to no other."
     " A bare number given as a rent is in FCFA: '50' means 50000, not 50."
     " Set 'intent' to exactly one value from the 'intent' enum in 'schema' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
@@ -159,6 +162,19 @@ _LANDLORD_TOPICS: dict[str, str] = {
     "ask.standing": "whether the property the landlord is listing is modern or not",
     "ask.location": "the city and neighbourhood where the property is",
     "ask.rent": "the monthly rent the landlord is asking, in XAF",
+    "ask.charges": (
+        "whether the charges on the landlord's property are included in the "
+        "rent and, if not, their monthly amount"
+    ),
+    "ask.deposit": (
+        "the refundable deposit (caution) the landlord asks of the tenant, in XAF"
+    ),
+    "ask.minimum_duration": "the minimum duration the landlord wants for the rental",
+    "ask.availability": "when the landlord's property becomes available (a date, or immediately)",
+    "ask.conditions": (
+        "the landlord's entry conditions: the advance in months, the agency or "
+        "lease fee, and the tenant type the landlord accepts"
+    ),
 }
 _TENANT_TOPICS: dict[str, str] = {
     "ask.property_type": "the type of property the tenant is looking for",
@@ -177,12 +193,48 @@ _FLOW_ROLES: dict[FlowName, str] = {
 }
 
 
+def _has_listing_facts(context: dict[str, object]) -> bool:
+    return any(name in context for name, _ in PROPERTY_REQUIREMENTS)
+
+
+def _opens_new_flow(session: ConversationSession, intent: str) -> bool:
+    """Whether this intent starts a *different* flow.
+
+    A flow switch resets the context, so it is only allowed while the current
+    flow has collected nothing yet. Otherwise a landlord half-way through a
+    listing whose "je loue" is read as a tenant search would be silently thrown
+    into the opposite role — the role is set by the facts already given, not by
+    the model's reading of one ambiguous verb.
+    """
+    opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
+    if opening_flow is None or session.flow is opening_flow:
+        return False
+    return not (session.flow in LISTING_FLOWS and _has_listing_facts(session.context))
+
+
 def question_topic(next_key: str | None, flow: FlowName) -> str | None:
     """The plain-words gloss of the next question, phrased for this flow."""
     if not next_key:
         return None
     overlay = _FLOW_TOPICS.get(flow, {})
     return overlay.get(next_key) or QUESTION_TOPICS.get(next_key)
+
+
+# The schema entity a short answer to each question fills. Handing the model the
+# target field, not only the question key, is what stops a bare "5" from being
+# stored as availability instead of the minimum duration the platform asked for.
+_FIELD_FOR_QUESTION: dict[str, str] = {
+    "ask.property_type": "property_type",
+    "ask.standing": "standing",
+    "ask.location": "city and neighbourhood",
+    "ask.rent": "price",
+    "ask.features": "bedrooms, bathrooms, surface_area",
+    "ask.charges": "charges and charging_policy",
+    "ask.deposit": "deposit",
+    "ask.minimum_duration": "minimum_duration_months",
+    "ask.availability": "availability",
+    "ask.conditions": "conditions",
+}
 
 RESPONSE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -544,8 +596,7 @@ class AnalyseConversationMessageUseCase:
         # step further, not back at the type question. When this message opens a
         # *new* flow, the old facts belong to the abandoned attempt and are
         # deliberately ignored — matching the reset ``_advance_session`` does.
-        opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
-        starts_new_flow = opening_flow is not None and session.flow is not opening_flow
+        starts_new_flow = _opens_new_flow(session, intent)
         known = {} if starts_new_flow else dict(session.context)
         next_step = (
             self._extractor.next_step(intent, facts, flow=session.flow, known=known)
@@ -666,6 +717,7 @@ class AnalyseConversationMessageUseCase:
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
         # notice a reply that was never staged.
+        reply_text = _collapse_repeats(reply_text) if reply_text else reply_text
         question = question_key_for(next_step) if accepted else None
         await self._stage_reply(
             session,
@@ -783,7 +835,7 @@ class AnalyseConversationMessageUseCase:
         observed = session.revision
 
         opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
-        if opening_flow is not None and session.flow is not opening_flow:
+        if opening_flow is not None and _opens_new_flow(session, intent):
             # Resets the context, so it must come first: the facts about to be
             # merged belong to this new attempt, not to the abandoned one.
             session.start_flow(opening_flow, now=now, first_step=next_step or FlowStep.START)
@@ -839,7 +891,7 @@ def _reply_kind(*, reason: str | None, question_key: str | None) -> str:
 # than in the outbound layer because the list is dynamic and cannot be a fixed
 # ``question_key``.
 _MISSING_LABELS_FR: dict[str, str] = {
-    "MISSING_PHOTOS": "des photos",
+    "MISSING_PHOTOS": "les photos du logement (envoyez-en au moins une)",
     "MISSING_CHARGES": "les charges mensuelles",
     "MISSING_MINIMUM_DURATION": "la durée minimale de location",
     "MISSING_AVAILABILITY_DATE": "la date de disponibilité",
@@ -870,6 +922,42 @@ def _join_fr(items: list[str]) -> str:
     return ", ".join(items[:-1]) + " et " + items[-1]
 
 
+def _collapse_repeats(text: str) -> str:
+    """Drop a phrase the model emitted several times in a row.
+
+    A reply model occasionally loops on a short fragment ("en sus en sus en sus
+    en plus du loyer"). The loop is a decoding artefact, not meaning, and sending
+    it verbatim makes the assistant look broken. Runs of a repeated one- or
+    two-word unit collapse to a single occurrence; numeric tokens are left alone
+    so a price never loses a digit.
+    """
+    tokens = text.split()
+    out: list[str] = []
+    index = 0
+    total = len(tokens)
+    while index < total:
+        for unit in (2, 1):
+            if index + 2 * unit > total:
+                continue
+            fragment = [token.casefold() for token in tokens[index : index + unit]]
+            if not any(any(char.isalpha() for char in token) for token in fragment):
+                continue
+            end = index + unit
+            while (
+                end + unit <= total
+                and [token.casefold() for token in tokens[end : end + unit]] == fragment
+            ):
+                end += unit
+            if end > index + unit:
+                out.extend(tokens[index : index + unit])
+                index = end
+                break
+        else:
+            out.append(tokens[index])
+            index += 1
+    return " ".join(out)
+
+
 def build_analysis_prompt(
     *,
     text: str | None,
@@ -898,6 +986,8 @@ def build_analysis_prompt(
             "flow": flow.value,
             "step": step.value,
             "awaiting_answer_to": pending_question,
+            "awaiting_question": question_topic(pending_question, flow),
+            "awaiting_field": _FIELD_FOR_QUESTION.get(pending_question or ""),
             "known_facts": public_known,
         },
         # Only what is still missing, in order, so the model asks the next real

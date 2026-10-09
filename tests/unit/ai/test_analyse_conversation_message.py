@@ -584,7 +584,91 @@ class TestLlmFirst:
         assert conversation["flow"] == "PROPERTY_CREATION"
         assert conversation["step"] == "COLLECT_LOCATION"
         assert conversation["awaiting_answer_to"] == "ask.location"
+        # The model is told not only *which* question is open but *which entity*
+        # a short answer fills, so a bare value cannot drift to another field.
+        assert conversation["awaiting_field"] == "city and neighbourhood"
         assert conversation["known_facts"]["property_type"] == "APARTMENT"
+
+
+class TestPendingAnswerBinding:
+    async def test_a_bare_number_fills_the_open_question(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """A lone "5" answered to "durée minimale" is five months and nothing
+        else: the open question binds it, deterministically and for free."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION,
+            now=NOW,
+            first_step=FlowStep.COLLECT_MINIMUM_DURATION,
+        )
+        session.context["next_question"] = "ask.minimum_duration"
+        session.context["property_type"] = "APARTMENT"
+        session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Bastos"}
+        session.context["rent"] = 150_000
+
+        model = StubModel(result=_model_result())
+        use_case, _, usage, sessions = build(
+            uow, session, message_id, text="5", model=model
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert usage.entries == []
+        assert report.facts["minimum_duration_months"] == 5
+        assert sessions.store[session.id].context["minimum_duration_months"] == 5
+
+
+class TestRoleStability:
+    async def test_a_listing_in_progress_is_not_reopened_as_a_search(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Once a landlord has given facts, an ambiguous "je loue" read as a
+        search must not throw them into the tenant flow and wipe the form."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        session.context["property_type"] = "APARTMENT"
+
+        model = StubModel(result=_model_result(intent="PROPERTY_SEARCH", entities={}))
+        use_case, _, _, sessions = build(
+            uow, session, message_id, text="je loue", model=model
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        saved = sessions.store[session.id]
+        assert saved.flow is FlowName.PROPERTY_CREATION
+        assert saved.context["property_type"] == "APARTMENT"
+
+    async def test_a_first_message_still_opens_the_flow(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        assert session.flow is FlowName.SUPPORT
+
+        model = StubModel(result=_model_result(intent="CREATE_PROPERTY"))
+        use_case, _, _, sessions = build(
+            uow, session, message_id, text=AMBIGUOUS_TEXT, model=model
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert sessions.store[session.id].flow is FlowName.PROPERTY_CREATION
 
 
 class TestModelWrittenReply:
@@ -612,6 +696,34 @@ class TestModelWrittenReply:
         assert isinstance(staged[0], WhatsAppMessageSendRequested)
         assert staged[0].text == "Parfait, quel est le loyer mensuel ?"
         assert responder.calls == 1
+
+    async def test_a_looped_fragment_is_collapsed(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """A decoding loop ("en sus en sus en sus") is sent once, not verbatim."""
+        model = StubModel(
+            result=_model_result(
+                reply=(
+                    "Le loyer est de 50 000 FCFA en sus en sus en sus "
+                    "en plus du loyer."
+                ),
+            )
+        )
+        use_case, _, _, _ = build(
+            uow, session, message_id, text=AMBIGUOUS_TEXT, model=model
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert (
+            uow.events.staged[0].text
+            == "Le loyer est de 50 000 FCFA en sus en plus du loyer."
+        )
 
     async def test_the_reply_prompt_is_told_what_to_ask(
         self,
