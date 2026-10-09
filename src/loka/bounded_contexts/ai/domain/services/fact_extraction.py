@@ -12,14 +12,17 @@ Refused fields are dropped, never repaired. The conversation asks again.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Any
 
+from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     BedroomCount,
+    ChargingPolicy,
     PropertyStanding,
     PropertyType,
     SurfaceArea,
@@ -39,11 +42,24 @@ MAX_PLAUSIBLE_RENT_XAF = 500_000_000
 # then modern or not, then where it is, then the rent. The bathroom count and the
 # surface are deliberately *not* asked: they are rarely known and rarely used,
 # and the answer that sells the place is the photos.
+#
+# The entry conditions come after the rent because in this market the monthly
+# price is only half the story: the real move-in cost is an *avance* (several
+# months up front), a *caution* (the deposit) and the monthly charges. The form
+# therefore collects exactly what the Property quality gate needs to publish —
+# charges, deposit, minimum duration, availability and the free-text conditions
+# (where avance and agency fees are stated) — instead of reporting them missing
+# only at the end.
 PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
     ("standing", FlowStep.COLLECT_STANDING),
     ("location", FlowStep.COLLECT_LOCATION),
     ("rent", FlowStep.COLLECT_PRICE),
+    ("charges", FlowStep.COLLECT_CHARGES),
+    ("deposit", FlowStep.COLLECT_DEPOSIT),
+    ("minimum_duration_months", FlowStep.COLLECT_MINIMUM_DURATION),
+    ("availability", FlowStep.COLLECT_AVAILABILITY),
+    ("conditions", FlowStep.COLLECT_CONDITIONS),
 )
 
 # Intents that concern a listing or a search. Everything else — "merci", "c'est
@@ -59,6 +75,7 @@ LISTING_INTENTS = frozenset(
         "COLLECT_FEATURES",
         "COLLECT_STANDING",
         "COLLECT_CHARGES",
+        "COLLECT_DEPOSIT",
         "COLLECT_MINIMUM_DURATION",
         "COLLECT_AVAILABILITY",
         "COLLECT_CONDITIONS",
@@ -91,6 +108,7 @@ SUPPORTED_INTENTS = frozenset(
         "COLLECT_FEATURES",
         "COLLECT_STANDING",
         "COLLECT_ACQUISITION_SOURCE",
+        "COLLECT_DEPOSIT",
         "AVAILABILITY_STILL_AVAILABLE",
         "AVAILABILITY_RENTED",
         "AVAILABILITY_TEMPORARILY_UNAVAILABLE",
@@ -128,6 +146,7 @@ QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_PRICE: "ask.rent",
     FlowStep.COLLECT_FEATURES: "ask.features",
     FlowStep.COLLECT_CHARGES: "ask.charges",
+    FlowStep.COLLECT_DEPOSIT: "ask.deposit",
     FlowStep.COLLECT_MINIMUM_DURATION: "ask.minimum_duration",
     FlowStep.COLLECT_AVAILABILITY: "ask.availability",
     FlowStep.COLLECT_CONDITIONS: "ask.conditions",
@@ -192,12 +211,17 @@ class FactExtractor:
             )
         if "standing" in present or "modern" in present:
             keep("standing", lambda: _build_standing(entities))
-        if "city" in present:
+        if "city" in present or "neighbourhood" in present:
             keep("location", lambda: self._build_location(entities))
         elif "location_hint" in present:
-            # A bare neighbourhood ("Bastos") stays a hint. Promoting it to a
-            # city would put Douala's Bonapriso into the city column.
-            keep("location_hint", lambda: _clean_hint(present["location_hint"]))
+            resolved = _resolve_location_hint(present["location_hint"])
+            if resolved is not None:
+                facts["location"] = resolved
+            else:
+                # Only a *known* district resolves to its city above; an unknown
+                # hint stays a hint, because promoting "Zzzville" to a city is
+                # exactly how a wrong listing enters search.
+                keep("location_hint", lambda: _clean_hint(present["location_hint"]))
         if "price" in present:
             keep("rent", lambda: self._build_rent(present["price"]))
         if "bedrooms" in present or "bathrooms" in present:
@@ -207,17 +231,28 @@ class FactExtractor:
                 "surface",
                 lambda: SurfaceArea(square_metres=_as_int(present["surface_area"])).square_metres,
             )
-        if "charges" in present:
+        if "charges" in present or "charges_included" in present or "charging_policy" in present:
+            try:
+                amount, policy = _build_charges(entities)
+                facts["charges"] = amount
+                facts["charging_policy"] = policy
+            except DomainError as exc:
+                rejected["charges"] = exc.message
+            except (TypeError, ValueError) as exc:
+                rejected["charges"] = str(exc)
+        if "deposit" in present:
             keep(
-                "charges",
-                lambda: Money(amount=_as_int(present["charges"]))
-                .require_positive(reason="charges must be positive")
+                "deposit",
+                lambda: Money(amount=_as_int(present["deposit"]))
+                .require_non_negative(reason="deposit cannot be negative")
                 .amount,
             )
         if "minimum_duration_months" in present:
             keep("minimum_duration_months", lambda: _as_int(present["minimum_duration_months"]))
         if "availability" in present:
-            keep("availability", lambda: str(present["availability"]).upper())
+            keep("availability", lambda: _build_availability(present["availability"]))
+        if "conditions" in present:
+            keep("conditions", lambda: _build_conditions(present["conditions"]))
 
         return ExtractedFacts(facts=facts, rejected=rejected)
 
@@ -279,12 +314,19 @@ class FactExtractor:
     @staticmethod
     def _build_location(entities: dict[str, Any]) -> dict[str, str]:
         city = str(entities.get("city") or "").strip()
-        if not city:
-            raise ValidationFailed("no city was extracted", context={"entities": sorted(entities)})
         neighbourhood = entities.get("neighbourhood")
+        neighbourhood_text = str(neighbourhood).strip() if isinstance(neighbourhood, str) else ""
+        if not city and neighbourhood_text:
+            # "Bastos" alone is a complete answer here: the district index knows
+            # it is in Yaoundé. Without this the location question never closes.
+            city = market.resolve_neighbourhood(neighbourhood_text) or ""
+        if not city:
+            raise ValidationFailed(
+                "no city was extracted", context={"entities": sorted(entities)}
+            )
         location = Location(
             city=city,
-            neighbourhood=str(neighbourhood) if isinstance(neighbourhood, str) else None,
+            neighbourhood=neighbourhood_text or None,
         )
         return {"city": location.city, "neighbourhood": location.neighbourhood or ""}
 
@@ -320,6 +362,99 @@ def _clean_hint(raw: Any) -> str:
     if len(hint) < 2:
         raise ValidationFailed("location hint is too vague", context={"value": raw})
     return hint
+
+
+def _resolve_location_hint(raw: Any) -> dict[str, str] | None:
+    """Turn a bare place name into a publishable location, or ``None``.
+
+    ``None`` means "not in the district index": the caller then keeps the raw
+    hint rather than inventing a city for it.
+    """
+    hint = str(raw).strip()
+    if len(hint) < 2:
+        return None
+    city = market.resolve_city(hint)
+    if city is not None:
+        return {"city": city, "neighbourhood": ""}
+    district_city = market.resolve_neighbourhood(hint)
+    if district_city is not None:
+        return {
+            "city": district_city,
+            "neighbourhood": market.canonical_neighbourhood(hint) or hint,
+        }
+    return None
+
+
+def _build_charges(entities: dict[str, Any]) -> tuple[int, str]:
+    """The monthly charges and whether they are included in the rent.
+
+    A landlord who says "charges incluses" states a *policy*, not an amount; one
+    who says "15 000 de charges" states an amount. Both must produce a value the
+    Property quality gate accepts, otherwise it reports MISSING_CHARGES forever.
+    """
+    included = entities.get("charges_included")
+    policy_raw = entities.get("charging_policy")
+    if policy_raw is not None and str(policy_raw).strip():
+        policy = ChargingPolicy(str(policy_raw).strip().upper().replace(" ", "_"))
+    elif isinstance(included, bool):
+        policy = ChargingPolicy.INCLUDED if included else ChargingPolicy.EXTRA
+    elif "charges" in entities:
+        policy = ChargingPolicy.EXTRA
+    else:
+        policy = ChargingPolicy.INCLUDED
+    amount = _as_int(entities["charges"]) if "charges" in entities else 0
+    if amount < 0:
+        raise ValidationFailed("charges cannot be negative", context={"value": amount})
+    return amount, policy.value
+
+
+_IMMEDIATE_AVAILABILITY = (
+    "immediat",
+    "maintenant",
+    "tout de suite",
+    "disponible",
+    "des que possible",
+    "asap",
+    "oui",
+)
+
+
+def _build_availability(raw: Any) -> str:
+    """Normalise availability to ``IMMEDIATE`` or an ISO date, or refuse it.
+
+    The domain needs a real date to publish; storing a phrase the Property
+    cannot read would leave MISSING_AVAILABILITY_DATE on a listing the landlord
+    believes they answered.
+    """
+    text = str(raw).strip()
+    lowered = market.normalize(text)
+    if not lowered:
+        raise ValidationFailed("availability is empty", context={"value": raw})
+    if any(word in lowered for word in _IMMEDIATE_AVAILABILITY):
+        return "IMMEDIATE"
+    parsed = _parse_date(text)
+    if parsed is not None:
+        return parsed.isoformat()
+    raise ValidationFailed(
+        "availability must be a date or 'immediate'", context={"value": raw}
+    )
+
+
+def _parse_date(text: str) -> date | None:
+    candidate = text.strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(candidate, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _build_conditions(raw: Any) -> str:
+    text = str(raw).strip()
+    if len(text) < 10:
+        raise ValidationFailed("conditions are too vague", context={"value": raw})
+    return text
 
 
 _STANDING_ALIASES: dict[str, PropertyStanding] = {

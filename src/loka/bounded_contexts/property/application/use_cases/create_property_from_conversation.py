@@ -31,7 +31,9 @@ from loka.bounded_contexts.property.domain.repositories.property_repository impo
     PropertyRepository,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
+    AvailabilityWindow,
     BedroomCount,
+    ChargingPolicy,
     Duration,
     PropertyStanding,
     PropertyStatus,
@@ -168,3 +170,44 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
     duration = facts.get("minimum_duration_months")
     if isinstance(duration, int) and not isinstance(duration, bool):
         guard(lambda: prop.set_minimum_duration(Duration(months=duration), now=now))
+
+    charges = facts.get("charges")
+    if isinstance(charges, int) and not isinstance(charges, bool):
+        policy = _charging_policy(facts.get("charging_policy"))
+        guard(lambda: prop.set_charges(Money(amount=charges), policy, now=now))
+
+    deposit = facts.get("deposit")
+    if isinstance(deposit, int) and not isinstance(deposit, bool):
+        guard(lambda: prop.set_deposit(Money(amount=deposit), now=now))
+
+    window = _availability_window(facts.get("availability"), now)
+    if window is not None:
+        guard(lambda: prop.set_availability(window, now=now))
+
+    conditions = facts.get("conditions")
+    if isinstance(conditions, str) and conditions.strip():
+        guard(lambda: prop.set_conditions(conditions, now=now))
+
+
+def _charging_policy(raw: object) -> ChargingPolicy:
+    """Read the charges policy, defaulting to "extra" for an amount.
+
+    A stored amount with no explicit policy is money asked *on top of* the rent,
+    which is the safe default: showing too high a total never misleads a tenant.
+    """
+    try:
+        return ChargingPolicy(str(raw).strip().upper())
+    except ValueError:
+        return ChargingPolicy.EXTRA
+
+
+def _availability_window(raw: object, now: datetime) -> AvailabilityWindow | None:
+    """Build the availability window from the normalised fact, or ``None``."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    if raw.strip().upper() == "IMMEDIATE":
+        return AvailabilityWindow(now.date())
+    try:
+        return AvailabilityWindow(datetime.strptime(raw.strip(), "%Y-%m-%d").date())
+    except ValueError:
+        return None

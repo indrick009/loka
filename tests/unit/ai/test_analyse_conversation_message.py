@@ -404,6 +404,29 @@ class TestDeterministicShortCircuit:
         assert session.context["standing"] == "NON_MODERN"
         assert report.next_step == "COLLECT_LOCATION"
 
+    async def test_a_bare_greeting_costs_no_model_call(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The most frequent message carries no intent: it is answered from a
+        template, and the turn is still recorded."""
+        model = StubModel(result=_model_result())
+
+        use_case, turns, usage, _ = build(
+            uow, session, message_id, text="Bonjour", model=model
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert report.intent == "SUPPORT"
+        assert usage.entries == []
+        assert turns.turns[0].used_llm is False
+
 
 class TestModelPath:
     async def test_an_ambiguous_message_falls_back_to_the_model(
@@ -1128,7 +1151,12 @@ class TestSessionAdvancement:
                         "standing": "MODERN",
                         "city": "Douala",
                         "price": 250_000,
-                        "bedrooms": 2,
+                        "charges": 0,
+                        "charging_policy": "INCLUDED",
+                        "deposit": 250_000,
+                        "minimum_duration_months": 12,
+                        "availability": "IMMEDIATE",
+                        "conditions": "Caution deux mois, avance de trois mois.",
                     }
                 )
             ),
@@ -1140,6 +1168,68 @@ class TestSessionAdvancement:
 
         assert session.step is FlowStep.CONFIRM_PROPERTY
         assert report.next_step == "CONFIRM_PROPERTY"
+
+    async def test_the_entry_conditions_are_asked_before_confirmation(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """A listing that only has a type, a place and a rent is not done: the
+        move-in cost the quality gate needs would otherwise be reported missing
+        only after the landlord already confirmed."""
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="une phrase indeterminate",
+            model=StubModel(
+                result=_model_result(
+                    entities={
+                        "property_type": "APARTMENT",
+                        "standing": "MODERN",
+                        "city": "Douala",
+                        "price": 250_000,
+                    }
+                )
+            ),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.next_step == "COLLECT_CHARGES"
+        assert report.question_key == "ask.charges"
+
+    async def test_a_bare_quartier_closes_the_location_question(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The landlord answers "Bastos", not "Yaoundé, Bastos". The district
+        index resolves the city, so the form advances instead of looping on the
+        location question forever."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["standing"] = "MODERN"
+        session.context["next_question"] = "ask.location"
+
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Bastos",
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_LOCATION", entities={"neighbourhood": "Bastos"}
+                )
+            ),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.context["location"] == {"city": "Yaoundé", "neighbourhood": "Bastos"}
+        assert report.next_step == "COLLECT_PRICE"
 
     async def test_the_revision_is_bumped_when_state_moves(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -1327,9 +1417,47 @@ class TestSingleCallReply:
             "standing",
             "location",
             "rent",
+            "charges",
+            "deposit",
+            "minimum_duration_months",
+            "availability",
+            "conditions",
         ]
         studio = payload["price_reference_monthly_xaf"]["STUDIO"]
         assert studio["min"] < studio["max"]
         assert "reply" in payload["schema"]["properties"]
         assert "standing" in payload["schema"]["properties"]["entities"]["properties"]
         assert payload["you_are_helping"]
+
+    async def test_the_prompt_omits_context_that_can_no_longer_be_used(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Every turn re-sends the prompt, so fields that can no longer change the
+        answer are pure cost: the allowlist lives once in the schema, the price
+        band is useless once the rent is known, and collected fields are not
+        re-listed as required."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_LOCATION
+        )
+        session.context["property_type"] = "APARTMENT"
+        session.context["standing"] = "MODERN"
+        session.context["rent"] = 250_000
+        session.context["next_question"] = "ask.location"
+        model = StubModel(result=_model_result(intent="COLLECT_LOCATION"))
+
+        use_case, _, _, _ = build(uow, session, message_id, text="Bastos", model=model)
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        assert "allowed_intents" not in payload
+        assert "price_reference_monthly_xaf" not in payload
+        fields = [f["field"] for f in payload["required_fields"]]
+        assert "property_type" not in fields
+        assert "rent" not in fields
+        assert "location" in fields
+        assert "next_question" not in payload["conversation"]["known_facts"]

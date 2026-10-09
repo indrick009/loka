@@ -63,6 +63,26 @@ NEGATIVE = frozenset(
     }
 )
 
+# A bare greeting is the single most frequent message that carries no intent at
+# all. When no question is open it can be answered from a template, so it must
+# not spend a model call.
+GREETINGS = frozenset(
+    {
+        "bonjour",
+        "bonsoir",
+        "salut",
+        "hello",
+        "hi",
+        "allo",
+        "coucou",
+        "bonjour monsieur",
+        "bonjour madame",
+        "bonjour monsieur madame",
+        "bjr",
+        "slt",
+    }
+)
+
 AMOUNT_PATTERN = re.compile(
     r"(?P<amount>\d[\d\s.\u202f]{2,12}?)\s*(?:fcfa|xaf|cfa|frs|f\b)", re.IGNORECASE
 )
@@ -255,6 +275,8 @@ class DeterministicClassifier:
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
             return DeterministicMatch(intent="NEGATIVE", confidence=0.98)
+        if normalized in GREETINGS:
+            return DeterministicMatch(intent="SUPPORT", confidence=0.9)
 
         return None
 
@@ -290,6 +312,10 @@ class DeterministicClassifier:
                 confidence=0.92,
                 entities={"price": entities["price"]},
             )
+        # Only when no question is open: mid-form a greeting may still come with
+        # an answer the model should read together with the open question.
+        if pending is None and normalized in GREETINGS:
+            return DeterministicMatch(intent="SUPPORT", confidence=0.9)
         return None
 
     @staticmethod

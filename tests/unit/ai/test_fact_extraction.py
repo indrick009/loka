@@ -12,6 +12,7 @@ import pytest
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     DeterministicClassifier,
 )
+from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
     MAX_PLAUSIBLE_RENT_XAF,
@@ -126,15 +127,38 @@ class TestRefusedFacts:
 
 
 class TestLocationHint:
-    def test_a_bare_neighbourhood_is_not_promoted_to_a_city(
+    def test_an_unknown_neighbourhood_is_not_promoted_to_a_city(
         self, extractor: FactExtractor
     ) -> None:
-        """``Bastos`` is a district. Storing it as Douala's city is how a search
-        for "Douala" returns a property that is not in Douala."""
-        facts = extractor.validate({"location_hint": "Bastos"})
+        """A place the index does not know stays a hint. Promoting any word to a
+        city is how a search for "Douala" returns a property that is not there."""
+        facts = extractor.validate({"location_hint": "Zzzville"})
 
         assert not facts.has("location")
-        assert facts.get("location_hint") == "Bastos"
+        assert facts.get("location_hint") == "Zzzville"
+
+    def test_a_known_quartier_resolves_to_its_city(
+        self, extractor: FactExtractor
+    ) -> None:
+        """``Bastos`` is a complete answer: the district index knows it is in
+        Yaoundé, so the location question can actually close."""
+        facts = extractor.validate({"location_hint": "Bastos"})
+
+        assert facts.get("location") == {"city": "Yaoundé", "neighbourhood": "Bastos"}
+
+    def test_a_bare_neighbourhood_without_a_city_resolves(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"neighbourhood": "Bonapriso"})
+
+        assert facts.get("location") == {"city": "Douala", "neighbourhood": "Bonapriso"}
+
+    def test_an_accented_neighbourhood_matches(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"neighbourhood": "Deido"})
+
+        assert facts.get("location") == {"city": "Douala", "neighbourhood": "Deido"}
 
     def test_a_vague_hint_is_refused(self, extractor: FactExtractor) -> None:
         facts = extractor.validate({"location_hint": "-"})
@@ -153,15 +177,15 @@ class TestConversationOrder:
 
         assert step is FlowStep.COLLECT_STANDING
 
-    def test_the_order_is_type_standing_location_price(
+    def test_the_form_order_is_type_standing_location_rent_then_entry_conditions(
         self, extractor: FactExtractor
     ) -> None:
+        """The order matches how a listing is described here: what it is, where,
+        for how much, and then the move-in cost (charges, caution, duration,
+        availability, conditions) that the quality gate needs to publish."""
         cases = [
             ({"property_type": "APARTMENT"}, FlowStep.COLLECT_STANDING),
-            (
-                {"property_type": "APARTMENT", "standing": "MODERN"},
-                FlowStep.COLLECT_LOCATION,
-            ),
+            ({"property_type": "APARTMENT", "standing": "MODERN"}, FlowStep.COLLECT_LOCATION),
             (
                 {"property_type": "APARTMENT", "standing": "MODERN", "city": "Douala"},
                 FlowStep.COLLECT_PRICE,
@@ -173,13 +197,78 @@ class TestConversationOrder:
                     "city": "Douala",
                     "price": 250_000,
                 },
+                FlowStep.COLLECT_CHARGES,
+            ),
+            (
+                {
+                    "property_type": "APARTMENT",
+                    "standing": "MODERN",
+                    "city": "Douala",
+                    "price": 250_000,
+                    "charges": 0,
+                    "charging_policy": "INCLUDED",
+                },
+                FlowStep.COLLECT_DEPOSIT,
+            ),
+            (
+                {
+                    "property_type": "APARTMENT",
+                    "standing": "MODERN",
+                    "city": "Douala",
+                    "price": 250_000,
+                    "charges": 0,
+                    "charging_policy": "INCLUDED",
+                    "deposit": 250_000,
+                },
+                FlowStep.COLLECT_MINIMUM_DURATION,
+            ),
+            (
+                {
+                    "property_type": "APARTMENT",
+                    "standing": "MODERN",
+                    "city": "Douala",
+                    "price": 250_000,
+                    "charges": 0,
+                    "charging_policy": "INCLUDED",
+                    "deposit": 250_000,
+                    "minimum_duration_months": 12,
+                },
+                FlowStep.COLLECT_AVAILABILITY,
+            ),
+            (
+                {
+                    "property_type": "APARTMENT",
+                    "standing": "MODERN",
+                    "city": "Douala",
+                    "price": 250_000,
+                    "charges": 0,
+                    "charging_policy": "INCLUDED",
+                    "deposit": 250_000,
+                    "minimum_duration_months": 12,
+                    "availability": "IMMEDIATE",
+                },
+                FlowStep.COLLECT_CONDITIONS,
+            ),
+            (
+                {
+                    "property_type": "APARTMENT",
+                    "standing": "MODERN",
+                    "city": "Douala",
+                    "price": 250_000,
+                    "charges": 0,
+                    "charging_policy": "INCLUDED",
+                    "deposit": 250_000,
+                    "minimum_duration_months": 12,
+                    "availability": "IMMEDIATE",
+                    "conditions": "Caution deux mois, avance de trois mois.",
+                },
                 FlowStep.CONFIRM_PROPERTY,
             ),
         ]
         for entities, expected in cases:
             facts = extractor.validate(entities)
             step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
-            assert step is expected
+            assert step is expected, entities
 
     def test_a_listing_intent_starts_from_what_is_already_known(
         self, extractor: FactExtractor
@@ -290,6 +379,89 @@ class TestAmountShorthand:
         classifier = DeterministicClassifier()
 
         assert classifier.shorthand_amount("2 millions") == 2_000_000
+
+
+class TestEntryConditions:
+    """The move-in cost is part of the price here, so it must survive validation."""
+
+    def test_included_charges_are_a_policy_not_an_amount(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"charges_included": True})
+
+        assert facts.get("charges") == 0
+        assert facts.get("charging_policy") == "INCLUDED"
+
+    def test_extra_charges_keep_their_amount(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"charges": 15_000})
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charging_policy") == "EXTRA"
+
+    def test_a_deposit_is_kept(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"deposit": 500_000})
+
+        assert facts.get("deposit") == 500_000
+
+    def test_a_negative_deposit_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"deposit": -1})
+
+        assert not facts.has("deposit")
+        assert "deposit" in facts.rejected
+
+    def test_availability_normalises_to_a_token(self, extractor: FactExtractor) -> None:
+        assert extractor.validate({"availability": "immédiatement"}).get(
+            "availability"
+        ) == "IMMEDIATE"
+        assert extractor.validate({"availability": "01/11/2026"}).get(
+            "availability"
+        ) == "2026-11-01"
+
+    def test_an_unreadable_availability_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"availability": "un jour"})
+
+        assert not facts.has("availability")
+        assert "availability" in facts.rejected
+
+    def test_conditions_must_be_specific_enough(self, extractor: FactExtractor) -> None:
+        assert not extractor.validate({"conditions": "ok"}).has("conditions")
+        kept = extractor.validate(
+            {"conditions": "Caution deux mois et avance de trois mois."}
+        )
+        assert kept.has("conditions")
+
+
+class TestMarketKnowledge:
+    """The district index is the authority a bare quartier resolves against."""
+
+    def test_a_district_resolves_to_its_city(self) -> None:
+        assert market.resolve_neighbourhood("Bastos") == "Yaoundé"
+        assert market.resolve_neighbourhood("Bonapriso") == "Douala"
+
+    def test_accents_and_case_do_not_matter(self) -> None:
+        assert market.resolve_city("YAOUNDE") == "Yaoundé"
+        assert market.resolve_neighbourhood("deido") == "Douala"
+
+    def test_an_unknown_place_stays_unresolved(self) -> None:
+        assert market.resolve_neighbourhood("Zzzville") is None
+        assert market.resolve_city("Zzzville") is None
+
+    def test_every_entry_points_at_a_declared_source(self) -> None:
+        for neighbourhood in market.NEIGHBOURHOODS:
+            assert neighbourhood.source in market.SOURCES
+        for expression in market.EXPRESSIONS:
+            assert expression.source in market.SOURCES
+
+    def test_a_premium_address_widens_the_price_band(self) -> None:
+        base = market.price_reference("APARTMENT")
+        premium = market.price_reference("APARTMENT", neighbourhood="Bastos")
+
+        assert base is not None and premium is not None
+        assert premium.low_xaf >= base.low_xaf
+        assert premium.high_xaf > base.high_xaf
+
+    def test_an_unknown_type_has_no_band(self) -> None:
+        assert market.price_reference("SPACESHIP") is None
 
 
 class TestTrustBoundary:

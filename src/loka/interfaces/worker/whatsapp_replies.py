@@ -38,14 +38,19 @@ QUESTION_TEXT: dict[str, str] = {
         "Les charges mensuelles sont-elles incluses dans le loyer ?\n"
         "Si non, quel est leur montant en FCFA ?"
     ),
+    "ask.deposit": (
+        "Quel est le montant de la caution (dépôt de garantie), en FCFA ?\n"
+        "C'est la somme remboursable demandée au locataire à l'entrée."
+    ),
     "ask.minimum_duration": "Quelle est la durée minimale de location souhaitée ?",
     "ask.availability": (
-        "Le logement est-il toujours disponible ?\n"
-        "Répondez : oui, loue, ou indisponible."
+        "À partir de quand le logement est-il disponible ?\n"
+        "Répondez : immédiatement, ou une date (exemple : 01/11/2026)."
     ),
     "ask.conditions": (
-        "Quelles conditions le locataire doit-il respecter ? "
-        "(caution, durée, type de locataire...)"
+        "Quelles sont les conditions d'entrée ?\n"
+        "Précisez par exemple l'avance (nombre de mois à payer d'avance), "
+        "les frais d'agence, et le type de locataire souhaité."
     ),
     "ask.confirm_property": (
         "Voici ce que je retiens. Confirmez-vous pour publier l'annonce ?\n"

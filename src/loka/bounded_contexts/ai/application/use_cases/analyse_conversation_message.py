@@ -42,6 +42,7 @@ from loka.bounded_contexts.ai.application.ports import (
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     DeterministicClassifier,
 )
+from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import LlmUsage, Prompt
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
@@ -93,7 +94,7 @@ SYSTEM_PROMPT = (
     "neighbourhood or a number is an answer to that question, so set the matching "
     "entity instead of asking again."
     " A bare number given as a rent is in FCFA: '50' means 50000, not 50."
-    " Set 'intent' to exactly one value from 'allowed_intents' and nothing else. "
+    " Set 'intent' to exactly one value from the 'intent' enum in 'schema' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
     "applies at all."
     " Also set 'reply': the next WhatsApp message to send, in the conversation's "
@@ -129,22 +130,24 @@ QUESTION_TOPICS: dict[str, str] = {
     "ask.rent": "the monthly rent, in XAF",
     "ask.features": "the number of bedrooms and bathrooms, and the surface in m2",
     "ask.charges": "whether charges are included and, if not, their monthly amount",
+    "ask.deposit": "the refundable deposit (caution) the tenant must pay, in XAF",
     "ask.minimum_duration": "the minimum rental duration",
-    "ask.availability": "whether the property is still available",
-    "ask.conditions": "the tenant conditions (deposit, duration, tenant type)",
+    "ask.availability": "when the property becomes available (a date, or immediately)",
+    "ask.conditions": (
+        "the entry conditions: the advance in months, the agency or lease fee, "
+        "and the tenant type accepted"
+    ),
     "ask.confirm_property": "confirmation of the summary before publishing",
     "confirm.published": "confirmation that the property has been published",
 }
 
 # What a month of rent costs here, by property type, in XAF. A model with no
 # Cameroonian grounding reads a bare "50" as fifty francs; these wide bands anchor
-# the magnitude only — they never reject a price the user is sure about.
+# the magnitude only — they never reject a price the user is sure about. The
+# values live in the sourced market knowledge base so the code and the prompt
+# share one authority (see ``ai.domain.knowledge.market``).
 PRICE_REFERENCES_XAF: dict[str, tuple[int, int]] = {
-    "ROOM": (10_000, 60_000),
-    "STUDIO": (20_000, 150_000),
-    "APARTMENT": (40_000, 400_000),
-    "HOUSE": (80_000, 800_000),
-    "DUPLEX": (150_000, 1_500_000),
+    name: (band.low_xaf, band.high_xaf) for name, band in market.PRICE_BANDS_XAF.items()
 }
 
 # The same question is asked from opposite sides: a landlord lists a property, a
@@ -200,6 +203,12 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "bedrooms": {"type": "integer"},
                 "bathrooms": {"type": "integer"},
                 "surface_area": {"type": "integer"},
+                "charges": {"type": "integer"},
+                "charging_policy": {"type": "string", "enum": ["INCLUDED", "EXTRA"]},
+                "deposit": {"type": "integer"},
+                "minimum_duration_months": {"type": "integer"},
+                "availability": {"type": "string"},
+                "conditions": {"type": "string"},
             },
         },
     },
@@ -880,41 +889,68 @@ def build_analysis_prompt(
     The phone number is never part of the prompt: the model has no business
     knowing who it is talking to, and prompts end up in vendor logs.
     """
+    public_known = _public_known_facts(known_facts)
+    payload: dict[str, Any] = {
+        "message": text or "",
+        "language": language if language in SUPPORTED_LANGUAGES else "fr",
+        "you_are_helping": _FLOW_ROLES.get(flow, _FLOW_ROLES[FlowName.SUPPORT]),
+        "conversation": {
+            "flow": flow.value,
+            "step": step.value,
+            "awaiting_answer_to": pending_question,
+            "known_facts": public_known,
+        },
+        # Only what is still missing, in order, so the model asks the next real
+        # question without re-reading fields already collected. The schema closes
+        # the intent enum, so a second copy of the allowlist would be dead bytes.
+        "required_fields": _missing_fields(flow, public_known),
+        "schema": RESPONSE_SCHEMA,
+    }
+    # The price band anchors the magnitude of a bare number; once the rent is
+    # known it is context that can never be used again, so it is dropped.
+    if not public_known.get("rent"):
+        payload["price_reference_monthly_xaf"] = {
+            name: {"min": low, "max": high}
+            for name, (low, high) in PRICE_REFERENCES_XAF.items()
+        }
+    turns = _turns_as_json(history)
+    if turns:
+        payload["recent_turns"] = turns
     return Prompt(
         system=SYSTEM_PROMPT,
-        user=json.dumps(
-            {
-                "message": text or "",
-                "language": language if language in SUPPORTED_LANGUAGES else "fr",
-                "you_are_helping": _FLOW_ROLES.get(flow, _FLOW_ROLES[FlowName.SUPPORT]),
-                "conversation": {
-                    "flow": flow.value,
-                    "step": step.value,
-                    "awaiting_answer_to": pending_question,
-                    "known_facts": known_facts,
-                },
-                # What the form still needs, in order, so the model can both read
-                # this message and ask the next question in the same reply.
-                "required_fields": _required_fields(flow),
-                "price_reference_monthly_xaf": {
-                    name: {"min": low, "max": high}
-                    for name, (low, high) in PRICE_REFERENCES_XAF.items()
-                },
-                "recent_turns": _turns_as_json(history),
-                "schema": RESPONSE_SCHEMA,
-                "allowed_intents": list(ALLOWED_INTENTS),
-            },
-            ensure_ascii=False,
-        ),
+        user=json.dumps(payload, ensure_ascii=False),
         response_schema=RESPONSE_SCHEMA,
     )
 
 
-def _required_fields(flow: FlowName) -> list[dict[str, str]]:
-    """The ordered form fields, glossed for the model, in this flow's wording."""
+# Keys the pipeline keeps in the session for its own use, never for the model:
+# leaking "next_question" into known_facts invites the model to treat an internal
+# variable as a fact about the property.
+_PROMPT_INTERNAL_KEYS = frozenset({"next_question", "abort_reason"})
+
+
+def _public_known_facts(known_facts: dict[str, Any]) -> dict[str, Any]:
+    return {
+        name: value
+        for name, value in known_facts.items()
+        if name not in _PROMPT_INTERNAL_KEYS and not str(name).startswith("_")
+    }
+
+
+def _missing_fields(flow: FlowName, known: dict[str, Any]) -> list[dict[str, str]]:
+    """The still-missing form fields, in order, glossed for this flow.
+
+    Making the model decide the next question is expensive in tokens *and*
+    fragile; handing it only the remaining fields lets it do both jobs (read the
+    message, ask the next question) while the code still owns the order.
+    """
     fields: list[dict[str, str]] = []
     for name, step in PROPERTY_REQUIREMENTS:
-        fields.append({"field": name, "ask": question_topic(question_key_for(step), flow) or ""})
+        if name in known:
+            continue
+        fields.append(
+            {"field": name, "ask": question_topic(question_key_for(step), flow) or ""}
+        )
     return fields
 
 
