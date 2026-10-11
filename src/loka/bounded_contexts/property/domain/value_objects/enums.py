@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
+from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.domain.value_object import ValueObject
 
 
@@ -76,6 +77,45 @@ class AvailabilityAnswer(StrEnum):
     STILL_AVAILABLE = "STILL_AVAILABLE"
     RENTED = "RENTED"
     TEMPORARILY_UNAVAILABLE = "TEMPORARILY_UNAVAILABLE"
+
+
+@dataclass(frozen=True, slots=True)
+class RentMonths(ValueObject):
+    """A number of months of rent, which is how this market counts entry money.
+
+    "Je paye 6 mois de loyer et j'ajoute deux mois comme caution remboursable":
+    the advance and the caution are both months, and the caution is added *on
+    top of* the advance. Eight months change hands, two of them come back.
+
+    Months rather than francs, because the figure is a multiple of the rent.
+    Stored as an amount it silently decouples the day a landlord corrects his
+    rent, and the tenant's "how many months can you pay" then needs converting
+    before it can be compared with what the landlord asks.
+
+    Not a :class:`Duration`: zero is a legitimate answer here — "aucune caution"
+    is ordinary — while a lease of zero months is nonsense.
+    """
+
+    months: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.months, int) or isinstance(self.months, bool):
+            self._reject("months must be a whole number", months=self.months)
+        if not 0 <= self.months <= 24:
+            # A year of advance is the heaviest case the business spec cites.
+            # Past two years it is a typo, and a typo stored is a listing the
+            # matching can never place.
+            self._reject("rent months must be between 0 and 24", months=self.months)
+
+    def amount_at(self, rent: Money) -> Money:
+        """What this represents in francs, at a given rent."""
+        return Money(amount=rent.amount * self.months, currency=rent.currency)
+
+    @property
+    def label(self) -> str:
+        if self.months == 0:
+            return "aucun"
+        return f"{self.months} mois"
 
 
 @dataclass(frozen=True, slots=True)

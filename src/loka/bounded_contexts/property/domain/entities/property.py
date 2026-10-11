@@ -128,6 +128,7 @@ class Property(AggregateRoot):
         "property_id",
         "property_type",
         "published_at",
+        "quantity",
         "rent",
         "standing",
         "status",
@@ -162,6 +163,9 @@ class Property(AggregateRoot):
         self.conditions: str | None = None
         self.description: str | None = None
         self.media: list[PropertyMedia] = []
+        # One listing can stand for several identical lodgings (§5). It is what
+        # makes "is it still available?" mean "are any left?".
+        self.quantity: int = 1
         self.landlord_rules: str | None = None
         self.last_availability_confirmed_at: datetime | None = None
         self.data_quality_issues: set[DataQualityIssue] = set()
@@ -233,6 +237,38 @@ class Property(AggregateRoot):
         self.deposit = deposit.require_non_negative(reason="deposit cannot be negative")
         self.pending_draft_steps.discard(PropertyDraftData.DEPOSIT)
         self.data_quality_issues.discard(DataQualityIssue.MISSING_DEPOSIT)
+        self._touch(now)
+
+    def set_quantity(self, quantity: int, *, now: datetime) -> None:
+        """How many identical lodgings this one listing stands for.
+
+        Same type, same characteristics, same price: one listing, quantity two.
+        Different prices make two listings, because the tenant is comparing a
+        price (§5).
+        """
+        self._assert_editable()
+        if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1:
+            self._reject("a listing must stand for at least one lodging", quantity=quantity)
+        self.quantity = quantity
+        self._touch(now)
+
+    @property
+    def is_exhausted(self) -> bool:
+        return self.quantity == 0
+
+    def declare_one_taken(self, *, now: datetime) -> None:
+        """The landlord says one of them is gone.
+
+        Only he can say it. Kora leaves the relationship at the introduction, so
+        it never learns whether a lease was signed — which is why nothing here
+        decrements on a match, a confirmation or a payment (§9).
+
+        Deliberately usable on a published listing: this is what a landlord
+        answers to "le logement est encore disponible ?", long after publication.
+        """
+        if self.is_exhausted:
+            self._reject("every lodging of this listing is already taken")
+        self.quantity -= 1
         self._touch(now)
 
     def set_rooms(
