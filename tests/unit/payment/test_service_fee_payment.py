@@ -28,7 +28,7 @@ def payment(**overrides: object) -> ServiceFeePayment:
         "payment_id": uuid.uuid4(),
         "tenant_id": uuid.uuid4(),
         "landlord_id": uuid.uuid4(),
-        "application_id": uuid.uuid4(),
+        "property_id": uuid.uuid4(),
         "amount": Money(1000),
         "purpose": PaymentPurpose.SERVICE_ACCESS,
         "now": NOW,
@@ -227,3 +227,53 @@ class TestAccessGrant:
         assert [
             event.event_type for event in grant.pull_events()
         ] == ["ContactInformationUnlocked"]
+
+class TestTheAnchorIsTheTenantAndTheListing:
+    """1 000 FCFA buys the landlord's number *and* this lodging's location.
+
+    The location is per-listing information, so the pair that the grant
+    expresses is (tenant, listing) — a landlord with ten listings is ten
+    unlocks, not one.
+    """
+
+    def test_a_settled_payment_names_the_listing_it_unlocks(self) -> None:
+        listing = uuid.uuid4()
+        pay = payment(property_id=listing)
+        pay.initiate(provider="mock", provider_reference=REFERENCE, now=NOW)
+        pay.mark_succeeded(
+            provider_reference=REFERENCE, signature="sig", now=NOW, provider_reported_at=NOW
+        )
+        settled = next(
+            event for event in pay.pull_events() if event.event_type == "PaymentSucceeded"
+        )
+        assert settled.metadata["property_id"] == str(listing)
+        assert settled.metadata["tenant_id"] == str(pay.tenant_id)
+        assert "application_id" not in settled.metadata
+
+    def test_the_grant_carries_the_pair_it_was_bought_for(self) -> None:
+        listing = uuid.uuid4()
+        pay = payment(property_id=listing)
+        pay.initiate(provider="mock", provider_reference=REFERENCE, now=NOW)
+        pay.mark_succeeded(
+            provider_reference=REFERENCE, signature="sig", now=NOW, provider_reported_at=NOW
+        )
+        grant = ServiceAccessGrant.from_payment(pay, now=NOW, grant_id=uuid.uuid4())
+        assert grant.property_id == listing
+        assert grant.tenant_id == pay.tenant_id
+
+    def test_a_reveal_names_the_listing_that_was_unlocked(self) -> None:
+        listing = uuid.uuid4()
+        pay = payment(property_id=listing)
+        pay.initiate(provider="mock", provider_reference=REFERENCE, now=NOW)
+        pay.mark_succeeded(
+            provider_reference=REFERENCE, signature="sig", now=NOW, provider_reported_at=NOW
+        )
+        grant = ServiceAccessGrant.from_payment(pay, now=NOW, grant_id=uuid.uuid4())
+        grant.record_reveal(now=NOW)
+        unlocked = next(
+            event
+            for event in grant.pull_events()
+            if event.event_type == "ContactInformationUnlocked"
+        )
+        assert unlocked.metadata["property_id"] == str(listing)
+        assert "application_id" not in unlocked.metadata

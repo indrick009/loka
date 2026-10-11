@@ -1,9 +1,10 @@
-"""Initiate the 1 000 FCFA service fee for a rental application.
+"""Initiate the 1 000 FCFA unlock of one listing for one tenant.
 
 The URL-friendly phrasing is that the caller "pays" or "unlocks" the contact;
 the domain language is precise: this creates a payment and asks the provider
 for a reference. ``initiated`` is never ``settled`` — the invariant is enforced
-by the aggregate and by the single-grant-per-application partial index.
+by the aggregate and by the one-active-grant-per-(tenant, listing) partial
+index.
 """
 
 from __future__ import annotations
@@ -36,10 +37,19 @@ from loka.shared.domain.identifiers import new_id
 
 @dataclass(frozen=True, slots=True)
 class InitiateServiceFeeCommand:
-    application_id: uuid.UUID
+    property_id: uuid.UUID
     tenant_id: uuid.UUID
     landlord_id: uuid.UUID
     idempotency_key: str | None = None
+
+    @property
+    def unlock_key(self) -> str:
+        """The thing being bought, not the attempt buying it.
+
+        An idempotency key tied to an attempt lets a retried attempt charge a
+        second time for the same disclosure; tied to the pair, it cannot.
+        """
+        return self.idempotency_key or f"unlock:{self.tenant_id}:{self.property_id}"
 
 
 class InitiateServiceFeeUseCase:
@@ -64,23 +74,31 @@ class InitiateServiceFeeUseCase:
         payments: PaymentRepository = self._uow.repository("payment")
         grants: AccessGrantRepository = self._uow.repository("payment_grant")
 
-        if await grants.get_active_for_application(command.application_id) is not None:
+        if (
+            await grants.get_active_for_listing(command.tenant_id, command.property_id)
+            is not None
+        ):
+            # He already has this landlord's number and this lodging's
+            # location: there is nothing left to sell him here.
             raise PaymentAlreadySettled(
-                "this application already has an active access grant",
-                context={"application_id": str(command.application_id)},
+                "this tenant has already unlocked this listing",
+                context={
+                    "tenant_id": str(command.tenant_id),
+                    "property_id": str(command.property_id),
+                },
             )
 
-        payment = await payments.get_open_for_application(command.application_id)
+        payment = await payments.get_open_for_listing(command.tenant_id, command.property_id)
         if payment is None:
             payment = ServiceFeePayment(
                 payment_id=new_id(),
                 tenant_id=command.tenant_id,
                 landlord_id=command.landlord_id,
-                application_id=command.application_id,
+                property_id=command.property_id,
                 amount=Money(self._service_fee_xaf),
                 purpose=PaymentPurpose.SERVICE_ACCESS,
                 now=now,
-                idempotency_key=command.idempotency_key,
+                idempotency_key=command.unlock_key,
             )
         elif payment.status in (PaymentStatus.INITIATED, PaymentStatus.PENDING_CONFIRMATION):
             # A duplicate initiate for an already-pending payment must not create
@@ -93,11 +111,11 @@ class InitiateServiceFeeUseCase:
                 payment_id=new_id(),
                 tenant_id=command.tenant_id,
                 landlord_id=command.landlord_id,
-                application_id=command.application_id,
+                property_id=command.property_id,
                 amount=Money(self._service_fee_xaf),
                 purpose=PaymentPurpose.SERVICE_ACCESS,
                 now=now,
-                idempotency_key=command.idempotency_key,
+                idempotency_key=command.unlock_key,
             )
 
         try:
@@ -108,7 +126,10 @@ class InitiateServiceFeeUseCase:
         except Exception as exc:  # provider boundary: any transport error is a gateway fault
             raise PaymentGatewayError(
                 f"payment provider refused the request: {type(exc).__name__}",
-                context={"application_id": str(command.application_id)},
+                context={
+                    "tenant_id": str(command.tenant_id),
+                    "property_id": str(command.property_id),
+                },
             ) from exc
 
         payment.initiate(
@@ -124,7 +145,7 @@ class InitiateServiceFeeUseCase:
         await self._uow.commit()
         self._logger.info(
             "service_fee_initiated",
-            application_id=str(command.application_id),
+            property_id=str(command.property_id),
             payment_id=str(payment.id),
             provider=initiation.provider,
             provider_reference=initiation.provider_reference,

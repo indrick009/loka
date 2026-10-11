@@ -23,7 +23,7 @@ class ServiceFeePaymentRow(Base):
     landlord_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False, index=True
     )
-    application_id: Mapped[uuid.UUID] = mapped_column(
+    property_id: Mapped[uuid.UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False, index=True
     )
     amount_xaf: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -52,10 +52,13 @@ class ServiceFeePaymentRow(Base):
             unique=True,
             postgresql_where="provider_reference IS NOT NULL",
         ),
-        # One live payment per application: retries reuse the row.
+        # One live payment per tenant per listing: retries reuse the row, and
+        # a second listing from the same landlord is a separate row because it
+        # is a separate piece of information being bought.
         Index(
-            "uq_payment_open_application",
-            "application_id",
+            "uq_payment_open_listing",
+            "tenant_id",
+            "property_id",
             unique=True,
             postgresql_where="status IN ('CREATED', 'INITIATED', 'PENDING_CONFIRMATION')",
         ),
@@ -72,7 +75,7 @@ class ServiceAccessGrantRow(Base):
     )
     tenant_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False, index=True)
     landlord_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
-    application_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    property_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     payment_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="ACTIVE")
     reveal_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -83,9 +86,11 @@ class ServiceAccessGrantRow(Base):
 
     __table_args__ = (
         Index("uq_grant_payment", "payment_id", unique=True),
+        # "This tenant has unlocked this listing", enforced once.
         Index(
-            "uq_grant_active_application",
-            "application_id",
+            "uq_grant_active_listing",
+            "tenant_id",
+            "property_id",
             unique=True,
             postgresql_where="status = 'ACTIVE'",
         ),

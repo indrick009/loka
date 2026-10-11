@@ -4,7 +4,8 @@ A webhook arrives with raw bytes and a signature. The gateway adapter is the
 only code that understands provider signing; this use case receives only the
 already-verified verdict. Settlement is idempotent on replay: the callback
 record's unique constraint, the aggregate's ``mark_succeeded`` guard and the
-one-grant-per-application partial index all make duplicate delivery harmless.
+one-active-grant-per-(tenant, listing) partial index all make duplicate
+delivery harmless.
 """
 
 from __future__ import annotations
@@ -168,7 +169,7 @@ class HandlePaymentCallbackUseCase:
         await self._uow.repository("payment").save(payment)
 
         grants: AccessGrantRepository = self._uow.repository("payment_grant")
-        grant = await grants.get_active_for_application(payment.application_id)
+        grant = await grants.get_active_for_listing(payment.tenant_id, payment.property_id)
         if grant is None:
             grant = ServiceAccessGrant.from_payment(payment, now=now, grant_id=new_id())
             await grants.add(grant)

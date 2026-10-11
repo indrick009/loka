@@ -90,14 +90,14 @@ async def _lifecycle(
     database: Database,
     secret: str,
     *,
-    application_id: uuid.UUID | None = None,
+    property_id: uuid.UUID | None = None,
 ) -> tuple[str, dict]:
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
-    application_id = application_id or uuid.uuid4()
+    property_id = property_id or uuid.uuid4()
 
     initiated = await client.post(
-        f"/payments/applications/{application_id}/initiate",
+        f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
         headers=_auth(token),
     )
@@ -116,7 +116,7 @@ async def _lifecycle(
     assert settled.json()["grant"]["status"] == "ACTIVE"
 
     status_response = await client.get(
-        f"/payments/applications/{application_id}", headers=_auth(token)
+        f"/payments/listings/{property_id}", headers=_auth(token)
     )
     assert status_response.status_code == 200
     return token, status_response.json()
@@ -148,12 +148,12 @@ async def test_a_replayed_webhook_is_acknowledged_without_a_second_grant(
     integration_settings: Settings,
 ) -> None:
     secret = integration_settings.payment.webhook_secret.get_secret_value()
-    application_id = uuid.uuid4()
+    property_id = uuid.uuid4()
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
 
     initiated = await client.post(
-        f"/payments/applications/{application_id}/initiate",
+        f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
         headers=_auth(token),
     )
@@ -198,17 +198,17 @@ async def test_a_forged_signature_is_rejected(
     assert response.json()["code"] == "callback_rejected"
 
 
-async def test_a_settled_application_refuses_a_second_payment(
+async def test_a_listing_already_unlocked_refuses_a_second_payment(
     client: httpx.AsyncClient,
     database: Database,
     integration_settings: Settings,
 ) -> None:
     secret = integration_settings.payment.webhook_secret.get_secret_value()
-    application_id = uuid.uuid4()
+    property_id = uuid.uuid4()
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
     await client.post(
-        f"/payments/applications/{application_id}/initiate",
+        f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
         headers=_auth(token),
     )
@@ -226,7 +226,7 @@ async def test_a_settled_application_refuses_a_second_payment(
     )
 
     second = await client.post(
-        f"/payments/applications/{application_id}/initiate",
+        f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
         headers=_auth(token),
     )
@@ -250,3 +250,95 @@ async def test_the_webhook_is_unauthenticated_by_design(
     )
 
     assert response.status_code == 422  # rejected for the signature, not for auth
+
+async def _unlock(
+    client: httpx.AsyncClient,
+    secret: str,
+    token: str,
+    property_id: uuid.UUID,
+    landlord_id: uuid.UUID,
+    *,
+    event_id: str,
+) -> None:
+    """Take one unlock all the way to a settled grant."""
+    initiated = await client.post(
+        f"/payments/listings/{property_id}/initiate",
+        json={"landlord_id": str(landlord_id)},
+        headers=_auth(token),
+    )
+    assert initiated.status_code == 201, initiated.text
+    body, signature = _signed_callback_body(
+        secret, reference=initiated.json()["provider_reference"], event_id=event_id
+    )
+    settled = await client.post(
+        f"/webhooks/payments/{PROVIDER}",
+        content=body,
+        headers={"x-loka-signature": signature},
+    )
+    assert settled.status_code == 200, settled.text
+    assert settled.json()["grant"]["status"] == "ACTIVE"
+
+
+async def test_a_second_listing_from_the_same_landlord_is_a_second_unlock(
+    client: httpx.AsyncClient,
+    database: Database,
+    integration_settings: Settings,
+) -> None:
+    """The 1 000 FCFA buys one lodging's location, so ten listings are ten unlocks.
+
+    This is the case the ``(tenant, property_id)`` partial unique index has to
+    allow: keyed on the landlord it would refuse the second listing, and the
+    tenant would be handed an address he never paid for.
+    """
+    secret = integration_settings.payment.webhook_secret.get_secret_value()
+    landlord_id = uuid.uuid4()
+    token = await _token_for(database, uuid.uuid4())
+    first, second = uuid.uuid4(), uuid.uuid4()
+
+    await _unlock(client, secret, token, first, landlord_id, event_id="evt-first")
+    await _unlock(client, secret, token, second, landlord_id, event_id="evt-second")
+
+    async with database.session() as session:
+        grants = (await session.execute(select(ServiceAccessGrantRow))).scalars().all()
+    assert {grant.property_id for grant in grants} == {first, second}
+
+
+async def test_another_tenant_pays_his_own_unlock_for_the_same_listing(
+    client: httpx.AsyncClient,
+    database: Database,
+    integration_settings: Settings,
+) -> None:
+    """The grant is the tenant's, not the listing's."""
+    secret = integration_settings.payment.webhook_secret.get_secret_value()
+    landlord_id, property_id = uuid.uuid4(), uuid.uuid4()
+    first_tenant = await _token_for(database, uuid.uuid4())
+    second_tenant = await _token_for(database, uuid.uuid4())
+
+    await _unlock(client, secret, first_tenant, property_id, landlord_id, event_id="evt-a")
+    await _unlock(client, secret, second_tenant, property_id, landlord_id, event_id="evt-b")
+
+    async with database.session() as session:
+        grants = (await session.execute(select(ServiceAccessGrantRow))).scalars().all()
+    assert len(grants) == 2
+    assert {grant.property_id for grant in grants} == {property_id}
+    assert len({grant.tenant_id for grant in grants}) == 2
+
+
+async def test_a_tenant_asking_about_a_listing_he_has_not_paid_for_learns_nothing(
+    client: httpx.AsyncClient,
+    database: Database,
+    integration_settings: Settings,
+) -> None:
+    """Refusing him would itself disclose that somebody else paid."""
+    secret = integration_settings.payment.webhook_secret.get_secret_value()
+    landlord_id, property_id = uuid.uuid4(), uuid.uuid4()
+    payer = await _token_for(database, uuid.uuid4())
+    stranger = await _token_for(database, uuid.uuid4())
+
+    await _unlock(client, secret, payer, property_id, landlord_id, event_id="evt-paid")
+
+    response = await client.get(
+        f"/payments/listings/{property_id}", headers=_auth(stranger)
+    )
+
+    assert response.status_code == 404

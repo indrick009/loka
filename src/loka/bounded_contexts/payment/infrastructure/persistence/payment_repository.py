@@ -51,12 +51,15 @@ class SqlAlchemyPaymentRepository:
         row = await self._session.get(ServiceFeePaymentRow, payment_id)
         return payment_from_row(row) if row is not None else None
 
-    async def get_open_for_application(self, application_id: Any) -> ServiceFeePayment | None:
+    async def get_open_for_listing(
+        self, tenant_id: Any, property_id: Any
+    ) -> ServiceFeePayment | None:
         """The current attempt: FAILED rows are retryable and keep their id."""
         result = await self._session.execute(
             select(ServiceFeePaymentRow)
             .where(
-                ServiceFeePaymentRow.application_id == application_id,
+                ServiceFeePaymentRow.tenant_id == tenant_id,
+                ServiceFeePaymentRow.property_id == property_id,
                 ServiceFeePaymentRow.status.in_(
                     ["CREATED", "INITIATED", "PENDING_CONFIRMATION", "FAILED"]
                 ),
@@ -67,10 +70,15 @@ class SqlAlchemyPaymentRepository:
         row = result.scalar_one_or_none()
         return payment_from_row(row) if row is not None else None
 
-    async def get_for_application(self, application_id: Any) -> ServiceFeePayment | None:
+    async def get_latest_for_listing(
+        self, tenant_id: Any, property_id: Any
+    ) -> ServiceFeePayment | None:
         result = await self._session.execute(
             select(ServiceFeePaymentRow)
-            .where(ServiceFeePaymentRow.application_id == application_id)
+            .where(
+                ServiceFeePaymentRow.tenant_id == tenant_id,
+                ServiceFeePaymentRow.property_id == property_id,
+            )
             .order_by(ServiceFeePaymentRow.created_at.desc())
             .limit(1)
         )
@@ -134,10 +142,13 @@ class SqlAlchemyAccessGrantRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_active_for_application(self, application_id: Any) -> ServiceAccessGrant | None:
+    async def get_active_for_listing(
+        self, tenant_id: Any, property_id: Any
+    ) -> ServiceAccessGrant | None:
         result = await self._session.execute(
             select(ServiceAccessGrantRow).where(
-                ServiceAccessGrantRow.application_id == application_id,
+                ServiceAccessGrantRow.tenant_id == tenant_id,
+                ServiceAccessGrantRow.property_id == property_id,
                 ServiceAccessGrantRow.status == "ACTIVE",
             )
         )

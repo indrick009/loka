@@ -37,17 +37,18 @@ clock = SystemClock()
 
 
 class InitiateServiceFeeRequest(BaseModel):
-    # The rental context (Phase 7) does not exist yet; until then the landlord
-    # who owns the application is supplied explicitly by the tenant.
+    # The landlord who owns the listing is supplied by the caller: the payment
+    # context does not read the catalogue, and the pair that matters to it is
+    # (tenant, listing).
     landlord_id: uuid.UUID
 
 
 @router.post(
-    "/payments/applications/{application_id}/initiate",
+    "/payments/listings/{property_id}/initiate",
     status_code=status.HTTP_201_CREATED,
 )
 async def initiate_service_fee(
-    application_id: uuid.UUID,
+    property_id: uuid.UUID,
     body: InitiateServiceFeeRequest,
     request: Request,
     principal: Annotated[Principal, Depends(require_principal)],
@@ -57,7 +58,7 @@ async def initiate_service_fee(
     async with unit_of_work(database) as uow:
         view = await initiate_service_fee_use_case(uow, settings).execute(
             InitiateServiceFeeCommand(
-                application_id=application_id,
+                property_id=property_id,
                 tenant_id=principal.user_id,
                 landlord_id=body.landlord_id,
             ),
@@ -66,9 +67,9 @@ async def initiate_service_fee(
     return view.to_dict()
 
 
-@router.get("/payments/applications/{application_id}", status_code=status.HTTP_200_OK)
+@router.get("/payments/listings/{property_id}", status_code=status.HTTP_200_OK)
 async def get_service_access_status(
-    application_id: uuid.UUID,
+    property_id: uuid.UUID,
     request: Request,
     principal: Annotated[Principal, Depends(require_principal)],
 ) -> dict[str, object]:
@@ -76,7 +77,7 @@ async def get_service_access_status(
     async with unit_of_work(database) as uow:
         result = await get_service_access_status_use_case(uow).execute(
             ServiceAccessQuery(
-                application_id=application_id,
+                property_id=property_id,
                 tenant_id=principal.user_id,
             ),
             now=clock.now(),

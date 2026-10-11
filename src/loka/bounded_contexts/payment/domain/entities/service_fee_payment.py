@@ -3,6 +3,13 @@
 The single most important invariant in this context: a payment being
 *initiated* is not a payment being *completed*. Contact details unlock only
 from a ``SUCCEEDED`` state reached through a verified gateway callback.
+
+The unlock is anchored on **(tenant, listing)**, not on an application: the
+1 000 FCFA buys the landlord's number *and* the lodging's location, and a
+location belongs to one listing. So the same tenant returning to the same
+listing owes nothing, a second listing from the same landlord is a second
+unlock, and another tenant wanting that listing pays his own — the grant is
+his, not the listing's.
 """
 
 from __future__ import annotations
@@ -56,7 +63,6 @@ class PaymentPurpose(StrEnum):
 class ServiceFeePayment(AggregateRoot):
     __slots__ = (
         "amount",
-        "application_id",
         "attempt_count",
         "callback_signature",
         "created_at",
@@ -67,6 +73,7 @@ class ServiceFeePayment(AggregateRoot):
         "method",
         "paid_at",
         "payment_id",
+        "property_id",
         "provider",
         "provider_reference",
         "purpose",
@@ -81,7 +88,7 @@ class ServiceFeePayment(AggregateRoot):
         payment_id: uuid.UUID,
         tenant_id: uuid.UUID,
         landlord_id: uuid.UUID,
-        application_id: uuid.UUID,
+        property_id: uuid.UUID,
         amount: Money,
         purpose: PaymentPurpose,
         now: datetime,
@@ -92,7 +99,7 @@ class ServiceFeePayment(AggregateRoot):
         self.payment_id = payment_id
         self.tenant_id = tenant_id
         self.landlord_id = landlord_id
-        self.application_id = application_id
+        self.property_id = property_id
         self.amount = amount.require_positive(reason="payment amount must be positive")
         self.purpose = purpose
         self.method = PaymentMethod.MOBILE_MONEY
@@ -193,7 +200,7 @@ class ServiceFeePayment(AggregateRoot):
                 "payment_id": str(self.id),
                 "tenant_id": str(self.tenant_id),
                 "landlord_id": str(self.landlord_id),
-                "application_id": str(self.application_id),
+                "property_id": str(self.property_id),
                 "amount": self.amount.amount,
                 "currency": self.amount.currency,
             },
@@ -261,15 +268,20 @@ class GrantStatus(StrEnum):
 
 
 class ServiceAccessGrant(AggregateRoot):
-    """Proof that a tenant paid and may see the landlord's contact details."""
+    """Proof that this tenant paid to unlock this listing.
+
+    Carries both halves of the pair, because both are needed to answer the only
+    question the grant exists to answer: may *this* person see the number and
+    the location of *this* lodging?
+    """
 
     __slots__ = (
-        "application_id",
         "expires_at",
         "grant_id",
         "granted_at",
         "landlord_id",
         "payment_id",
+        "property_id",
         "reveal_count",
         "revocation_reason",
         "revoked_at",
@@ -283,7 +295,7 @@ class ServiceAccessGrant(AggregateRoot):
         grant_id: uuid.UUID,
         tenant_id: uuid.UUID,
         landlord_id: uuid.UUID,
-        application_id: uuid.UUID,
+        property_id: uuid.UUID,
         payment_id: uuid.UUID,
         now: datetime,
     ) -> None:
@@ -292,7 +304,7 @@ class ServiceAccessGrant(AggregateRoot):
         self.grant_id = grant_id
         self.tenant_id = tenant_id
         self.landlord_id = landlord_id
-        self.application_id = application_id
+        self.property_id = property_id
         self.payment_id = payment_id
         self.status = GrantStatus.ACTIVE
         self.granted_at = ensure_utc(now)
@@ -311,7 +323,7 @@ class ServiceAccessGrant(AggregateRoot):
             grant_id=grant_id,
             tenant_id=payment.tenant_id,
             landlord_id=payment.landlord_id,
-            application_id=payment.application_id,
+            property_id=payment.property_id,
             payment_id=payment.id,
             now=now,
         )
@@ -339,7 +351,7 @@ class ServiceAccessGrant(AggregateRoot):
                 "grant_id": str(self.id),
                 "tenant_id": str(self.tenant_id),
                 "landlord_id": str(self.landlord_id),
-                "application_id": str(self.application_id),
+                "property_id": str(self.property_id),
                 "reveal_count": self.reveal_count,
             },
         )

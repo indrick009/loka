@@ -31,11 +31,17 @@ class RawCallbackRecord:
 
 
 class PaymentRepository(Protocol):
+    """Lookups are keyed on the pair being unlocked: a tenant and a listing."""
+
     async def get(self, payment_id: Any) -> ServiceFeePayment | None: ...
 
-    async def get_open_for_application(self, application_id: Any) -> ServiceFeePayment | None: ...
+    async def get_open_for_listing(
+        self, tenant_id: Any, property_id: Any
+    ) -> ServiceFeePayment | None: ...
 
-    async def get_for_application(self, application_id: Any) -> ServiceFeePayment | None: ...
+    async def get_latest_for_listing(
+        self, tenant_id: Any, property_id: Any
+    ) -> ServiceFeePayment | None: ...
 
     async def get_by_provider_reference(
         self, provider: str, provider_reference: str
@@ -47,8 +53,8 @@ class PaymentRepository(Protocol):
 
 
 class AccessGrantRepository(Protocol):
-    async def get_active_for_application(
-        self, application_id: Any
+    async def get_active_for_listing(
+        self, tenant_id: Any, property_id: Any
     ) -> ServiceAccessGrant | None: ...
 
     async def add(self, grant: ServiceAccessGrant) -> None: ...

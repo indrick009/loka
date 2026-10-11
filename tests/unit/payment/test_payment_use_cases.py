@@ -34,11 +34,11 @@ from loka.bounded_contexts.payment.domain.exceptions import (
 from loka.bounded_contexts.payment.domain.repositories import RawCallbackRecord
 from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
-from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
+from loka.shared.domain.errors import ResourceNotFound
 from loka.shared.domain.identifiers import new_id
 
 NOW = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
-APP_ID = uuid.uuid4()
+LISTING_ID = uuid.uuid4()
 TENANT_ID = uuid.uuid4()
 LANDLORD_ID = uuid.uuid4()
 
@@ -52,20 +52,29 @@ class FakePaymentRepository:
     async def get(self, payment_id: uuid.UUID) -> ServiceFeePayment | None:
         return self.store.get(payment_id)
 
-    async def get_open_for_application(self, application_id: uuid.UUID) -> ServiceFeePayment | None:
+    async def get_open_for_listing(
+        self, tenant_id: uuid.UUID, property_id: uuid.UUID
+    ) -> ServiceFeePayment | None:
         for payment in self.store.values():
-            if payment.application_id == application_id and payment.status in (
-                PaymentStatus.CREATED,
-                PaymentStatus.INITIATED,
-                PaymentStatus.PENDING_CONFIRMATION,
-                PaymentStatus.FAILED,
+            if (
+                payment.tenant_id == tenant_id
+                and payment.property_id == property_id
+                and payment.status
+                in (
+                    PaymentStatus.CREATED,
+                    PaymentStatus.INITIATED,
+                    PaymentStatus.PENDING_CONFIRMATION,
+                    PaymentStatus.FAILED,
+                )
             ):
                 return payment
         return None
 
-    async def get_for_application(self, application_id: uuid.UUID) -> ServiceFeePayment | None:
+    async def get_latest_for_listing(
+        self, tenant_id: uuid.UUID, property_id: uuid.UUID
+    ) -> ServiceFeePayment | None:
         for payment in self.store.values():
-            if payment.application_id == application_id:
+            if payment.tenant_id == tenant_id and payment.property_id == property_id:
                 return payment
         return None
 
@@ -94,11 +103,15 @@ class FakeGrantRepository:
         self.store: dict[uuid.UUID, ServiceAccessGrant] = {}
         self.added: list[ServiceAccessGrant] = []
 
-    async def get_active_for_application(
-        self, application_id: uuid.UUID
+    async def get_active_for_listing(
+        self, tenant_id: uuid.UUID, property_id: uuid.UUID
     ) -> ServiceAccessGrant | None:
         for grant in self.store.values():
-            if grant.application_id == application_id and grant.is_active:
+            if (
+                grant.tenant_id == tenant_id
+                and grant.property_id == property_id
+                and grant.is_active
+            ):
                 return grant
         return None
 
@@ -217,7 +230,7 @@ def _payment(**overrides: object) -> ServiceFeePayment:
         "payment_id": new_id(),
         "tenant_id": TENANT_ID,
         "landlord_id": LANDLORD_ID,
-        "application_id": APP_ID,
+        "property_id": LISTING_ID,
         "amount": Money(1000),
         "purpose": PaymentPurpose.SERVICE_ACCESS,
         "now": NOW,
@@ -250,7 +263,7 @@ class TestInitiateServiceFee:
 
         view = await use_case.execute(
             InitiateServiceFeeCommand(
-                application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
             ),
             now=NOW,
         )
@@ -271,14 +284,14 @@ class TestInitiateServiceFee:
         use_case = InitiateServiceFeeUseCase(uow, gateway=gateway, service_fee_xaf=1000)
         first = await use_case.execute(
             InitiateServiceFeeCommand(
-                application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
             ),
             now=NOW,
         )
 
         second = await use_case.execute(
             InitiateServiceFeeCommand(
-                application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
             ),
             now=NOW,
         )
@@ -297,7 +310,7 @@ class TestInitiateServiceFee:
 
         view = await use_case.execute(
             InitiateServiceFeeCommand(
-                application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
             ),
             now=NOW,
         )
@@ -308,7 +321,7 @@ class TestInitiateServiceFee:
         assert payments.saved == [pay]
 
     @pytest.mark.asyncio
-    async def test_a_settled_application_refuses_a_new_payment(self) -> None:
+    async def test_a_listing_already_unlocked_refuses_a_new_payment(self) -> None:
         grants = FakeGrantRepository()
         grants.seed(ServiceAccessGrant.from_payment(_settled_payment(), now=NOW, grant_id=new_id()))
         uow = FakeUnitOfWork(FakePaymentRepository(), grants, FakeCallbackRepository())
@@ -317,7 +330,7 @@ class TestInitiateServiceFee:
         with pytest.raises(PaymentAlreadySettled):
             await use_case.execute(
                 InitiateServiceFeeCommand(
-                    application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                    property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
                 ),
                 now=NOW,
             )
@@ -331,11 +344,86 @@ class TestInitiateServiceFee:
         with pytest.raises(PaymentGatewayError):
             await use_case.execute(
                 InitiateServiceFeeCommand(
-                    application_id=APP_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                    property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
                 ),
                 now=NOW,
             )
         assert uow.commits == 0
+
+
+class TestWhoPaysAgain:
+    """The three situations the pricing rule has to tell apart.
+
+    The pair is (tenant, listing), so: same listing again is free, a second
+    listing from the same landlord is a second unlock, and another tenant
+    wanting the same listing pays his own.
+    """
+
+    @pytest.mark.asyncio
+    async def test_the_same_tenant_returning_to_the_same_listing_pays_nothing(self) -> None:
+        grants = FakeGrantRepository()
+        grants.seed(ServiceAccessGrant.from_payment(_settled_payment(), now=NOW, grant_id=new_id()))
+        uow = FakeUnitOfWork(FakePaymentRepository(), grants, FakeCallbackRepository())
+        use_case = InitiateServiceFeeUseCase(uow, gateway=FakeGateway(), service_fee_xaf=1000)
+
+        with pytest.raises(PaymentAlreadySettled):
+            await use_case.execute(
+                InitiateServiceFeeCommand(
+                    property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+                ),
+                now=NOW,
+            )
+
+    @pytest.mark.asyncio
+    async def test_a_second_listing_from_the_same_landlord_is_a_second_unlock(self) -> None:
+        grants = FakeGrantRepository()
+        grants.seed(ServiceAccessGrant.from_payment(_settled_payment(), now=NOW, grant_id=new_id()))
+        uow = FakeUnitOfWork(FakePaymentRepository(), grants, FakeCallbackRepository())
+        use_case = InitiateServiceFeeUseCase(uow, gateway=FakeGateway(), service_fee_xaf=1000)
+
+        other_listing = uuid.uuid4()
+        view = await use_case.execute(
+            InitiateServiceFeeCommand(
+                property_id=other_listing, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+            ),
+            now=NOW,
+        )
+
+        assert view.amount_xaf == 1000
+        assert view.status == PaymentStatus.PENDING_CONFIRMATION.value
+
+    @pytest.mark.asyncio
+    async def test_another_tenant_wanting_the_same_listing_pays_his_own(self) -> None:
+        grants = FakeGrantRepository()
+        grants.seed(ServiceAccessGrant.from_payment(_settled_payment(), now=NOW, grant_id=new_id()))
+        uow = FakeUnitOfWork(FakePaymentRepository(), grants, FakeCallbackRepository())
+        use_case = InitiateServiceFeeUseCase(uow, gateway=FakeGateway(), service_fee_xaf=1000)
+
+        view = await use_case.execute(
+            InitiateServiceFeeCommand(
+                property_id=LISTING_ID, tenant_id=uuid.uuid4(), landlord_id=LANDLORD_ID
+            ),
+            now=NOW,
+        )
+
+        assert view.amount_xaf == 1000
+        assert view.status == PaymentStatus.PENDING_CONFIRMATION.value
+
+    @pytest.mark.asyncio
+    async def test_an_unsupplied_idempotency_key_is_the_pair_being_unlocked(self) -> None:
+        """Keyed on the thing unlocked, so a retried attempt cannot charge twice."""
+        payments = FakePaymentRepository()
+        uow = FakeUnitOfWork(payments, FakeGrantRepository(), FakeCallbackRepository())
+        use_case = InitiateServiceFeeUseCase(uow, gateway=FakeGateway(), service_fee_xaf=1000)
+
+        await use_case.execute(
+            InitiateServiceFeeCommand(
+                property_id=LISTING_ID, tenant_id=TENANT_ID, landlord_id=LANDLORD_ID
+            ),
+            now=NOW,
+        )
+
+        assert payments.added[0].idempotency_key == f"unlock:{TENANT_ID}:{LISTING_ID}"
 
 
 class TestHandlePaymentCallback:
@@ -466,7 +554,7 @@ class TestGetServiceAccessStatus:
         uow.grants.seed(ServiceAccessGrant.from_payment(pay, now=NOW, grant_id=new_id()))
 
         result = await use_case.execute(
-            ServiceAccessQuery(application_id=APP_ID, tenant_id=TENANT_ID), now=NOW
+            ServiceAccessQuery(property_id=LISTING_ID, tenant_id=TENANT_ID), now=NOW
         )
 
         assert result.payment is not None and result.payment.settled is True
@@ -480,19 +568,23 @@ class TestGetServiceAccessStatus:
         use_case = GetServiceAccessStatusUseCase(uow)
         with pytest.raises(ResourceNotFound):
             await use_case.execute(
-                ServiceAccessQuery(application_id=uuid.uuid4(), tenant_id=TENANT_ID), now=NOW
+                ServiceAccessQuery(property_id=uuid.uuid4(), tenant_id=TENANT_ID), now=NOW
             )
 
     @pytest.mark.asyncio
-    async def test_a_tenant_cannot_read_someone_elses_payment(self) -> None:
+    async def test_another_tenant_is_told_nothing_exists_rather_than_refused(self) -> None:
+        """Refusing would itself disclose that somebody else paid for this listing."""
         uow = FakeUnitOfWork(
             FakePaymentRepository(), FakeGrantRepository(), FakeCallbackRepository()
         )
         use_case = GetServiceAccessStatusUseCase(uow)
-        await uow.payments.add(_settled_payment())
-        with pytest.raises(AuthorizationDenied):
+        pay = _settled_payment()
+        await uow.payments.add(pay)
+        uow.grants.seed(ServiceAccessGrant.from_payment(pay, now=NOW, grant_id=new_id()))
+
+        with pytest.raises(ResourceNotFound):
             await use_case.execute(
-                ServiceAccessQuery(application_id=APP_ID, tenant_id=uuid.uuid4()), now=NOW
+                ServiceAccessQuery(property_id=LISTING_ID, tenant_id=uuid.uuid4()), now=NOW
             )
 
 

@@ -1,8 +1,12 @@
-"""Payment and access status for one application.
+"""Payment and access status for one tenant on one listing.
 
 Read-only: it never creates, mutates or commits anything. Accepted answers are
 the current payment state and the active grant, so a client can decide between
 "pay", "waiting confirmation" and "unlocked" without guessing.
+
+Both lookups are scoped to the asking tenant, which is also the authorisation:
+another tenant asking about the same listing is told nothing exists rather
+than being refused, so the answer never reveals that somebody else paid.
 """
 
 from __future__ import annotations
@@ -20,12 +24,12 @@ from loka.bounded_contexts.payment.domain.repositories import (
     PaymentRepository,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
-from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
+from loka.shared.domain.errors import ResourceNotFound
 
 
 @dataclass(frozen=True, slots=True)
 class ServiceAccessQuery:
-    application_id: Any
+    property_id: Any
     tenant_id: Any
 
 
@@ -51,25 +55,15 @@ class GetServiceAccessStatusUseCase:
         payments: PaymentRepository = self._uow.repository("payment")
         grants: AccessGrantRepository = self._uow.repository("payment_grant")
 
-        payment = await payments.get_for_application(query.application_id)
-        grant = await grants.get_active_for_application(query.application_id)
+        payment = await payments.get_latest_for_listing(query.tenant_id, query.property_id)
+        grant = await grants.get_active_for_listing(query.tenant_id, query.property_id)
         if payment is None and grant is None:
             raise ResourceNotFound(
-                "no payment exists for this application",
-                context={"application_id": str(query.application_id)},
-            )
-
-        # The caller is the tenant who owns the attempt: someone else must not
-        # learn whether a payment (or a grant) exists for another person.
-        if payment is not None and payment.tenant_id != query.tenant_id:
-            raise AuthorizationDenied(
-                "only the tenant who owns this payment may read its status",
-                context={"application_id": str(query.application_id)},
-            )
-        if grant is not None and grant.tenant_id != query.tenant_id:
-            raise AuthorizationDenied(
-                "only the tenant who owns this grant may read its status",
-                context={"application_id": str(query.application_id)},
+                "this tenant has no payment for this listing",
+                context={
+                    "tenant_id": str(query.tenant_id),
+                    "property_id": str(query.property_id),
+                },
             )
 
         return ServiceAccessStatus(
