@@ -23,6 +23,10 @@ from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     ServiceAccessGrantRow,
     ServiceFeePaymentRow,
 )
+from loka.bounded_contexts.property.infrastructure.persistence.models import (
+    AvailabilityCheckRow,
+    PropertyRow,
+)
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token
 from loka.shared.application.ports import SignatureVerifier
@@ -45,6 +49,51 @@ async def client(integration_settings: Settings) -> AsyncIterator[httpx.AsyncCli
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://api") as http:
             yield http
+
+
+async def _available_listing(
+    database: Database, *, property_id: uuid.UUID, landlord_id: uuid.UUID
+) -> None:
+    """A published listing whose landlord confirmed it is still free.
+
+    Required by every unlock now, and that is the point: nobody is charged
+    before the landlord says the lodging is still there (housing spec §9).
+    Seeded directly rather than through the catalogue's use cases, because what
+    these tests are about is the payment lifecycle — but seeded for real, so
+    the gate is exercised against actual catalogue state and not a stub.
+    """
+    now = datetime.now(UTC)
+    async with database.session() as session:
+        if await session.get(PropertyRow, property_id) is not None:
+            return
+        session.add(
+            PropertyRow(
+                id=property_id,
+                landlord_id=landlord_id,
+                status="AVAILABLE",
+                property_type="STUDIO",
+                city="Douala",
+                neighbourhood="Bonapriso",
+                rent_xaf=60_000,
+                charging_policy="INCLUDED",
+                quantity=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            AvailabilityCheckRow(
+                id=uuid.uuid4(),
+                property_id=property_id,
+                landlord_id=landlord_id,
+                tenant_id=None,
+                status="ANSWERED",
+                asked_at=now,
+                answered_at=now,
+                answer="STILL_AVAILABLE",
+            )
+        )
+        await session.commit()
 
 
 async def _token_for(database: Database, user_id: uuid.UUID) -> str:
@@ -95,6 +144,7 @@ async def _lifecycle(
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
     property_id = property_id or uuid.uuid4()
+    await _available_listing(database, property_id=property_id, landlord_id=landlord_id)
 
     initiated = await client.post(
         f"/payments/listings/{property_id}/initiate",
@@ -151,6 +201,9 @@ async def test_a_replayed_webhook_is_acknowledged_without_a_second_grant(
     property_id = uuid.uuid4()
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
+    await _available_listing(
+        database, property_id=property_id, landlord_id=landlord_id
+    )
 
     initiated = await client.post(
         f"/payments/listings/{property_id}/initiate",
@@ -181,6 +234,80 @@ async def test_a_replayed_webhook_is_acknowledged_without_a_second_grant(
     assert len(grants) == 1
 
 
+async def test_nobody_is_charged_before_the_landlord_confirms(
+    client: httpx.AsyncClient,
+    database: Database,
+) -> None:
+    """The rule the whole availability check exists for (housing spec §9).
+
+    The failure it prevents is concrete: a tenant pays 1 000 FCFA, gets a
+    number, calls, and learns the room went last week. Kora keeps the money and
+    has sold nothing.
+    """
+    property_id = uuid.uuid4()
+    user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
+    token = await _token_for(database, user_id)
+    # A listing, but no answer from its landlord.
+    now = datetime.now(UTC)
+    async with database.session() as session:
+        session.add(
+            PropertyRow(
+                id=property_id,
+                landlord_id=landlord_id,
+                status="AVAILABLE",
+                property_type="STUDIO",
+                city="Douala",
+                rent_xaf=60_000,
+                charging_policy="INCLUDED",
+                quantity=1,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        await session.commit()
+
+    response = await client.post(
+        f"/payments/listings/{property_id}/initiate",
+        json={"landlord_id": str(landlord_id)},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "availability_not_confirmed"
+
+    # And no payment row to complete later on the tenant's phone.
+    async with database.session() as session:
+        payments = (await session.execute(select(ServiceFeePaymentRow))).scalars().all()
+    assert payments == []
+
+
+async def test_a_listing_whose_last_lodging_went_cannot_be_unlocked(
+    client: httpx.AsyncClient,
+    database: Database,
+) -> None:
+    """Confirmed once, then emptied: the listing has the final say, not the
+    answer it gave three days ago."""
+    property_id = uuid.uuid4()
+    user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
+    token = await _token_for(database, user_id)
+    await _available_listing(database, property_id=property_id, landlord_id=landlord_id)
+    async with database.session() as session:
+        listing = await session.get(PropertyRow, property_id)
+        assert listing is not None
+        listing.status = "RENTED"
+        listing.quantity = 0
+        await session.commit()
+
+    response = await client.post(
+        f"/payments/listings/{property_id}/initiate",
+        json={"landlord_id": str(landlord_id)},
+        headers=_auth(token),
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "availability_not_confirmed"
+
+
 async def test_a_forged_signature_is_rejected(
     client: httpx.AsyncClient,
     database: Database,
@@ -207,6 +334,9 @@ async def test_a_listing_already_unlocked_refuses_a_second_payment(
     property_id = uuid.uuid4()
     user_id, landlord_id = uuid.uuid4(), uuid.uuid4()
     token = await _token_for(database, user_id)
+    await _available_listing(
+        database, property_id=property_id, landlord_id=landlord_id
+    )
     await client.post(
         f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
@@ -253,6 +383,7 @@ async def test_the_webhook_is_unauthenticated_by_design(
 
 async def _unlock(
     client: httpx.AsyncClient,
+    database: Database,
     secret: str,
     token: str,
     property_id: uuid.UUID,
@@ -260,7 +391,12 @@ async def _unlock(
     *,
     event_id: str,
 ) -> None:
-    """Take one unlock all the way to a settled grant."""
+    """Take one unlock all the way to a settled grant.
+
+    Seeds the listing and its confirmed availability first: no unlock is
+    allowed without one, which is the rule and not an inconvenience.
+    """
+    await _available_listing(database, property_id=property_id, landlord_id=landlord_id)
     initiated = await client.post(
         f"/payments/listings/{property_id}/initiate",
         json={"landlord_id": str(landlord_id)},
@@ -295,8 +431,8 @@ async def test_a_second_listing_from_the_same_landlord_is_a_second_unlock(
     token = await _token_for(database, uuid.uuid4())
     first, second = uuid.uuid4(), uuid.uuid4()
 
-    await _unlock(client, secret, token, first, landlord_id, event_id="evt-first")
-    await _unlock(client, secret, token, second, landlord_id, event_id="evt-second")
+    await _unlock(client, database, secret, token, first, landlord_id, event_id="evt-first")
+    await _unlock(client, database, secret, token, second, landlord_id, event_id="evt-second")
 
     async with database.session() as session:
         grants = (await session.execute(select(ServiceAccessGrantRow))).scalars().all()
@@ -314,8 +450,12 @@ async def test_another_tenant_pays_his_own_unlock_for_the_same_listing(
     first_tenant = await _token_for(database, uuid.uuid4())
     second_tenant = await _token_for(database, uuid.uuid4())
 
-    await _unlock(client, secret, first_tenant, property_id, landlord_id, event_id="evt-a")
-    await _unlock(client, secret, second_tenant, property_id, landlord_id, event_id="evt-b")
+    await _unlock(
+        client, database, secret, first_tenant, property_id, landlord_id, event_id="evt-a"
+    )
+    await _unlock(
+        client, database, secret, second_tenant, property_id, landlord_id, event_id="evt-b"
+    )
 
     async with database.session() as session:
         grants = (await session.execute(select(ServiceAccessGrantRow))).scalars().all()
@@ -335,7 +475,9 @@ async def test_a_tenant_asking_about_a_listing_he_has_not_paid_for_learns_nothin
     payer = await _token_for(database, uuid.uuid4())
     stranger = await _token_for(database, uuid.uuid4())
 
-    await _unlock(client, secret, payer, property_id, landlord_id, event_id="evt-paid")
+    await _unlock(
+        client, database, secret, payer, property_id, landlord_id, event_id="evt-paid"
+    )
 
     response = await client.get(
         f"/payments/listings/{property_id}", headers=_auth(stranger)

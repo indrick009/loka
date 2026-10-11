@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import uuid
-from typing import Protocol
+from typing import Any, Protocol
 
+from loka.bounded_contexts.property.domain.entities.availability_check import (
+    AvailabilityCheck,
+)
 from loka.bounded_contexts.property.domain.entities.property import Property
 
 
@@ -34,3 +37,29 @@ class MarketReference(Protocol):
     async def median_rent(
         self, *, city: str, neighbourhood: str | None, property_type: str | None
     ) -> int | None: ...
+
+class AvailabilityCheckRepository(Protocol):
+    """The open question about a listing, and the landlord's answers.
+
+    ``get_open_for_listing`` is what makes asking idempotent: a second tenant
+    interested in the same lodging joins the question already pending instead of
+    sending the landlord the same message twice.
+
+    ``get_open_for_landlord`` is how an answer finds its question. A landlord
+    replies "c'est déjà loué" in a WhatsApp thread that names no listing, so the
+    only thing to go on is which of his listings he was last asked about.
+    """
+
+    async def get(self, check_id: Any) -> AvailabilityCheck | None: ...
+
+    async def get_open_for_listing(self, property_id: Any) -> AvailabilityCheck | None: ...
+
+    async def get_open_for_landlord(self, landlord_id: Any) -> AvailabilityCheck | None: ...
+
+    async def latest_answered_for_listing(
+        self, property_id: Any
+    ) -> AvailabilityCheck | None: ...
+
+    async def add(self, check: AvailabilityCheck) -> None: ...
+
+    async def save(self, check: AvailabilityCheck) -> None: ...

@@ -18,6 +18,9 @@ from loka.bounded_contexts.ai.application.ports import BudgetPolicy
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
+from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability import (
+    ConversationAvailabilityAnswers,
+)
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
 )
@@ -103,4 +106,8 @@ def analyse_conversation_message_use_case(
         # The one read it triggers: a tenant's completed criteria become a
         # catalogue search whose results the reply prints.
         search=ConversationPropertySearch(uow),
+        # The landlord's half of the availability check. Without it his
+        # "c'est déjà loué" is understood and then dropped, and the lodging
+        # stays in every tenant's results.
+        availability=ConversationAvailabilityAnswers(uow),
     )

@@ -38,7 +38,14 @@ class PropertySearchRepository:
         self._session = session
 
     def _filters(self, criteria: PropertySearchCriteria) -> list[Any]:
-        clauses: list[Any] = [PropertySearchDocumentRow.status == AVAILABLE]
+        clauses: list[Any] = [
+            PropertySearchDocumentRow.status == AVAILABLE,
+            # A listing whose last lodging is gone has nothing to offer. The
+            # status filter normally covers it — the landlord's answer flips the
+            # listing to RENTED — but the read model stays correct on its own
+            # rather than depending on two writes landing in order.
+            PropertySearchDocumentRow.lodgings > 0,
+        ]
         if criteria.city:
             clauses.append(PropertySearchDocumentRow.city == criteria.city)
         if criteria.neighbourhoods:
@@ -192,6 +199,9 @@ class PropertySearchRepository:
         return {
             "property_id": str(row.property_id),
             "landlord_id": str(row.landlord_id),
+            # How many identical lodgings this one listing stands for (§5).
+            # Exposed so a result can say "2 studios" instead of implying one.
+            "lodgings": row.lodgings,
             "type": row.property_type,
             "city": row.city,
             "neighbourhood": row.neighbourhood,

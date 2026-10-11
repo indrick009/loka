@@ -85,6 +85,11 @@ from loka.bounded_contexts.payment.infrastructure.gateways.fapshi_gateway import
 from loka.bounded_contexts.payment.infrastructure.gateways.mock_gateway import (
     MockPaymentGateway,
 )
+from loka.bounded_contexts.property.application.use_cases.check_availability import (
+    AnswerAvailabilityCheckUseCase,
+    ListingAvailabilityReader,
+    RequestAvailabilityCheckUseCase,
+)
 from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (
     CreatePropertyFromConversationUseCase,
 )
@@ -183,8 +188,23 @@ def initiate_service_fee_use_case(
     return InitiateServiceFeeUseCase(
         uow,
         gateway=payment_gateway(settings),
+        # The catalogue's answer to Payment's own question, and the only thing
+        # Payment learns about a listing.
+        availability=ListingAvailabilityReader(uow),
         service_fee_xaf=settings.payment.service_fee_xaf,
     )
+
+
+def request_availability_check_use_case(
+    uow: SqlAlchemyUnitOfWork,
+) -> RequestAvailabilityCheckUseCase:
+    return RequestAvailabilityCheckUseCase(uow)
+
+
+def answer_availability_check_use_case(
+    uow: SqlAlchemyUnitOfWork,
+) -> AnswerAvailabilityCheckUseCase:
+    return AnswerAvailabilityCheckUseCase(uow)
 
 
 def handle_payment_callback_use_case(

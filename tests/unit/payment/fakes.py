@@ -240,3 +240,15 @@ def a_payment(**overrides: object) -> ServiceFeePayment:
     }
     kwargs.update(overrides)
     return ServiceFeePayment(**kwargs)  # type: ignore[arg-type]
+
+
+class FakeAvailability:
+    """Payment's whole view of a listing: one boolean, asked of the catalogue."""
+
+    def __init__(self, *, confirmed: bool = True) -> None:
+        self._confirmed = confirmed
+        self.asked: list[uuid.UUID] = []
+
+    async def is_confirmed_available(self, property_id: uuid.UUID) -> bool:
+        self.asked.append(property_id)
+        return self._confirmed

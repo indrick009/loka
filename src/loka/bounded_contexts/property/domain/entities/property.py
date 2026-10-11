@@ -608,14 +608,41 @@ class Property(AggregateRoot):
         now: datetime,
         window: AvailabilityWindow | None = None,
     ) -> None:
-        """Apply the landlord's answer to a periodic availability check."""
-        self.last_availability_confirmed_at = ensure_utc(now)
+        """Apply the landlord's answer to "le logement est encore disponible ?".
+
+        The landlord decides availability, always. Kora never infers it — not
+        from a match, not from a payment, not from elapsed time — and a listing
+        stays available by default until he writes otherwise (§9).
+        """
+        if answer is AvailabilityAnswer.ONE_TAKEN:
+            # "Un studio a été pris": one fewer, and the listing stays in search
+            # while any remain. The last one leaving is the same thing as the
+            # whole listing being gone, so it ends up rented either way.
+            self.declare_one_taken(now=now)
+            self.last_availability_confirmed_at = ensure_utc(now)
+            if self.is_exhausted:
+                self.mark_as_rented(now=now)
+                return
+            self.record(
+                "PropertyAvailabilityConfirmed",
+                occurred_at=now,
+                payload={
+                    "property_id": str(self.id),
+                    "answer": answer.value,
+                    "lodgings": self.lodgings,
+                },
+            )
+            return
+
+        # Stamped only once the answer is known to be applicable: a refused
+        # answer used to leave the listing looking freshly confirmed.
         if answer is AvailabilityAnswer.STILL_AVAILABLE:
             if self.status is not PropertyStatus.AVAILABLE:
                 self._reject(
                     "cannot confirm availability for a non-available listing",
                     status=self.status.value,
                 )
+            self.last_availability_confirmed_at = ensure_utc(now)
             self._touch(now)
             self.record(
                 "PropertyAvailabilityConfirmed",
@@ -624,9 +651,13 @@ class Property(AggregateRoot):
             )
             return
         if answer is AvailabilityAnswer.RENTED:
+            # "Tout a été pris."
+            self.last_availability_confirmed_at = ensure_utc(now)
+            self.quantity = 0
             self.mark_as_rented(now=now)
             return
         if answer is AvailabilityAnswer.TEMPORARILY_UNAVAILABLE:
+            self.last_availability_confirmed_at = ensure_utc(now)
             self.mark_unavailable(now=now, reason="landlord_reported_temporarily_unavailable")
             if window is not None:
                 self.availability = window

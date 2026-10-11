@@ -273,3 +273,55 @@ def search_unavailable_text(language: str) -> str:
 def no_results_text(language: str) -> str:
     """Nothing matched, with the one move that can change that."""
     return _copy(_NO_RESULTS_TEXT, language)
+
+
+# What the landlord reads once his answer has moved the listing. Three cases,
+# because they are three different situations for him: the lodging is still on
+# offer, some remain, or it has left the catalogue and no tenant will be sent.
+_AVAILABILITY_ANSWER_TEXT: dict[str, dict[str, str]] = {
+    "fr": {
+        "delisted": (
+            "C'est noté, le logement ne sera plus proposé aux locataires.\n"
+            "Dites-moi quand il redevient libre et je le remets en ligne."
+        ),
+        "some_left": (
+            "C'est noté. Il reste {lodgings} logement(s) dans cette annonce, "
+            "elle reste proposée aux locataires."
+        ),
+        "available": (
+            "Merci, c'est confirmé. Je transmets au locataire pour qu'il "
+            "puisse vous contacter."
+        ),
+    },
+    "en": {
+        "delisted": (
+            "Noted, the property will no longer be shown to tenants.\n"
+            "Tell me when it is free again and I will put it back online."
+        ),
+        "some_left": (
+            "Noted. {lodgings} lodging(s) remain in this listing, so it stays "
+            "available to tenants."
+        ),
+        "available": (
+            "Thank you, that is confirmed. I am letting the tenant know so "
+            "they can contact you."
+        ),
+    },
+}
+
+
+def availability_answer_text(
+    language: str, *, lodgings_left: int, delisted: bool
+) -> str:
+    """Acknowledge the landlord's answer, saying what it changed.
+
+    Never a bare "c'est noté": a landlord who has just let one of two studios
+    go needs to know the other is still on offer, and one who has let the last
+    one go needs to know no tenant will be sent any more.
+    """
+    table = _AVAILABILITY_ANSWER_TEXT.get(language, _AVAILABILITY_ANSWER_TEXT[_LANG_FR])
+    if delisted:
+        return table["delisted"]
+    if lodgings_left > 1:
+        return table["some_left"].format(lodgings=lodgings_left)
+    return table["available"]

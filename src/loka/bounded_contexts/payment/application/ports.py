@@ -8,6 +8,7 @@ ever sees the resulting, already-verified data.
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
@@ -99,3 +100,21 @@ class PaymentStatusSource(Protocol):
     """
 
     async def fetch_status(self, *, provider_reference: str) -> VerifiedCallback: ...
+
+
+@runtime_checkable
+class ListingAvailability(Protocol):
+    """Whether a landlord has confirmed that his lodging is still free.
+
+    Declared here, by the consumer, because the rule belongs to this context:
+    a tenant pays only if the landlord confirmed (housing spec §9). What
+    "confirmed" means belongs to the catalogue, and the implementation lives
+    there — this port is the whole of what Payment is allowed to know about a
+    listing, which is one boolean.
+
+    Optional on purpose. A deployment with no availability check configured
+    charges without one rather than refusing every unlock, and the use case
+    says so in its log: a missing gate must be visible, not silently fatal.
+    """
+
+    async def is_confirmed_available(self, property_id: uuid.UUID) -> bool: ...

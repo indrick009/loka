@@ -88,6 +88,13 @@ QUESTION_TEXT: dict[str, str] = {
     "confirm.published": (
         "Votre bien est publié. Il apparaîtra dans les recherches des locataires."
     ),
+    # Verbatim from the spec (§9). It says a tenant wants to visit and asks
+    # nothing else: the wording *is* the business rule, and a landlord who
+    # reads a longer question answers a different one.
+    "ask.availability_check": (
+        "Le logement est encore disponible ? Un locataire aimerait visiter.\n"
+        "Répondez : oui, ou « un a été pris », ou « tout a été pris »."
+    ),
     # The tenant's side: what to look for, and what to do with what is found.
     "ask.search_type": (
         "Quel type de logement cherchez-vous ?\n"
@@ -174,6 +181,10 @@ _QUESTION_TEXT_EN: dict[str, str] = {
     ),
     "confirm.published": (
         "Your property is published. It will appear in tenants' searches."
+    ),
+    "ask.availability_check": (
+        "Is the property still available? A tenant would like to visit.\n"
+        "Answer: yes, or \"one has been taken\", or \"all have been taken\"."
     ),
     "ask.search_type": (
         "What type of property are you looking for?\n"

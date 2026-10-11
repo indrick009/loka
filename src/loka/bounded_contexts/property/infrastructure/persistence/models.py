@@ -9,7 +9,17 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Index, Integer, String, Text
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Date,
+    DateTime,
+    Index,
+    Integer,
+    String,
+    Text,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -129,6 +139,13 @@ class PropertySearchDocumentRow(Base):
     minimum_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     available_from: Mapped[date | None] = mapped_column(Date, nullable=True)
 
+    # How many are still on offer. Denormalised as a plain count, never null:
+    # a search page must be able to drop an exhausted listing and to say "2
+    # studios" without reaching into the write model.
+    lodgings: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
     amenities: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False, default=dict)
     media_object_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     is_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -178,6 +195,13 @@ class PropertyMediaRow(Base):
 
 
 class AvailabilityCheckRow(Base):
+    """One question put to one landlord, and his answer if it came.
+
+    ``attempts`` and ``next_ask_at`` are gone: they belonged to a periodic
+    re-verification design the business spec explicitly rejects — no polling,
+    no automatic expiry, one question at the moment it counts (§9).
+    """
+
     __tablename__ = "property_availability_checks"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -187,13 +211,27 @@ class AvailabilityCheckRow(Base):
         PGUUID(as_uuid=True), nullable=False, index=True
     )
     landlord_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    # Who is waiting for the answer. Nullable because a landlord can confirm
+    # availability unprompted, and that still counts.
+    tenant_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDING")
     asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     answer: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    next_ask_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    __table_args__ = (Index("ix_availability_due", "next_ask_at", "answered_at"),)
+    __table_args__ = (
+        # One open question per listing: asking twice because two tenants are
+        # interested is noise, and two open checks would let one answer settle
+        # the wrong one.
+        Index(
+            "uq_availability_open_per_listing",
+            "property_id",
+            unique=True,
+            postgresql_where=text("status = 'PENDING'"),
+        ),
+        Index("ix_availability_landlord_open", "landlord_id", "status"),
+    )
 
 
 class PropertyDataQualityIssueRow(Base):

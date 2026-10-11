@@ -66,6 +66,26 @@ What is still open: splitting one conversation into two listings when the
 landlord has different types or different prices (§5 rows two and three). The
 quantity question records a number; it does not yet split.
 
+### The availability check is implemented
+
+`check_availability.py` holds both halves. Requesting is idempotent per listing
+(a partial unique index on `(property_id) WHERE status = 'PENDING'`), so two
+tenants interested in the same lodging join one question. Answering is not
+idempotent on purpose: the first answer already moved the listing.
+
+All four answers of §9 exist, and `ONE_TAKEN` is the one the old three-value
+enum could not express — it decrements and keeps the listing published, where
+`RENTED` empties it and takes it out of search.
+
+**The payment gate is the point.** `InitiateServiceFeeUseCase` refuses with
+`AvailabilityNotConfirmed` unless the landlord confirmed, through a
+`ListingAvailability` port Payment declares for itself: one boolean, and
+Payment learns nothing else about the catalogue. A stale confirmation does not
+survive the listing — the listing has the final say.
+
+There is no timer anywhere, and that is deliberate: the spec keeps no
+availability state over time, so an unanswered question simply never confirms.
+
 | Change | State |
 | --- | --- |
 | "Several lodgings?" as step 3 | **Asked.** Records `quantity`; does not yet split one conversation into several listings. |

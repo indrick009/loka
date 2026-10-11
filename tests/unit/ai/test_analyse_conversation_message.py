@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from loka.bounded_contexts.ai.application.ports import (
+    AvailabilityAnswerResult,
     BudgetPolicy,
     ConversationPropertyHit,
     ConversationSearchQuery,
@@ -299,6 +300,7 @@ def build(
     ledger: FakeLedger | None = None,
     sessions: FakeSessionRepository | None = None,
     search: Any | None = None,
+    availability: Any | None = None,
 ) -> tuple[
     AnalyseConversationMessageUseCase,
     FakeTurnRepository,
@@ -329,6 +331,7 @@ def build(
         response_model=response_model,
         budget=budget,
         search=search,
+        availability=availability,
     )
     return use_case, turns, usage, session_repo
 
@@ -2026,3 +2029,128 @@ class TestConversationLanguage:
         )
 
         assert session.language == "en"
+
+
+class FakeAvailabilityAnswers:
+    """The catalogue's half of the availability check, as the pipeline sees it."""
+
+    def __init__(
+        self,
+        *,
+        result: Any | None = None,
+        asked: bool = True,
+    ) -> None:
+        self._result = result
+        self._asked = asked
+        self.calls: list[tuple[uuid.UUID, str]] = []
+
+    async def record_answer(
+        self, *, landlord_id: uuid.UUID, answer: str, now: datetime
+    ) -> Any | None:
+        self.calls.append((landlord_id, answer))
+        if not self._asked:
+            return None
+        return self._result
+
+
+class TestTheLandlordsAvailabilityAnswerIsActedOn:
+    """The intents were recognised and then thrown away.
+
+    ``AVAILABILITY_RENTED`` has been in the allowed-intent list from the start,
+    and nothing consumed it: a landlord could write "c'est déjà loué" and his
+    lodging stayed in every tenant's search results. Nothing else in the system
+    can take a listing out — Kora never infers availability — so if this turn
+    does nothing, the listing is never withdrawn at all.
+    """
+
+    async def test_an_answer_reaches_the_catalogue(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=False, lodgings_left=0, delisted=True
+            )
+        )
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="c'est déjà loué",
+            availability=answers,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert answers.calls == [(session.user_id, "AVAILABILITY_RENTED")]
+
+    async def test_the_landlord_is_told_the_listing_left_the_catalogue(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Never a bare "c'est noté": he needs to know no tenant will be sent."""
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=False, lodgings_left=0, delisted=True
+            )
+        )
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="tout a été pris", availability=answers
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert "ne sera plus proposé" in uow.events.staged[-1].text
+
+    async def test_a_landlord_with_lodgings_left_is_told_so(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=True, lodgings_left=2, delisted=False
+            )
+        )
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="un studio a été pris", availability=answers
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert "2" in uow.events.staged[-1].text
+
+    async def test_an_answer_to_no_question_leaves_the_reply_alone(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """He was never asked, so there is nothing to acknowledge and the turn
+        is answered the way any other would be."""
+        answers = FakeAvailabilityAnswers(asked=False)
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="c'est déjà loué", availability=answers
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert answers.calls
+        # No acknowledgement of its own: the turn is answered the way any other
+        # would be, which with no model configured is the fallback copy.
+        staged = uow.events.staged[-1]
+        assert staged.text is None
+        assert staged.reply_kind == "ACK"

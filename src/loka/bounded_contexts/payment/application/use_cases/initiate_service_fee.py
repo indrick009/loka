@@ -16,13 +16,17 @@ from datetime import datetime
 import structlog
 
 from loka.bounded_contexts.payment.application.dto.payment_dto import PaymentStatusView
-from loka.bounded_contexts.payment.application.ports import PaymentGateway
+from loka.bounded_contexts.payment.application.ports import (
+    ListingAvailability,
+    PaymentGateway,
+)
 from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
     PaymentPurpose,
     PaymentStatus,
     ServiceFeePayment,
 )
 from loka.bounded_contexts.payment.domain.exceptions import (
+    AvailabilityNotConfirmed,
     PaymentAlreadySettled,
     PaymentGatewayError,
 )
@@ -60,12 +64,14 @@ class InitiateServiceFeeUseCase:
         uow: UnitOfWork,
         *,
         gateway: PaymentGateway,
+        availability: ListingAvailability | None = None,
         service_fee_xaf: int = 1000,
         payment_message: str = "Kora - contact du bailleur",
         logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         self._uow = uow
         self._gateway = gateway
+        self._availability = availability
         self._service_fee_xaf = service_fee_xaf
         # What the payer reads on the provider's checkout page and on their
         # mobile-money confirmation. It is the only wording in this flow Kora
@@ -92,6 +98,8 @@ class InitiateServiceFeeUseCase:
                     "property_id": str(command.property_id),
                 },
             )
+
+        await self._require_confirmed_availability(command)
 
         payment = await payments.get_open_for_listing(command.tenant_id, command.property_id)
         if payment is None:
@@ -163,6 +171,32 @@ class InitiateServiceFeeUseCase:
             provider_reference=initiation.provider_reference,
         )
         return self._view(payment)
+
+    async def _require_confirmed_availability(
+        self, command: InitiateServiceFeeCommand
+    ) -> None:
+        """No charge before the landlord said the lodging is still free.
+
+        The state can have changed between publication and this request, and
+        the only person who knows is the landlord. Taking 1 000 FCFA for a
+        contact that leads nowhere is the one failure this whole check exists
+        to prevent (housing spec §9).
+        """
+        if self._availability is None:
+            self._logger.warning(
+                "service_fee_without_availability_gate",
+                property_id=str(command.property_id),
+            )
+            return
+        if await self._availability.is_confirmed_available(command.property_id):
+            return
+        raise AvailabilityNotConfirmed(
+            "the landlord has not confirmed that this lodging is still available",
+            context={
+                "tenant_id": str(command.tenant_id),
+                "property_id": str(command.property_id),
+            },
+        )
 
     @staticmethod
     def _view(payment: ServiceFeePayment) -> PaymentStatusView:

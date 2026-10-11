@@ -18,7 +18,7 @@ appels réels ; **observé** sur au moins une occurrence en conversation ;
 
 ## État au 11 octobre 2026
 
-**Corrigés et vérifiés** : D1, D2, D3, D4, D5, D7, D8, D9, D11, D13, D18 — 11 sur 20.
+**Corrigés et vérifiés** : D1, D2, D3, D4, D5, D7, D8, D9, D10, D11, D13, D18 — 12 sur 20.
 
 | Défaut | Correction | Preuve |
 | --- | --- | --- |
@@ -39,7 +39,20 @@ sur 384 fichiers, **38 tests d'intégration** sur la zone touchée.
 Quatre assertions d'intégration périmées ont aussi été corrigées : elles
 attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 
-**Reste ouvert** : D6, D10, D12, D14, D15, D16, D17, D19, D20.
+**Reste ouvert** : D6, D12, D14, D15, D16, D17, D19, D20.
+
+**D10 — la vérification de disponibilité.** Faite. Les intentions
+`AVAILABILITY_*` étaient reconnues depuis le début et **jetées** : un bailleur
+écrivait « c'est déjà loué » et son logement restait dans toutes les recherches.
+Rien d'autre dans le système ne peut retirer une annonce — Kora ne déduit jamais
+la disponibilité — donc le tour ne faisant rien, l'annonce n'était jamais
+retirée. Désormais : une question par annonce (index unique partiel), les
+**quatre** réponses de la spec (dont `ONE_TAKEN`, qui décrémente et garde
+l'annonce publiée là où `RENTED` la sort), et la projection de recherche porte
+`lodgings` — une annonce épuisée quitte les résultats du locataire. Et surtout,
+**la porte de paiement** : `AvailabilityNotConfirmed` refuse le prélèvement
+tant que le bailleur n'a pas confirmé, ce qui est la raison d'être de tout
+le mécanisme (§9).
 
 **Hors numérotation — le parcours bailleur réaligné sur la spec.** Le
 formulaire posait neuf questions ; la spec (§4) en pose dix, et ce n'étaient pas
@@ -85,7 +98,7 @@ annonce » des résultats de recherche.
 | D7 | Le modèle pose une question que le backend n'a pas décidée | Grave | **corrigé** |
 | D8 | Le rédacteur n'a pas les faits de la session | Grave | **corrigé** |
 | D9 | Une fourchette interne divulguée comme engagement commercial | Grave | **corrigé** |
-| D10 | `AVAILABILITY_CHECK` déclaré, jamais implémenté | Grave | lu dans le code |
+| D10 | `AVAILABILITY_CHECK` déclaré, jamais implémenté | Grave | **corrigé** |
 | D11 | Aucun paiement réel — Fapshi absent | Grave | **corrigé** (côté fournisseur) |
 | D12 | Langue non persistante | Important | **observé** |
 | D13 | Identité instable | Important | **corrigé** |
@@ -316,7 +329,7 @@ prix, un minimum ou un tarif. 20 formulations de la question.
 
 | # | Défaut | Mécanisme / preuve |
 | --- | --- | --- |
-| D10 | `AVAILABILITY_CHECK` jamais implémenté | Flow et intents présents dans `fact_extraction.py` et `conversation_session.py`, aucun use case. Or la spec en fait la condition bloquante avant tout paiement. |
+| D10 | `AVAILABILITY_CHECK` jamais implémenté | Flow et intents présents, aucun use case : les réponses du bailleur étaient comprises puis jetées. **Corrigé** : `check_availability.py` (demande + réponse), `availability_check.py`, la porte `ListingAvailability` déclarée par Payment, et `lodgings` dans la projection. La table `property_availability_checks` n'avait ni lecteur ni écrivain ; ses colonnes `attempts` et `next_ask_at` venaient d'un design périodique que la spec refuse et ont été supprimées. |
 | D11 | Aucun paiement réel | `payment/infrastructure/gateways/` ne contenait que `mock_gateway.py`. `service_fee_xaf=1000` était bien codé, mais rien n'encaissait. **Corrigé** : `fapshi_gateway.py`, plus `reconcile_pending_payments.py` parce que Fapshi n'envoie qu'un webhook par événement et ne réessaie jamais. Reste le flux WhatsApp qui remet le lien au locataire. |
 | D12 | Langue non persistante | `:520` réécrit `session.language` à chaque message. Observé : fil anglais (`lang=en`) basculé en `fr` par une seule question française. |
 | D13 | Identité instable | `SYSTEM_PROMPT` (`:95-118`) écrit aussi `reply` et ne contient **aucune persona** ; `REPLY_SYSTEM_PROMPT` (`:128`) dit « You are Loka ». Deux rédacteurs, un sans nom → « Loka », « Kasa », compte « Kora ». |
@@ -359,7 +372,7 @@ Piloté par « lancer Housing », pas par « préparer 4 domaines » :
 2. **D4, D5, D7, D8** — le cœur conversationnel : actes actionnables, état propre,
    rédacteur ancré.
 3. **D3** — le pipeline média, sans lequel Housing ne peut pas publier.
-4. **D10** — la disponibilité, puis le flux WhatsApp qui remet le lien de paiement : D11 est encaissable mais pas encore atteignable depuis une conversation.
+4. **Le flux WhatsApp du locataire** : choix d'une annonce → demande de disponibilité → lien de paiement → contact. Les deux bouts existent et sont testés ; il manque le fil qui les relie depuis la conversation.
 5. **D6** — cycle de vie des tâches ; indispensable au **deuxième** domaine.
 6. **D9, D12 à D20** — par ordre de gêne constatée.
 

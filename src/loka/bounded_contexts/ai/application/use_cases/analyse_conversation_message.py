@@ -28,6 +28,7 @@ from typing import Any
 
 from loka.bounded_contexts.ai.application.ports import (
     AiUsageLedger,
+    AvailabilityAnswers,
     BudgetDecision,
     BudgetPolicy,
     ConversationTurn,
@@ -41,6 +42,7 @@ from loka.bounded_contexts.ai.application.ports import (
 )
 from loka.bounded_contexts.ai.application.services.conversation_copy import (
     SEARCH_RESULT_LIMIT,
+    availability_answer_text,
     listing_unsaved_text,
     missing_listing_reply,
     no_results_text,
@@ -72,6 +74,9 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     is_supported_intent,
     question_key_for,
     question_to_ask,
+)
+from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability import (
+    is_availability_answer,
 )
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -236,6 +241,7 @@ class AnalyseConversationMessageUseCase:
         budget: BudgetPolicy | None = None,
         provider_name: str = "openrouter",
         listing: PropertyListing | None = None,
+        availability: AvailabilityAnswers | None = None,
         search: PropertySearchGateway | None = None,
     ) -> None:
         self._uow = uow
@@ -250,6 +256,7 @@ class AnalyseConversationMessageUseCase:
         self._budget = budget
         self._provider = provider_name
         self._listing = listing
+        self._availability = availability
         self._search = search
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
@@ -798,6 +805,9 @@ class AnalyseConversationMessageUseCase:
         question: str | None = None
 
         if accepted:
+            availability_text = await self._record_availability_answer(
+                session, intent=intent, now=now
+            )
             listing_text, next_step, listing_id = await self._confirm_listing(
                 session, intent=intent, next_step=next_step, now=now
             )
@@ -810,7 +820,7 @@ class AnalyseConversationMessageUseCase:
             # The catalogue's numbers are data, not prose: they win over both
             # the model's sentence and the listing summary, which cannot apply
             # to the same turn.
-            reply_text = search_text or listing_text or reply_text
+            reply_text = availability_text or search_text or listing_text or reply_text
 
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
@@ -874,6 +884,40 @@ class AnalyseConversationMessageUseCase:
                 )
             ],
             correlation_id=current_context().get("correlation_id") or "unknown",
+        )
+
+    async def _record_availability_answer(
+        self,
+        session: ConversationSession,
+        *,
+        intent: str,
+        now: datetime,
+    ) -> str | None:
+        """Apply "le logement est encore disponible ?" to the listing it was about.
+
+        These intents were recognised and then discarded: a landlord could
+        write "c'est déjà loué" and the lodging stayed in every tenant's search
+        results. Nothing else in the system can take a listing out — Kora never
+        infers availability — so this answer is the only thing that does.
+
+        ``None`` when the turn was not one of these answers, or when the
+        landlord was never asked: the reply then comes from wherever it usually
+        would.
+        """
+        if self._availability is None or session.user_id is None:
+            return None
+        if not is_availability_answer(intent):
+            return None
+
+        result = await self._availability.record_answer(
+            landlord_id=session.user_id, answer=intent, now=now
+        )
+        if result is None:
+            return None
+        return availability_answer_text(
+            session.language,
+            lodgings_left=result.lodgings_left,
+            delisted=result.delisted,
         )
 
     async def _confirm_listing(

@@ -134,7 +134,18 @@ PROPERTY_TYPE_PATTERNS: dict[str, re.Pattern[str]] = {
     "LAND": re.compile(r"\b(terrains?|parcelles?|lots?|terrains?\s+a\s+b[aâ]tir)\b", re.I),
 }
 
+# Order matters: ``_first_match`` returns the first hit, and "un studio a été
+# pris" must not be read as "tout a été pris". One decrements and leaves the
+# listing published; the other takes it out of search, and a landlord with two
+# studios would lose the second one by letting the first go.
 AVAILABILITY_PATTERNS: dict[str, re.Pattern[str]] = {
+    "ONE_TAKEN": re.compile(
+        r"\b(?:il\s+y\s+en\s+a\s+)?(?:un|une|1)\s+"
+        r"(?:studio|chambre|appartement|appart|maison|logement|seul|seule)?\s*"
+        r"(?:a|est|ont)?\s*(?:[ée]t[ée]\s+)?(?:pris|prise|lou[ée]e?|parti[e]?)\b"
+        r"|\bj\'?ai\s+lou[ée]\s+(?:un|une|1)\b",
+        re.I,
+    ),
     "STILL_AVAILABLE": re.compile(
         r"\b(toujours\s+(?:disponible|libre|ok|dispo|valide)|c'est\s+toujours|"
         r"toujours\s+[aà]\s+louer|elle\s+est\s+toujours)\b",
@@ -144,7 +155,10 @@ AVAILABILITY_PATTERNS: dict[str, re.Pattern[str]] = {
         r"\b(d[ée]j[àa]\s+lou[ée]|c'?est\s+lou[ée]|est\s+d[ée]j[àa]\s+lou[ée]|"
         r"[àa]\s+[ée]t[ée]\s+lou[ée]|j'?ai\s+lou[ée]|on\s+a\s+lou[ée]|"
         r"j'ai\s+trouv[ée]\s+(?:un\s+)?locataire|elle\s+est\s+lou[ée]|"
-        r"c'est\s+d[ée]j[àa]\s+pris|parti\s+avec)\b",
+        r"c'est\s+d[ée]j[àa]\s+pris|parti\s+avec|"
+        r"tout\s+(?:a\s+|est\s+)?(?:[ée]t[ée]\s+)?(?:pris|lou[ée])|"
+        r"tous?\s+(?:ont\s+)?(?:[ée]t[ée]\s+)?(?:pris|lou[ée]s?)|"
+        r"plus\s+rien|il\s+n'?y\s+a\s+plus)\b",
         re.I,
     ),
     "TEMPORARILY_UNAVAILABLE": re.compile(

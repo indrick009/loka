@@ -8,6 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.property.infrastructure.persistence.availability_check_repository import (  # noqa: E501
+    SqlAlchemyAvailabilityCheckRepository,
+)
 from loka.bounded_contexts.property.infrastructure.persistence.property_quota import (
     SqlAlchemyPropertyQuota,
 )
@@ -26,6 +29,7 @@ PROPERTY_REPOSITORY = "property"
 PROPERTY_QUOTA_REPOSITORY = "property_quota"
 PROPERTY_SEARCH_PROJECTOR = "property_search_projector"
 PROPERTY_SEARCH_REPOSITORY = "property_search"
+AVAILABILITY_CHECK_REPOSITORY = "availability_check"
 
 
 def _property(uow: SqlAlchemyUnitOfWork) -> Any:
@@ -44,9 +48,14 @@ def _property_search(uow: SqlAlchemyUnitOfWork) -> Any:
     return PropertySearchRepository(uow.session)
 
 
+def _availability_check(uow: SqlAlchemyUnitOfWork) -> Any:
+    return SqlAlchemyAvailabilityCheckRepository(uow.session)
+
+
 PROPERTY_REPOSITORY_FACTORIES: dict[str, Any] = {
     PROPERTY_REPOSITORY: _property,
     PROPERTY_QUOTA_REPOSITORY: _property_quota,
     PROPERTY_SEARCH_PROJECTOR: _property_search_projector,
     PROPERTY_SEARCH_REPOSITORY: _property_search,
+    AVAILABILITY_CHECK_REPOSITORY: _availability_check,
 }

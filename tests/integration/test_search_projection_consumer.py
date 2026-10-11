@@ -18,6 +18,9 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
+from loka.bounded_contexts.property.application.queries.search_properties import (
+    PropertySearchCriteria,
+)
 from loka.bounded_contexts.property.domain.entities.property import Property
 from loka.bounded_contexts.property.domain.entities.property_media import (
     MediaKind,
@@ -25,6 +28,7 @@ from loka.bounded_contexts.property.domain.entities.property_media import (
     PropertyMedia,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
+    AvailabilityAnswer,
     AvailabilityWindow,
     BedroomCount,
     ChargingPolicy,
@@ -40,6 +44,9 @@ from loka.bounded_contexts.property.infrastructure.persistence.models import (
 )
 from loka.bounded_contexts.property.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
+)
+from loka.bounded_contexts.property.infrastructure.persistence.property_search_repository import (
+    PropertySearchRepository,
 )
 from loka.interfaces.worker.search_projection_consumer import (
     SEARCH_PROJECTION_QUEUE,
@@ -190,6 +197,55 @@ async def test_a_rented_property_leaves_search(
     document = await _wait_for_document(database, prop.id)
     assert document is not None
     assert document.status == "RENTED"
+
+
+async def test_the_read_model_carries_how_many_lodgings_are_left(
+    consumer: Any, broker: Any, database: Any
+) -> None:
+    """One listing can stand for several identical lodgings (§5).
+
+    The write model knew the quantity and the read model did not, so a tenant
+    could not be told "2 studios" and — worse — an exhausted listing was still
+    returned to him.
+    """
+    prop = _listing()
+    prop.set_quantity(3, now=NOW)
+    prop.publish(now=NOW, actor_id=prop.landlord_id)
+    await _persist(database, prop)
+
+    await _publish(broker, _event(prop.id))
+
+    document = await _wait_for_document(database, prop.id)
+    assert document is not None
+    assert document.lodgings == 3
+
+
+async def test_an_exhausted_listing_is_dropped_from_tenant_results(
+    consumer: Any, broker: Any, database: Any
+) -> None:
+    """The landlord said every one of them is gone, so there is nothing to show.
+
+    The status filter normally covers this — his answer flips the listing to
+    RENTED — but the read model has to be correct on its own rather than
+    depending on two writes landing in order.
+    """
+    prop = _listing()
+    prop.set_quantity(1, now=NOW)
+    prop.publish(now=NOW, actor_id=prop.landlord_id)
+    prop.answer_availability(AvailabilityAnswer.ONE_TAKEN, now=NOW)
+    await _persist(database, prop)
+
+    await _publish(broker, _event(prop.id, event_type="PropertyRented"))
+
+    document = await _wait_for_document(database, prop.id)
+    assert document is not None
+    assert document.lodgings == 0
+
+    async with database.session() as session:
+        results = await PropertySearchRepository(session).search(
+            PropertySearchCriteria(city="Douala"), limit=10
+        )
+    assert all(hit["property_id"] != str(prop.id) for hit in results.items)
 
 
 async def test_a_malformed_event_is_parked_not_retried(

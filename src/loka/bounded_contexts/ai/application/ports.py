@@ -94,6 +94,37 @@ class PropertyListing(Protocol):
         ...
 
 
+class AvailabilityAnswers(Protocol):
+    """Carries a landlord's "le logement est encore disponible ?" answer home.
+
+    Narrow on purpose, like :class:`PropertyListing`: the pipeline depends on
+    the *act* of recording an answer, not on the catalogue's use cases. The
+    landlord's reply names no listing — it arrives in a WhatsApp thread — so
+    the adapter is the thing that knows which question he was asked.
+
+    ``None`` means he was not asked anything. That is a real case: a landlord
+    may volunteer "c'est déjà loué" out of the blue, and guessing which listing
+    he meant would take a lodging out of search on a coincidence.
+    """
+
+    async def record_answer(
+        self, *, landlord_id: uuid.UUID, answer: str, now: datetime
+    ) -> AvailabilityAnswerResult | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AvailabilityAnswerResult:
+    """What the answer did, in the terms a reply needs.
+
+    No listing, no landlord details: enough to tell the landlord his answer
+    landed and to say how many lodgings remain.
+    """
+
+    confirms_availability: bool
+    lodgings_left: int
+    delisted: bool
+
+
 @dataclass(frozen=True, slots=True)
 class ConversationSearchQuery:
     """One tenant search, stated in the facts the conversation accepted.

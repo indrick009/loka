@@ -79,9 +79,24 @@ class PropertyDraftData(StrEnum):
 
 
 class AvailabilityAnswer(StrEnum):
-    """Answers a landlord may give when availability is re-confirmed."""
+    """What a landlord can answer to "le logement est encore disponible ?".
+
+    The spec's four outcomes (§9): yes, one of them is gone, all of them are
+    gone, or no answer at all. ``ONE_TAKEN`` and ``RENTED`` are different
+    answers with different effects — one decrements and leaves the listing
+    published, the other takes it out of search — and conflating them is how a
+    landlord with two studios loses the second one by letting the first go.
+
+    "No answer" is not a value here: it is the absence of one, and the spec is
+    explicit that Kora keeps no availability state over time. An unanswered
+    question simply never confirms, so the tenant never pays.
+
+    ``TEMPORARILY_UNAVAILABLE`` is not one of the four, but a landlord does say
+    it ("je suis en travaux"), so it is recorded rather than refused.
+    """
 
     STILL_AVAILABLE = "STILL_AVAILABLE"
+    ONE_TAKEN = "ONE_TAKEN"
     RENTED = "RENTED"
     TEMPORARILY_UNAVAILABLE = "TEMPORARILY_UNAVAILABLE"
 
