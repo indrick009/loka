@@ -66,6 +66,45 @@ proposal that keeps Kora in the relationship after disclosure is outside V1.
 It also raises the stakes on the two invariants below: with no ongoing
 relationship, there is no later opportunity to make a bad unlock good.
 
+## The anchor is wrong, and it blocks a deletion
+
+Found 11 October. `ServiceFeePayment` and `AccessGrant` are both keyed on
+`application_id` — the id of a **rental application** — with database columns and
+uniqueness constraints built around "one payment per application".
+
+There is no application in Kora V1. A tenant pays 1 000 FCFA to unlock a
+specific landlord's contact **for a specific listing**, and that is the pair the
+grant should express: *this tenant has unlocked this listing*. Keyed on an
+application, the payment has no anchor once `rental` is removed — and `rental` is
+out of scope.
+
+**Decided 11 October: the unlock is keyed on the tenant and the listing.** "This
+tenant has unlocked this listing."
+
+What that means in practice:
+
+| Situation | Pays again? |
+| --- | --- |
+| He comes back to the same listing | No — he already has the number |
+| He wants a second listing from the same landlord | **Yes** — another lodging, another location, another piece of information |
+| Another tenant wants the same listing | Yes — the grant is his, not the listing's |
+
+The reasoning is in §9: the 1 000 FCFA buys the landlord's number **and the
+lodging's location**. The location is per-listing information, so a landlord
+with ten listings is ten unlocks, not one.
+
+What has to change, and it is not mechanical:
+
+- `ServiceFeePayment` and `AccessGrant` move from `application_id` to a
+  `(tenant_id, property_id)` pair
+- the uniqueness constraints follow: one active grant per tenant per listing
+- a migration, with the old column kept until readers are switched
+- `InitiateServiceFeeCommand` loses `application_id`
+- only then can `rental` be deleted
+
+Do this before the deletion, not after: a payment keyed on a concept that has
+already been removed cannot be migrated from.
+
 ## State today
 
 - `initiate_service_fee.py` already defaults to `service_fee_xaf: int = 1000`,
