@@ -55,7 +55,6 @@ from loka.bounded_contexts.property.domain.entities.property_media import (
     MediaStatus,
     PropertyMedia,
 )
-from loka.bounded_contexts.property.domain.exceptions import PublicationBlocked
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     AvailabilityWindow,
     BedroomCount,
@@ -178,7 +177,17 @@ async def test_a_tenant_becomes_a_publishable_landlord(database: Database) -> No
     assert summary.status == "AVAILABLE"
 
 
-async def test_an_unverified_tenant_cannot_publish(database: Database) -> None:
+async def test_a_pending_verification_does_not_hold_up_publication(
+    database: Database,
+) -> None:
+    """Identity verification is a trust signal, not a gate. Decided 11 October.
+
+    The ten collection steps never ask a landlord for a CNI or a selfie, so
+    requiring verification meant he could answer every question he was actually
+    asked and still never appear in a single search. The signal still works
+    where it belongs: a verified listing ranks higher and the fraud engine keeps
+    reading it. What is asserted here is the absence of the old refusal.
+    """
     user_id = uuid.uuid4()
     profile_id = await _request_status(database, user_id)
     await _submit(database, user_id)
@@ -189,13 +198,14 @@ async def test_an_unverified_tenant_cannot_publish(database: Database) -> None:
         await uow.commit()
 
     async with unit_of_work(database) as uow:
-        with pytest.raises(PublicationBlocked):
-            await publish_property_use_case(uow).execute(
-                PublishPropertyCommand(
-                    property_id=prop.id, actor_id=user_id, confirmed_by_landlord=True
-                ),
-                now=NOW,
-            )
+        summary = await publish_property_use_case(uow).execute(
+            PublishPropertyCommand(
+                property_id=prop.id, actor_id=user_id, confirmed_by_landlord=True
+            ),
+            now=NOW,
+        )
+
+    assert summary is not None
 
 
 async def test_a_rejected_request_does_not_unlock_publication(database: Database) -> None:

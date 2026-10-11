@@ -202,21 +202,32 @@ async def test_publish_requires_explicit_landlord_confirmation() -> None:
 
 
 @pytest.mark.asyncio
-async def test_publish_blocked_when_landlord_not_verified() -> None:
+async def test_an_unverified_landlord_can_still_publish() -> None:
+    """Identity verification is a trust signal, not a gate. Decided 11 October.
+
+    The ten collection steps never ask a landlord for a CNI or a selfie, so
+    requiring verification meant someone could answer every question he was
+    asked and still never appear in a single search. Asking a man who wants to
+    rent out a studio to send his identity card to an application he has just
+    discovered is where most of them stop.
+
+    Verification still exists and still matters: a verified landlord ranks
+    higher, and the fraud engine keeps reading it as a signal — the same shape
+    as the decision taken for reviews.
+    """
     landlord_id = uuid.uuid4()
     prop = complete_property(landlord_id)
     uow, use_case = _use_case(landlord_id, verified=False)
     await uow.properties.add(prop)
 
-    with pytest.raises(PublicationBlocked):
-        await use_case.execute(
-            PublishPropertyCommand(
-                property_id=prop.id, actor_id=landlord_id, confirmed_by_landlord=True
-            ),
-            now=NOW,
-        )
+    await use_case.execute(
+        PublishPropertyCommand(
+            property_id=prop.id, actor_id=landlord_id, confirmed_by_landlord=True
+        ),
+        now=NOW,
+    )
 
-    assert prop.status is PropertyStatus.DRAFT
+    assert prop.status is PropertyStatus.AVAILABLE
 
 
 @pytest.mark.asyncio

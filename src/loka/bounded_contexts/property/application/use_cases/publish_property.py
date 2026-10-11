@@ -72,11 +72,18 @@ class PublishPropertyUseCase:
                 context={"property_id": str(command.property_id)},
             )
 
-        if not await self._landlords.is_verified(prop.landlord_id):
-            raise PublicationBlocked(
-                "landlord identity must be verified before publishing",
-                context={"landlord_id": str(prop.landlord_id)},
-            )
+        # Identity verification is a trust signal, not a gate. Decided
+        # 11 October: the ten collection steps never ask a landlord for a CNI or
+        # a selfie, so requiring it meant he could answer every question he was
+        # actually asked and still never appear in a single search. And asking a
+        # man who wants to rent out a studio to send his identity card to an app
+        # he has just discovered is where most of them stop.
+        #
+        # The signal keeps working where it belongs: a listing is projected with
+        # ``is_verified``, the search can favour or filter on it (see
+        # property_search_repository and ix_search_documents_verified), and the
+        # fraud engine still reads verification facts. Same shape as the
+        # decision taken for reviews — it ranks, it does not forbid.
 
         quota: LandlordPropertyQuota = self._uow.repository("property_quota")
         # The listing being published counts towards the catalogue only while it

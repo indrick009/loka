@@ -272,9 +272,17 @@ async def test_an_incomplete_listing_reports_what_is_missing(
     assert "MISSING_PHOTOS" in body["context"]["missing"]
 
 
-async def test_an_unverified_landlord_is_refused(
+async def test_an_unverified_landlord_can_publish(
     client: httpx.AsyncClient, database: Database
 ) -> None:
+    """Identity verification is a trust signal, not a gate. Decided 11 October.
+
+    The ten collection steps never ask a landlord for a CNI or a selfie, so
+    requiring verification meant he could answer every question he was actually
+    asked and still never appear in a single search. The signal still works
+    where it belongs: a verified listing ranks higher and the fraud engine keeps
+    reading it. What is asserted here is the absence of the old refusal.
+    """
     user_id, landlord_id = await _landlord(database, verified=False)
     await _token_for(database, user_id)
     prop = await _seed(database, landlord_id)
@@ -285,8 +293,7 @@ async def test_an_unverified_landlord_is_refused(
         headers=_auth(),
     )
 
-    assert response.status_code == 422
-    assert response.json()["code"] == "publication_blocked"
+    assert response.status_code < 300, response.text
 
 
 async def test_an_unknown_property_is_not_found(

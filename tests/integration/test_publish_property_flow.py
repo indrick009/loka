@@ -208,19 +208,28 @@ async def test_a_user_owning_another_profile_cannot_publish(
             )
 
 
-async def test_an_unverified_landlord_cannot_publish(database: Database) -> None:
+async def test_an_unverified_landlord_can_publish(database: Database) -> None:
+    """Identity verification is a trust signal, not a gate. Decided 11 October.
+
+    The ten collection steps never ask a landlord for a CNI or a selfie, so
+    requiring verification meant he could answer every question he was actually
+    asked and still never appear in a single search. The signal still works
+    where it belongs: a verified listing ranks higher and the fraud engine keeps
+    reading it. What is asserted here is the absence of the old refusal.
+    """
     user_id, landlord_id = await _landlord(database, verified=False)
     prop = _complete_property(landlord_id)
     await _store_draft(database, prop)
 
     async with unit_of_work(database) as uow:
-        with pytest.raises(PublicationBlocked):
-            await publish_property_use_case(uow).execute(
-                PublishPropertyCommand(
-                    property_id=prop.id, actor_id=user_id, confirmed_by_landlord=True
-                ),
-                now=NOW,
-            )
+        summary = await publish_property_use_case(uow).execute(
+            PublishPropertyCommand(
+                property_id=prop.id, actor_id=user_id, confirmed_by_landlord=True
+            ),
+            now=NOW,
+        )
+
+    assert summary is not None
 
 
 async def test_a_blocked_publication_leaves_no_event_and_no_version_bump(

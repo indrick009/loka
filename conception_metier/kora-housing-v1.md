@@ -132,6 +132,19 @@ compte — parce que l'état a pu changer entre la publication et la demande.
 Ce flux constitue la **V1** de Kora Housing. Rien d'autre n'est à ajouter côté
 métier à ce stade.
 
+### Ce que Kora ne fait pas
+
+Tranché le 11 octobre, après avoir constaté que le code faisait les trois.
+
+| Kora ne fait pas | Pourquoi c'est écrit ici |
+| --- | --- |
+| **Organiser les visites** | Le bailleur et le locataire s'arrangent entre eux après l'échange du numéro. Kora mentionne la visite dans sa question de disponibilité, elle ne la planifie pas. |
+| **Héberger des candidatures de location** | Pas de dépôt de candidature, pas d'acceptation ni de refus, pas d'historique de négociation. La §8 est volontairement minuscule : une demande, une contre-offre, stop. |
+| **Exiger la vérification d'identité du bailleur** | Les 10 étapes ne demandent ni CNI ni selfie. Le code bloquait pourtant la publication sans vérification : un bailleur pouvait répondre à toutes les questions posées et n'apparaître dans aucune recherche. La vérification reste, mais comme **signal de classement** — un bailleur vérifié remonte, et le moteur antifraude continue de la lire. Même principe que les avis : ça classe, ça n'interdit pas. |
+
+Ces trois lignes existent parce que l'omission ne suffit pas : du code avait été
+écrit pour chacune. Les réintroduire demande de rouvrir cette section.
+
 **Le travail de Kora s'arrête à la mise en relation.** Une fois les informations
 du bailleur transmises, Kora a fini : plus aucun argent ne vient à Kora. Pas
 d'encaissement de loyer, pas de commission sur le bail, pas de séquestre de

@@ -32,7 +32,10 @@ is sound and is the starting point, not something to replace.
 | --- | --- | --- |
 | **Conversation** | The single entry point: sessions, turns, tasks, dialogue acts, intent understanding, outbound replies. Today split across `ai` + `messaging`. | Exists; needs the task lifecycle from `kora-conversation-engine` |
 | **Identity** | Who the user is. A WhatsApp number proves possession, so first contact auto-registers. Shared by all domains. | Exists |
-| **Housing** | Listings, search, matching, negotiation, availability, tenancy. Today spread over `property` + `landlord` + `rental` + `visit`. | Exists; see `kora-housing` for the delta |
+| **Housing** | Listings, search, matching, one round of negotiation, availability. Today `property`, plus the landlord *directory*. | Exists; see `kora-housing` for the delta |
+| ~~`rental`~~ | Rental applications, accept/refuse, unlimited counter-offers with history. **Out of scope, to delete** (11 Oct): §8 wants one counter-offer then stop, and no application at all. The small §8 negotiation gets written fresh. | 1 159 lines, wired, awaiting removal |
+| ~~`visit`~~ | Kora scheduling, cancelling and completing visits. **Out of scope, to delete** (11 Oct): the two parties arrange it themselves once the contact is released. | 763 lines, wired, awaiting removal |
+| `landlord` | **Directory only** — who owns this listing. Publication depends on it, so it stays. The ~1 400-line verification flow no longer gates anything; `is_verified` is a ranking signal the search already filters on, and a fraud-engine input. | Gate removed 11 Oct |
 | **Food** | Restaurants, recurring menus, menu of the day, dish search, reservation requests. | To build — `kora-food` |
 | **Dating** | Profiles, preferences, discovery, matches. | To build — `kora-dating` |
 | **Found** | Lost/found declarations, ownership proof, controlled restitution. Priority 2. | To build — `kora-found` |
