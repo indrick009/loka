@@ -67,6 +67,7 @@ def to_row(prop: Property) -> dict[str, Any]:
         "public_price_xaf": public.amount if public else None,
         "charging_policy": prop.charging_policy.value,
         "deposit_xaf": prop.deposit.amount if prop.deposit else None,
+        "quantity": prop.quantity,
         "currency": rent.currency if rent else "XAF",
         "bedrooms": prop.bedrooms.count if prop.bedrooms else None,
         "bathrooms": prop.bedrooms.bathrooms if prop.bedrooms else None,
@@ -153,6 +154,7 @@ def from_row(row: PropertyRow, media_rows: list[PropertyMediaRow] | None = None)
     prop.charges = Money(row.charges_xaf, row.currency) if row.charges_xaf is not None else None
     prop.charging_policy = ChargingPolicy(row.charging_policy)
     prop.deposit = Money(row.deposit_xaf, row.currency) if row.deposit_xaf is not None else None
+    prop.quantity = row.quantity
     if row.bedrooms is not None:
         prop.bedrooms = BedroomCount(row.bedrooms, row.bathrooms or 0)
     prop.surface_area = SurfaceArea(row.surface_m2) if row.surface_m2 else None

@@ -337,3 +337,44 @@ async def test_price_nearest_orders_by_distance_to_the_budget(session: AsyncSess
     # price tie-break, and the 120 000 is last.
     assert [item["price_xaf"] for item in result.items] == [145_000, 155_000, 120_000]
     assert result.next_cursor is None
+
+
+async def test_the_quantity_survives_a_round_trip(session: AsyncSession) -> None:
+    """A listing standing for two identical studios must still stand for two
+    after a reload.
+
+    Without the column the aggregate silently fell back to one on every load,
+    and "le logement est encore disponible ?" would have been answered from a
+    count nobody had stored.
+    """
+    now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    prop = _listing(uuid.uuid4(), now=now)
+    prop.set_quantity(2, now=now)
+
+    repository = SqlAlchemyPropertyRepository(session)
+    await repository.add(prop)
+    await session.commit()
+
+    loaded = await repository.get(prop.id)
+    assert loaded is not None
+    assert loaded.quantity == 2
+
+
+async def test_a_lodging_declared_taken_stays_taken(session: AsyncSession) -> None:
+    """The landlord's declaration is the only thing that moves the count, so it
+    is the one thing that must survive being written down."""
+    now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    prop = _listing(uuid.uuid4(), now=now)
+    prop.set_quantity(2, now=now)
+
+    repository = SqlAlchemyPropertyRepository(session)
+    await repository.add(prop)
+    await session.commit()
+
+    reloaded = await repository.get(prop.id)
+    assert reloaded is not None
+    reloaded.declare_one_taken(now=now)
+    await repository.save(reloaded)
+    await session.commit()
+
+    assert (await repository.get(prop.id)).quantity == 1  # type: ignore[union-attr]

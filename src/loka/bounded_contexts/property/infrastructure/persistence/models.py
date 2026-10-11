@@ -42,6 +42,11 @@ class PropertyRow(Base):
     public_price_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     charging_policy: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
     deposit_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # How many identical lodgings this one listing stands for. Never null: a
+    # listing is at least one lodging, and zero means every one is taken.
+    quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
 
     bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
