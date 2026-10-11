@@ -35,6 +35,10 @@ class PropertySearchCriteria:
     property_types: tuple[str, ...] = ()
     min_price_xaf: int | None = None
     max_price_xaf: int | None = None
+    # The anchor of a ``price_nearest`` sort: with it, the closest prices to
+    # ``near_price_xaf`` come first (used by a tenant search, whose budget is a
+    # target rather than a ceiling). Ignored by the other sorts.
+    near_price_xaf: int | None = None
     min_bedrooms: int | None = None
     min_surface_m2: int | None = None
     available_before: date | None = None

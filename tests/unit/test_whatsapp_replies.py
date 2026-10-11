@@ -10,6 +10,8 @@ from __future__ import annotations
 import pytest
 
 from loka.interfaces.worker.whatsapp_replies import (
+    _CLARIFY_TEXT_EN,
+    _QUESTION_TEXT_EN,
     ACK_TEXT,
     CLARIFY_TEXT,
     NO_QUESTION_TEXT,
@@ -82,3 +84,37 @@ class TestAcknowledgements:
 
     def test_an_unknown_intent_falls_back_to_the_bare_ack(self) -> None:
         assert render_reply(reply_kind="ACK", question_key=None, intent="SMALLTALK") == ACK_TEXT
+
+
+class TestEnglish:
+    """A thread the model read as English gets English templates, too."""
+
+    def test_every_french_question_has_an_english_twin(self) -> None:
+        assert set(_QUESTION_TEXT_EN) == set(QUESTION_TEXT)
+
+    @pytest.mark.parametrize("key", sorted(QUESTION_TEXT))
+    def test_the_english_twin_is_used(self, key: str) -> None:
+        sentence = render_reply(reply_kind="QUESTION", question_key=key, language="en")
+
+        assert sentence == _QUESTION_TEXT_EN[key]
+        assert sentence != QUESTION_TEXT[key]
+
+    def test_an_unknown_question_still_degrades_in_english(self) -> None:
+        sentence = render_reply(
+            reply_kind="QUESTION", question_key="ask.price_per_m2", language="en"
+        )
+
+        assert sentence == _CLARIFY_TEXT_EN
+
+    def test_an_ack_intent_is_translated(self) -> None:
+        sentence = render_reply(
+            reply_kind="ACK", question_key=None, intent="SUPPORT", language="en"
+        )
+
+        assert sentence != NO_QUESTION_TEXT["SUPPORT"]
+        assert "help" in sentence
+
+    def test_an_unknown_language_stays_french(self) -> None:
+        assert (
+            render_reply(reply_kind="ACK", question_key=None, language="es") == ACK_TEXT
+        )

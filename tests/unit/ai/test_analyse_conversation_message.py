@@ -249,11 +249,13 @@ def _model_result(
     entities: dict[str, Any] | None = None,
     cost: float = 0.0002,
     reply: str | None = None,
+    language: str = "fr",
 ) -> IntentResult:
     return IntentResult(
         intent=intent,
         confidence=confidence,
         entities=entities if entities is not None else {"property_type": "APARTMENT"},
+        language=language,
         reply=reply,
         usage=LlmUsage(
             input_tokens=100,
@@ -592,6 +594,42 @@ class TestLlmFirst:
         # a short answer fills, so a bare value cannot drift to another field.
         assert conversation["awaiting_field"] == "city and neighbourhood"
         assert conversation["known_facts"]["property_type"] == "APARTMENT"
+
+    async def test_an_opening_search_shows_the_tenant_form_to_the_model(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The session is still on SUPPORT when the tenant opens a search, so a
+        prompt built from the session would hand the model the landlord's fields
+        — rent, charges, deposit — that a searching tenant cannot answer."""
+        model = StubModel(
+            result=_model_result(
+                intent="PROPERTY_SEARCH",
+                entities={"property_type": "STUDIO", "standing": "MODERN"},
+            )
+        )
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="je veux louer un studio moderne",
+            model=model,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        assert payload["conversation"]["flow"] == "PROPERTY_SEARCH"
+        assert "tenant" in payload["you_are_helping"]
+        assert [field["field"] for field in payload["required_fields"]] == [
+            "property_type",
+            "location",
+            "rent",
+        ]
 
 
 class TestPendingAnswerBinding:
@@ -1658,7 +1696,7 @@ class TestConversationSearch:
                 city="Yaoundé",
                 neighbourhoods=("Bastos",),
                 property_types=("APARTMENT",),
-                max_price_xaf=180_000,
+                budget_xaf=180_000,
             )
         ]
         assert report.next_step == "COLLECT_PROPERTY_CHOICE"
@@ -1710,6 +1748,72 @@ class TestConversationSearch:
         assert staged[0].reply_kind == "QUESTION"
         assert staged[0].question_key == "ask.search_budget"
 
+    async def test_the_catalogue_speaks_the_language_of_the_conversation(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """An English thread must not get the French catalogue: the numbers stay
+        the platform's, but the words around them follow the conversation."""
+        search = StubSearch(hits=[_hit()])
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    language="en",
+                    intent="PROPERTY_SEARCH",
+                    entities={
+                        "property_type": "APARTMENT",
+                        "city": "Yaoundé",
+                        "neighbourhood": "Bastos",
+                        "price": 180_000,
+                    },
+                )
+            ),
+            search=search,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.language == "en"
+        assert uow.events.staged[0].text == (
+            "I found 1 property:\n"
+            "1. Apartment 3 bedrooms 90 m2 - Bastos, Yaoundé - 150 000 FCFA/month\n"
+            "Reply with the number of the property you are interested in."
+        )
+
+    async def test_an_empty_catalogue_answers_in_the_conversation_language(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """A bare "50 000" cannot tell its own language: the session's remembered
+        one — read from an earlier English message — has to carry the answer."""
+        session.language = "en"
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
+        session.context["next_question"] = "ask.search_budget"
+
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="50 000",
+            model=StubModel(
+                result=_model_result(intent="COLLECT_PRICE", entities={"price": 50_000})
+            ),
+            search=StubSearch(hits=[]),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert "widen the search" in uow.events.staged[0].text
+
     async def test_the_tenant_form_is_what_the_model_is_given(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
@@ -1745,7 +1849,8 @@ class TestConversationSearch:
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
         """There is nothing to choose, so the turn offers the one move that can
-        change the outcome: widening the search."""
+        change the outcome: widening the search, without promising a follow-up
+        the platform cannot send."""
         session.start_flow(
             FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
         )
@@ -1769,12 +1874,12 @@ class TestConversationSearch:
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert search.queries[0].max_price_xaf == 50_000
+        assert search.queries[0].budget_xaf == 50_000
         assert report.next_step == "COLLECT_SEARCH_CRITERIA"
         assert report.question_key == "ask.search_criteria"
         assert session.step is FlowStep.COLLECT_SEARCH_CRITERIA
         staged = uow.events.staged
-        assert "rien trouvé" in staged[0].text
+        assert "élargir la recherche" in staged[0].text
 
     async def test_a_search_without_a_port_still_answers_the_thread(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -1833,8 +1938,82 @@ class TestConversationSearch:
                 city="Yaoundé",
                 neighbourhoods=("Bastos",),
                 property_types=("APARTMENT",),
-                max_price_xaf=150_000,
+                budget_xaf=150_000,
             )
         ]
         assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
         assert "J'ai trouvé 1 logement :" in uow.events.staged[0].text
+
+
+class TestConversationLanguage:
+    """The message decides the language; the session only remembers it.
+
+    The model reads the message, so the pipeline does not impose French. It keeps
+    the model's reading to answer a later message whose language cannot be told
+    on its own (a bare "150000").
+    """
+
+    async def test_the_model_reported_language_is_remembered(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        model = StubModel(result=_model_result(language="en"))
+        use_case, _, _, sessions = build(
+            uow,
+            session,
+            message_id,
+            text="Hello, I am looking to rent a flat in Bastos",
+            model=model,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.language == "en"
+        assert sessions.store[session.id].language == "en"
+
+    async def test_the_prompt_does_not_impose_a_language(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """A forced "language" is what made the assistant answer French to an
+        English message; the model is handed the message, not a verdict."""
+        model = StubModel(result=_model_result(language="en"))
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Hello, I am looking to rent a flat in Bastos",
+            model=model,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        payload = json.loads(model.prompts[0].user)
+        assert "language" not in payload
+        assert payload["default_language"] == "fr"
+        assert payload["message"] == "Hello, I am looking to rent a flat in Bastos"
+
+    async def test_an_unusable_report_leaves_the_session_language(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        session.language = "en"
+        use_case, _, _, _ = build(
+            uow, session, message_id, model=StubModel(result=_model_result(language="es"))
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.language == "en"

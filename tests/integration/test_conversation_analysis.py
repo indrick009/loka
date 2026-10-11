@@ -219,7 +219,7 @@ class TestPersistence:
         assert row is not None
         assert row.revision > 0
         assert row.context_json["rent"] == 250_000
-        assert row.context_json["next_question"] == "ask.location"
+        assert row.context_json["next_question"] == "ask.standing"
 
     async def test_a_model_answer_is_costed_in_the_ledger(
         self, database: Database, integration_settings: Settings

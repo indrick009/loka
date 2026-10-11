@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import IntentResult
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     MIN_PLAUSIBLE_RENT_XAF,
@@ -182,10 +183,26 @@ ACQUISITION_SOURCE_PATTERNS: dict[str, re.Pattern[str]] = {
 # though no price and no room count came with it. Without this the flow would
 # sit in SUPPORT for ever, asking a landlord nothing about the flat they are
 # trying to rent out.
+#
+# ``louer`` is deliberately NOT one of the verbs here. "Je veux louer un studio"
+# is a *tenant* looking for a home, and a tenant sent through a landlord's form
+# is the role mix-up this pipeline exists to avoid. A landlord renting out their
+# own place owns it, and the possessive in ``_LANDLORD_OWNERSHIP_PATTERN`` is
+# what tells the two apart.
 LISTING_INTENT_PATTERN = re.compile(
     r"\b(je\s+(?:voudrais|souhaite|veux|dois|ai)\s+"
-    r"(?:publier|mettre\s+en\s+ligne|vendre|louer|proposer)|"
+    r"(?:publier|mettre\s+en\s+ligne|vendre|proposer)|"
     r"annonce[er]?|je\s+propose|disponible\s+a\s+louer)\b",
+    re.I,
+)
+
+# "Je louer mon studio" is a landlord naming the home they own. The possessive
+# before a property noun is the one unambiguous marker of ownership in a phrase
+# where "louer" alone reads as a tenant ("je loue un studio").
+_LANDLORD_OWNERSHIP_PATTERN = re.compile(
+    r"\b(?:mon|ma|mes)\s+(?:appartements?|apparts?|studios?|maisons?|villas?|"
+    r"chambres?|duplex(?:e?s?)?|lofts?|locaux|bureaux?|immeubles?|terrains?|"
+    r"parcelles?|pi[eè]ces?|sbg)\b",
     re.I,
 )
 
@@ -272,12 +289,17 @@ class DeterministicClassifier:
         if property_type:
             entities["property_type"] = property_type
 
-        wants_to_list = bool(LISTING_INTENT_PATTERN.search(normalized))
+        wants_to_list = bool(
+            LISTING_INTENT_PATTERN.search(normalized)
+            or _LANDLORD_OWNERSHIP_PATTERN.search(normalized)
+        )
         wants_to_search = bool(SEARCH_INTENT_PATTERN.search(normalized))
 
         # A tenant asking for a flat is never asking to publish one: the two
         # intents open different flows and confusing them would send a tenant
-        # through a landlord's form.
+        # through a landlord's form. The possessive wins when both match
+        # ("je veux louer mon studio" is a landlord), so listing is tested here
+        # only when the message claims ownership or uses a publishing verb.
         if wants_to_search and not wants_to_list:
             return DeterministicMatch(
                 intent="PROPERTY_SEARCH", confidence=0.85, entities=entities
@@ -303,6 +325,15 @@ class DeterministicClassifier:
         if "standing" in entities:
             return DeterministicMatch(
                 intent="COLLECT_STANDING", confidence=0.9, entities=entities
+            )
+
+        # A place name with nothing else is a location answer, not noise: the
+        # open location question is what it closes. Without this the rule set
+        # stays silent on "Bastos" and a deployment without a model would ask
+        # the same question for ever.
+        if {"city", "neighbourhood", "location_hint"} & entities.keys():
+            return DeterministicMatch(
+                intent="COLLECT_LOCATION", confidence=0.9, entities=entities
             )
 
         if normalized in AFFIRMATIVE:
@@ -485,9 +516,13 @@ class DeterministicClassifier:
             entities["standing"] = "NON_MODERN"
         elif MODERN_PATTERN.search(normalized):
             entities["standing"] = "MODERN"
-        location = LOCATION_HINT_PATTERN.search(normalized)
-        if location:
-            entities["location_hint"] = location.group(0).title()
+        location = _location_entity(normalized)
+        if location is not None:
+            entities.update(location)
+        else:
+            hint = LOCATION_HINT_PATTERN.search(normalized)
+            if hint:
+                entities["location_hint"] = hint.group(0).title()
         return entities
 
     @staticmethod
@@ -533,3 +568,28 @@ class DeterministicClassifier:
 def _parse_amount(raw: str) -> int:
     digits = re.sub(r"[^\d]", "", raw)
     return int(digits) if digits else 0
+
+
+def _location_entity(normalized: str) -> dict[str, str] | None:
+    """The city (and district) a message names, or ``None``.
+
+    Scans the words longest-first so a two-word district ("New Bell") beats its
+    single word, and resolves both canonical cities and every district in the
+    market index — so "yaounde nkoabang" closes the location question on Yaoundé
+    even when the district itself is not in the index. Only *known* places
+    resolve: promoting an unknown word to a city is how a wrong search is born.
+    """
+    words = normalized.split()
+    for size in (3, 2, 1):
+        for start in range(0, len(words) - size + 1):
+            candidate = " ".join(words[start : start + size])
+            city = market.resolve_city(candidate)
+            if city is not None:
+                return {"city": city, "neighbourhood": ""}
+            district_city = market.resolve_neighbourhood(candidate)
+            if district_city is not None:
+                return {
+                    "city": district_city,
+                    "neighbourhood": market.canonical_neighbourhood(candidate) or "",
+                }
+    return None

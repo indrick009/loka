@@ -27,6 +27,11 @@ from loka.bounded_contexts.property.infrastructure.persistence.models import (
     PropertySearchDocumentRow,
 )
 
+# Sorts the adapter knows how to translate. ``price_nearest`` needs an anchor
+# price and has no stable keyset, so it is offered single-page only.
+_SORTS = frozenset({"recent", "price_asc", "price_desc", "price_nearest"})
+_CURSOR_SORTS = frozenset({"recent", "price_asc", "price_desc"})
+
 
 class PropertySearchRepository:
     def __init__(self, session: AsyncSession) -> None:
@@ -68,8 +73,12 @@ class PropertySearchRepository:
     ) -> PropertySearchResult:
         size = max(1, min(limit, MAX_PAGE_SIZE))
         statement = select(PropertySearchDocumentRow).where(*self._filters(criteria))
-        sort = criteria.sort if criteria.sort in ("recent", "price_asc", "price_desc") else "recent"
-        statement = self._apply_sort(statement, sort, cursor)
+        sort = (
+            criteria.sort
+            if criteria.sort in _SORTS and self._is_sortable(criteria, criteria.sort)
+            else "recent"
+        )
+        statement = self._apply_sort(statement, criteria, sort, cursor)
 
         result = await self._session.execute(statement.limit(size + 1))
         rows = list(result.scalars().all())
@@ -78,8 +87,10 @@ class PropertySearchRepository:
 
         items = [self._to_item(row) for row in rows]
 
+        # ``price_nearest`` orders by a distance, not by a column: there is no
+        # value to encode a stable keyset cursor from, so it is single-page.
         next_cursor = None
-        if has_more and rows:
+        if has_more and rows and sort in _CURSOR_SORTS:
             last = rows[-1]
             next_cursor = encode_cursor(
                 sort,
@@ -87,6 +98,12 @@ class PropertySearchRepository:
                 last.property_id,
             )
         return PropertySearchResult(items=items, next_cursor=next_cursor)
+
+    @staticmethod
+    def _is_sortable(criteria: PropertySearchCriteria, sort: str) -> bool:
+        if sort == "price_nearest":
+            return criteria.near_price_xaf is not None
+        return True
 
     async def count(self, criteria: PropertySearchCriteria) -> int:
         result = await self._session.execute(
@@ -96,7 +113,20 @@ class PropertySearchRepository:
         )
         return int(result.scalar_one())
 
-    def _apply_sort(self, statement: Select[Any], sort: str, cursor: str | None) -> Select[Any]:
+    def _apply_sort(
+        self,
+        statement: Select[Any],
+        criteria: PropertySearchCriteria,
+        sort: str,
+        cursor: str | None,
+    ) -> Select[Any]:
+        if sort == "price_nearest":
+            anchor = int(criteria.near_price_xaf or 0)
+            return statement.order_by(
+                func.abs(PropertySearchDocumentRow.public_price_xaf - anchor).asc(),
+                PropertySearchDocumentRow.public_price_xaf.asc(),
+                PropertySearchDocumentRow.property_id.asc(),
+            )
         if sort == "recent":
             statement = statement.order_by(
                 PropertySearchDocumentRow.source_created_at.desc(),

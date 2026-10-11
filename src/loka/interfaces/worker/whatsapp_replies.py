@@ -58,6 +58,13 @@ QUESTION_TEXT: dict[str, str] = {
         "Voici ce que je retiens. Confirmez-vous pour publier l'annonce ?\n"
         "Répondez oui pour publier, ou indiquez ce qu'il faut corriger."
     ),
+    # The listing exists but cannot be published without photos. This is the
+    # last thing between a draft and a tenant seeing it, so it is asked plainly
+    # rather than acknowledged.
+    "ask.media": (
+        "Envoyez maintenant les photos du logement, au moins une.\n"
+        "Elles sont indispensables pour publier l'annonce."
+    ),
     "confirm.published": (
         "Votre bien est publié. Il apparaîtra dans les recherches des locataires."
     ),
@@ -82,9 +89,84 @@ QUESTION_TEXT: dict[str, str] = {
     "ask.search_choice": "Indiquez le numéro du logement qui vous intéresse.",
 }
 
+# The same sentences, for a conversation the model read as English. A parallel
+# table rather than a nested one: an untranslated key must degrade to the
+# clarification, never silently fall back to French mid-thread.
+_QUESTION_TEXT_EN: dict[str, str] = {
+    "ask.property_type": (
+        "What type of property would you like to list?\n"
+        "Example: apartment, studio, room, house, commercial space."
+    ),
+    "ask.standing": (
+        "Is the property modern or not?\n"
+        "Answer: modern, or not."
+    ),
+    "ask.location": (
+        "In which city and neighbourhood is the property?\n"
+        "Example: Douala, Bastos."
+    ),
+    "ask.rent": "What is the monthly rent, in FCFA?",
+    "ask.features": (
+        "How many bedrooms?\n"
+        "You can also give the surface area in m2."
+    ),
+    "ask.charges": (
+        "Are the monthly charges included in the rent?\n"
+        "If not, what is their amount in FCFA?"
+    ),
+    "ask.deposit": (
+        "What is the security deposit amount, in FCFA?\n"
+        "It is the refundable sum asked from the tenant on move-in."
+    ),
+    "ask.minimum_duration": "What is the minimum rental duration you want?",
+    "ask.availability": (
+        "From when is the property available?\n"
+        "Answer: immediately, or a date (example: 01/11/2026)."
+    ),
+    "ask.conditions": (
+        "What are the move-in conditions?\n"
+        "State for example the advance (number of months to pay upfront), the "
+        "agency fees, and the type of tenant you want."
+    ),
+    "ask.confirm_property": (
+        "Here is what I understood. Do you confirm publishing the listing?\n"
+        "Answer yes to publish, or tell me what to correct."
+    ),
+    "ask.media": (
+        "Please send the property photos now, at least one.\n"
+        "They are required before the listing can be published."
+    ),
+    "confirm.published": (
+        "Your property is published. It will appear in tenants' searches."
+    ),
+    "ask.search_type": (
+        "What type of property are you looking for?\n"
+        "Example: apartment, studio, house, room."
+    ),
+    "ask.search_location": (
+        "Where are you looking?\n"
+        "Give a city or a neighbourhood, for example: Douala, Bastos."
+    ),
+    "ask.search_budget": "What is your maximum monthly rent, in FCFA?",
+    "ask.search_criteria": (
+        "Which criterion would you like to change?\n"
+        "For example: the city, the neighbourhood, the property type or the budget."
+    ),
+    "ask.search_results": (
+        "I could not show the properties found just now.\n"
+        "Please try again in a moment."
+    ),
+    "ask.search_choice": "Give the number of the property you are interested in.",
+}
+
 ACK_TEXT = (
     "C'est bien noté. Continuez quand vous voulez, je vous pose la question "
     "suivante dès que j'ai besoin d'une précision."
+)
+
+_ACK_TEXT_EN = (
+    "Noted. Continue whenever you like, I will ask the next question as soon "
+    "as I need a detail."
 )
 
 CLARIFY_TEXT = (
@@ -93,9 +175,20 @@ CLARIFY_TEXT = (
     "« Je cherche un studio à Douala à 150 000 FCFA »."
 )
 
+_CLARIFY_TEXT_EN = (
+    "I did not quite understand. Could you rephrase?\n"
+    'For example: "I want to rent an apartment in Bastos" or "I am looking '
+    'for a studio in Douala at 150,000 FCFA".'
+)
+
 SUPPORT_TEXT = (
     "Je peux vous aider à publier un logement, à en chercher un ou à "
     "planifier une visite. Dites-moi simplement ce dont vous avez besoin."
+)
+
+_SUPPORT_TEXT_EN = (
+    "I can help you list a property, find one, or plan a visit. Just tell me "
+    "what you need."
 )
 
 # Intents where the platform understood the message but has no question to ask:
@@ -105,18 +198,47 @@ NO_QUESTION_TEXT: dict[str, str] = {
     "SUPPORT": SUPPORT_TEXT,
 }
 
+_NO_QUESTION_TEXT_EN: dict[str, str] = {
+    "SUPPORT": _SUPPORT_TEXT_EN,
+}
+
+
+def _is_english(language: str | None) -> bool:
+    if language is None:
+        return False
+    return language.casefold().startswith("en")
+
 
 def render_reply(
     *,
     reply_kind: str,
     question_key: str | None,
     intent: str | None = None,
+    language: str | None = None,
 ) -> str:
-    """The sentence to send, never ``None``: a silent thread is the failure."""
+    """The sentence to send, never ``None``: a silent thread is the failure.
+
+    ``language`` is the one the conversation settled on; unknown values stay in
+    French, the platform's default.
+    """
+    if _is_english(language):
+        question, ack, clarify, no_question = (
+            _QUESTION_TEXT_EN,
+            _ACK_TEXT_EN,
+            _CLARIFY_TEXT_EN,
+            _NO_QUESTION_TEXT_EN,
+        )
+    else:
+        question, ack, clarify, no_question = (
+            QUESTION_TEXT,
+            ACK_TEXT,
+            CLARIFY_TEXT,
+            NO_QUESTION_TEXT,
+        )
     if reply_kind == "QUESTION":
-        return QUESTION_TEXT.get(question_key or "", CLARIFY_TEXT)
+        return question.get(question_key or "", clarify)
     if reply_kind == "ACK":
         if intent:
-            return NO_QUESTION_TEXT.get(intent, ACK_TEXT)
-        return ACK_TEXT
-    return CLARIFY_TEXT
+            return no_question.get(intent, ack)
+        return ack
+    return clarify

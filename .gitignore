@@ -18,3 +18,5 @@ media/
 wa-sessions/
 node_modules/
 *.tar.gz
+# macOS
+.DS_Store

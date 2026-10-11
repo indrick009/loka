@@ -94,6 +94,46 @@ class TestSuccess:
         assert result.entities == {"property_type": "APARTMENT"}
         assert len(seen) == 1
 
+    async def test_the_model_reported_language_is_kept(self) -> None:
+        """The conversation language is the model's to read: dropping its answer
+        is what pinned every reply to the deployment's default."""
+        payload = json.dumps(
+            {
+                "intent": "SUPPORT",
+                "confidence": 0.9,
+                "entities": {},
+                "language": "en",
+            }
+        )
+        model, _ = model_for(lambda _: completion(chat(payload)))
+
+        result = await model.understand_intent(prompt())
+
+        assert result.language == "en"
+
+    async def test_a_regional_tag_is_reduced_to_its_language(self) -> None:
+        payload = json.dumps(
+            {
+                "intent": "SUPPORT",
+                "confidence": 0.9,
+                "entities": {},
+                "language": "fr-CM",
+            }
+        )
+        model, _ = model_for(lambda _: completion(chat(payload)))
+
+        result = await model.understand_intent(prompt())
+
+        assert result.language == "fr"
+
+    async def test_a_missing_language_falls_back_to_the_given_default(self) -> None:
+        payload = json.dumps({"intent": "SUPPORT", "confidence": 0.9, "entities": {}})
+        model, _ = model_for(lambda _: completion(chat(payload)))
+
+        result = await model.understand_intent(prompt())
+
+        assert result.language == "fr"
+
     async def test_the_call_is_costed_from_configured_pricing(self) -> None:
         payload = json.dumps({"intent": "SUPPORT", "confidence": 0.9, "entities": {}})
         model, _ = model_for(lambda _: completion(chat(payload)))

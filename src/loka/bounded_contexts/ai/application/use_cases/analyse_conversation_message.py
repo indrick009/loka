@@ -47,7 +47,11 @@ from loka.bounded_contexts.ai.application.services.deterministic_classifier impo
     DeterministicClassifier,
 )
 from loka.bounded_contexts.ai.domain.knowledge import market
-from loka.bounded_contexts.ai.domain.services.ai_provider import LlmUsage, Prompt
+from loka.bounded_contexts.ai.domain.services.ai_provider import (
+    SUPPORTED_LANGUAGES,
+    LlmUsage,
+    Prompt,
+)
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
     LISTING_FLOWS,
@@ -59,6 +63,7 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FactExtractor,
     is_supported_intent,
     question_key_for,
+    question_to_ask,
 )
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -78,6 +83,7 @@ from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import DomainError
+from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import (
     ai_bypass_total,
     llm_calls_total,
@@ -87,9 +93,26 @@ from loka.shared.infrastructure.metrics import (
 )
 
 USE_CASE = "analyse_conversation_message"
-SUPPORTED_LANGUAGES = frozenset({"fr", "en"})
+
+_logger = get_logger(__name__)
+
+# Both prompts below can write the sentence a user reads, so the identity lives
+# in one place. When only one of them carried a name, the assistant introduced
+# itself as "Loka" on one turn and "Kasa" on another, from an account called Kora.
+PERSONA = "You are Kora, a warm WhatsApp assistant for a Cameroonian services platform."
+
+# A reference band anchors the model's own sense of magnitude — a studio at "50"
+# means 50 000 francs. It is sourced, wide and partly unconfirmed, so it is not a
+# tariff: quoted to a user it becomes a commercial promise the platform never
+# made. One did reach a tenant as "le loyer minimum pour un appartement est de
+# 40 000 FCFA".
+PRICE_REFERENCE_RULE = (
+    "A price reference range is background for your own judgement, never a "
+    "tariff: never quote it to the user as a price, a minimum or a maximum."
+)
 
 SYSTEM_PROMPT = (
+    f"{PERSONA} "
     "You classify WhatsApp messages for a Cameroonian real-estate platform. "
     "Reply with one JSON object and nothing else. "
     "Never invent a value that is not in the message: use null when unsure. "
@@ -105,12 +128,16 @@ SYSTEM_PROMPT = (
     " Set 'intent' to exactly one value from the 'intent' enum in 'schema' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
     "applies at all."
-    " Also set 'reply': the next WhatsApp message to send, in the conversation's "
+    " Also set 'language' to the language the user wrote in ('fr' or 'en'), then "
+    "set 'reply': the next WhatsApp message to send, written in that same "
     "language, one to three short sentences of plain text (no markdown, no emoji, "
-    "no signature). Acknowledge the message briefly, then ask for the first field "
+    "no signature). A message too short to tell the language (a bare number or a "
+    "single word) keeps 'default_language'. Acknowledge the message briefly, then "
+    "ask for the first field "
     "in 'required_fields' that is not already in known_facts; if none is missing, "
     "confirm the summary. If the message was not understood, ask the user to "
     "rephrase instead of posing a question."
+    f" {PRICE_REFERENCE_RULE}"
 )
 
 # The closed set the model may choose from. Exposed in the prompt so the model
@@ -120,13 +147,15 @@ SYSTEM_PROMPT = (
 ALLOWED_INTENTS: tuple[str, ...] = tuple(sorted(SUPPORTED_INTENTS))
 
 REPLY_SYSTEM_PROMPT = (
-    "You are Loka, a warm WhatsApp assistant for a Cameroonian real-estate "
-    "platform. Write the next message the assistant sends to the user. "
-    "Answer in the conversation's language. One to three short sentences, plain "
+    f"{PERSONA} Write the next message the assistant sends to the user. "
+    "Answer in the language given in the input. One to three short sentences, plain "
     "text: no markdown, no emoji, no letter salutation and no signature. "
-    "If a question is given, ask it naturally in your own words. "
+    "If a question is given, ask that question and no other, naturally in your own "
+    "words; never substitute a different one, and never ask for something already "
+    "present in known_facts. Do not answer that question on the user's behalf — "
+    "only the user can say what their answer is. "
     "Never invent a listing, a price or a fact that is not in the context, and "
-    "never promise anything the platform did not confirm."
+    f"never promise anything the platform did not confirm. {PRICE_REFERENCE_RULE}"
 )
 
 # A short, provider-neutral gloss for each question, so the reply model knows
@@ -241,6 +270,23 @@ def _target_flow(session: ConversationSession, intent: str) -> FlowName:
 def _known_facts(session: ConversationSession, intent: str) -> dict[str, Any]:
     """What this turn may build on: nothing from an abandoned attempt."""
     return {} if _opens_new_flow(session, intent) else dict(session.context)
+
+
+def _prompt_flow(session: ConversationSession, hint_intent: str | None) -> FlowName:
+    """The flow whose form the next question must be phrased against.
+
+    On the message that *opens* a flow the session is still on SUPPORT, so
+    phrasing the reply from ``session.flow`` hands a tenant the landlord's form
+    ("standing", "charges", "deposit") and the model asks the wrong questions.
+    The cheap rule set reads the opening intent, and its flow is the one the
+    reply has to speak for.
+    """
+    if hint_intent is None:
+        return session.flow
+    opening_flow = FLOW_BY_OPENING_INTENT.get(hint_intent)
+    if opening_flow is not None and _opens_new_flow(session, hint_intent):
+        return opening_flow
+    return session.flow
 
 
 def question_topic(next_key: str | None, flow: FlowName) -> str | None:
@@ -474,16 +520,25 @@ class AnalyseConversationMessageUseCase:
             )
 
         ai_bypass_total.labels(stage="llm").inc()
+        # A cheap rule reading only picks which form the prompt shows; the model
+        # still chooses the intent. On an opening turn it is what tells a tenant
+        # the search fields instead of the landlord's.
+        hint = self._classifier.classify(text, pending=pending_key)
         prompt = build_analysis_prompt(
             text=message.text,
-            language=session.language,
+            default_language=session.language,
             history=history,
-            flow=session.flow,
+            flow=_prompt_flow(session, hint.intent if hint is not None else None),
             step=session.step,
             pending_question=pending_key,
             known_facts=dict(session.context),
         )
         result = await self._model.understand_intent(prompt)
+        # The model read the message, so it is the one that knows which language
+        # the user is writing in. Adopting its answer keeps a bare "150000" in
+        # tomorrow's fallback in the right language instead of snapping to French.
+        if result.language in SUPPORTED_LANGUAGES:
+            session.language = result.language
         entities = dict(result.entities)
         # The locale shorthand ("50 mil") is a rule, not a guess: when the
         # message spells one it overrides whatever number the model proposed,
@@ -709,14 +764,36 @@ class AnalyseConversationMessageUseCase:
             next_key=next_key,
             history=history,
             flow=session.flow,
+            known_facts=dict(session.context),
         )
+        model_name = str(getattr(self._response_model, "model", "unknown"))
         try:
             response = await self._response_model.generate_response(prompt)
-        except DomainError:
+        except DomainError as exc:
+            # The user still gets a sentence — the outbound layer renders the
+            # template — but the turn's own call has already been counted as
+            # "ok", so without these two lines a response model that is down
+            # looks perfectly healthy: every answer quietly degrades to a
+            # template and no dashboard says a word.
+            llm_calls_total.labels(
+                use_case=USE_CASE, model=model_name, outcome="error"
+            ).inc()
+            _logger.warning(
+                "reply_composition_failed",
+                session_id=str(session.id),
+                model=model_name,
+                error=type(exc).__name__,
+            )
             return None, None
         sentence = response.content.strip()
         if not sentence:
-            return None, None
+            # Billed and unusable. The usage is still returned so the ledger and
+            # the budget see what the call cost; dropping it made an empty-answer
+            # regression indistinguishable from a deployment with no reply model.
+            _logger.warning(
+                "reply_composition_empty", session_id=str(session.id), model=model_name
+            )
+            return None, response.usage
         return sentence, response.usage
 
     async def _apply(
@@ -781,6 +858,11 @@ class AnalyseConversationMessageUseCase:
         # needs no such handling.
         reply_text = _collapse_repeats(reply_text) if reply_text else reply_text
 
+        # Decided by ``_advance_session`` and by nobody else. Computing it twice
+        # is how the question the session remembered drifted away from the one
+        # the user was actually asked.
+        question: str | None = None
+
         if accepted:
             listing_text, next_step, listing_id = await self._confirm_listing(
                 session, intent=intent, next_step=next_step, now=now
@@ -788,7 +870,7 @@ class AnalyseConversationMessageUseCase:
             search_text, next_step = await self._present_results(
                 session, intent=intent, facts=facts, next_step=next_step
             )
-            await self._advance_session(
+            question = await self._advance_session(
                 session, intent, facts, next_step, now=now, attach_property_id=listing_id
             )
             # The catalogue's numbers are data, not prose: they win over both
@@ -799,7 +881,6 @@ class AnalyseConversationMessageUseCase:
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
         # notice a reply that was never staged.
-        question = question_key_for(next_step, session.flow) if accepted else None
         await self._stage_reply(
             session,
             intent=intent,
@@ -891,11 +972,15 @@ class AnalyseConversationMessageUseCase:
             now=now,
         )
         if result is None:
-            return _LISTING_UNSAVED_TEXT, next_step, None
+            return _copy(_LISTING_UNSAVED_TEXT, session.language), next_step, None
 
         if result.published:
             return None, FlowStep.PUBLISHED, result.property_id
-        return _missing_listing_reply(result.missing), FlowStep.COLLECT_MEDIA, result.property_id
+        return (
+            _missing_listing_reply(result.missing, session.language),
+            FlowStep.COLLECT_MEDIA,
+            result.property_id,
+        )
 
     async def _present_results(
         self,
@@ -915,22 +1000,24 @@ class AnalyseConversationMessageUseCase:
         listing that does not exist.
 
         An empty result moves back to the criteria step, not to a choice: there
-        is nothing to choose, and the tenant's next move is to widen the search.
+        is nothing to choose yet, so the reply offers the one move that can
+        change the outcome — widening the search — without promising a follow-up
+        the platform has no watcher to send.
         """
         if next_step is not FlowStep.PRESENT_RESULTS:
             return None, next_step
         if self._search is None:
-            return _SEARCH_UNAVAILABLE_TEXT, next_step
+            return _copy(_SEARCH_UNAVAILABLE_TEXT, session.language), next_step
         query = _search_query({**_known_facts(session, intent), **facts.as_context()})
         if query is None:
             # The form reported complete but the facts describe no place to
             # search: calling that "no match" would be a lie the tenant cannot
             # act on, so it is reported as a failure instead.
-            return _SEARCH_UNAVAILABLE_TEXT, next_step
+            return _copy(_SEARCH_UNAVAILABLE_TEXT, session.language), next_step
         hits = await self._search.search_for_conversation(query, limit=SEARCH_RESULT_LIMIT)
         if not hits:
-            return _NO_RESULTS_TEXT, FlowStep.COLLECT_SEARCH_CRITERIA
-        return _results_text(hits), FlowStep.COLLECT_PROPERTY_CHOICE
+            return _copy(_NO_RESULTS_TEXT, session.language), FlowStep.COLLECT_SEARCH_CRITERIA
+        return _results_text(hits, session.language), FlowStep.COLLECT_PROPERTY_CHOICE
 
     async def _advance_session(
         self,
@@ -941,20 +1028,28 @@ class AnalyseConversationMessageUseCase:
         *,
         now: datetime,
         attach_property_id: uuid.UUID | None = None,
-    ) -> None:
+    ) -> str | None:
         """Open the flow if needed, merge the facts, move to the chosen step.
+
+        Returns the question this turn asks, which is also the one the session
+        records: one decision, one writer, so the two cannot drift apart.
 
         ``expected_revision`` is the revision read at load time, so if another
         worker moved this session meanwhile the save is refused and the analysis
         is discarded instead of overwriting a concurrent step.
         """
         observed = session.revision
+        # Read before ``start_flow`` can clear the context: a question left open
+        # by an attempt the user has walked away from must not be asked again.
+        carried = session.context.get("next_question")
+        pending = carried if isinstance(carried, str) else None
 
         opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
         if opening_flow is not None and _opens_new_flow(session, intent):
             # Resets the context, so it must come first: the facts about to be
             # merged belong to this new attempt, not to the abandoned one.
             session.start_flow(opening_flow, now=now, first_step=next_step or FlowStep.START)
+            pending = None
 
         # Transition before merging: `transition` compares expected_revision
         # against the current revision, and merging first would bump it and make
@@ -966,10 +1061,10 @@ class AnalyseConversationMessageUseCase:
         # expected_revision equal to the value read from the row.
         if attach_property_id is not None:
             session.attach_property(attach_property_id, now=now)
-        question = question_key_for(next_step, session.flow)
-        if question:
-            session.context["next_question"] = question
+        asked = question_to_ask(next_step=next_step, flow=session.flow, pending=pending)
+        session.record_pending_question(asked)
         await self._sessions.save(session, expected_revision=observed)
+        return asked
 
     async def _budget_decision(
         self, user_id: uuid.UUID | None, now: datetime
@@ -1005,64 +1100,148 @@ def _reply_kind(*, reason: str | None, question_key: str | None) -> str:
 
 # The quality gate reports stable codes; the user gets words. Kept here rather
 # than in the outbound layer because the list is dynamic and cannot be a fixed
-# ``question_key``.
-_MISSING_LABELS_FR: dict[str, str] = {
-    "MISSING_PHOTOS": "les photos du logement (envoyez-en au moins une)",
-    "MISSING_CHARGES": "les charges mensuelles",
-    "MISSING_MINIMUM_DURATION": "la durée minimale de location",
-    "MISSING_AVAILABILITY_DATE": "la date de disponibilité",
-    "VAGUE_LOCATION": "le quartier précis",
-    "MISSING_DEPOSIT": "le dépôt de garantie",
-    "AMBIGUOUS_CONDITIONS": "les conditions de location",
-    "SUSPICIOUS_PRICE": "le prix, qui semble anormal",
+# ``question_key``. Every platform-authored sentence exists in French (the
+# default) and English: the catalogue must not speak French to a thread the
+# model read as English, and it cannot hand the phrasing to the model either —
+# a rephrased price would be a listing that does not exist.
+_LANG_FR = "fr"
+
+
+def _copy(table: Mapping[str, str], language: str) -> str:
+    return table.get(language, table[_LANG_FR])
+
+
+_MISSING_LABELS: dict[str, dict[str, str]] = {
+    "fr": {
+        "MISSING_PHOTOS": "les photos du logement (envoyez-en au moins une)",
+        "MISSING_CHARGES": "les charges mensuelles",
+        "MISSING_MINIMUM_DURATION": "la durée minimale de location",
+        "MISSING_AVAILABILITY_DATE": "la date de disponibilité",
+        "VAGUE_LOCATION": "le quartier précis",
+        "MISSING_DEPOSIT": "le dépôt de garantie",
+        "AMBIGUOUS_CONDITIONS": "les conditions de location",
+        "SUSPICIOUS_PRICE": "le prix, qui semble anormal",
+    },
+    "en": {
+        "MISSING_PHOTOS": "the property photos (send at least one)",
+        "MISSING_CHARGES": "the monthly charges",
+        "MISSING_MINIMUM_DURATION": "the minimum rental duration",
+        "MISSING_AVAILABILITY_DATE": "the availability date",
+        "VAGUE_LOCATION": "the exact neighbourhood",
+        "MISSING_DEPOSIT": "the security deposit",
+        "AMBIGUOUS_CONDITIONS": "the rental conditions",
+        "SUSPICIOUS_PRICE": "the price, which looks unusual",
+    },
 }
 
-_LISTING_UNSAVED_TEXT = (
-    "Je n'ai pas pu enregistrer l'annonce pour le moment. Réessayez dans un instant."
-)
+_LISTING_UNSAVED_TEXT: dict[str, str] = {
+    "fr": (
+        "Je n'ai pas pu enregistrer l'annonce pour le moment. "
+        "Réessayez dans un instant."
+    ),
+    "en": "I could not save the listing for now. Please try again in a moment.",
+}
 
-
-def _missing_listing_reply(missing: tuple[str, ...]) -> str:
-    labels = [_MISSING_LABELS_FR.get(code, code) for code in missing]
-    return (
+_MISSING_LISTING_INTRO: dict[str, str] = {
+    "fr": (
         "C'est enregistré, votre annonce est créée. "
-        "Pour pouvoir la publier, il manque encore : " + _join_fr(labels) + "."
-    )
+        "Pour pouvoir la publier, il manque encore : "
+    ),
+    "en": (
+        "Saved, your listing is created. "
+        "To publish it, the following is still missing: "
+    ),
+}
+
+_JOIN_WORD: dict[str, str] = {"fr": " et ", "en": " and "}
+_EMPTY_LIST: dict[str, str] = {"fr": "rien", "en": "nothing"}
 
 
-def _join_fr(items: list[str]) -> str:
+def _missing_listing_reply(missing: tuple[str, ...], language: str) -> str:
+    labels_by_code = _MISSING_LABELS.get(language, _MISSING_LABELS[_LANG_FR])
+    labels = [labels_by_code.get(code, code) for code in missing]
+    return _copy(_MISSING_LISTING_INTRO, language) + _join(labels, language) + "."
+
+
+def _join(items: list[str], language: str) -> str:
     if not items:
-        return "rien"
+        return _copy(_EMPTY_LIST, language)
     if len(items) == 1:
         return items[0]
-    return ", ".join(items[:-1]) + " et " + items[-1]
+    return ", ".join(items[:-1]) + _copy(_JOIN_WORD, language) + items[-1]
 
 
 # A WhatsApp thread is not a results page: five properties is already a long
 # message, and the catalogue is read again on the next criteria anyway.
 SEARCH_RESULT_LIMIT = 5
 
-_SEARCH_UNAVAILABLE_TEXT = (
-    "Je n'ai pas pu lancer la recherche pour le moment. "
-    "Réessayez dans un instant, ou reformulez votre demande."
-)
+_SEARCH_UNAVAILABLE_TEXT: dict[str, str] = {
+    "fr": (
+        "Je n'ai pas pu lancer la recherche pour le moment. "
+        "Réessayez dans un instant, ou reformulez votre demande."
+    ),
+    "en": (
+        "I could not run the search for now. "
+        "Please try again in a moment, or rephrase your request."
+    ),
+}
 
-_NO_RESULTS_TEXT = (
-    "Je n'ai rien trouvé pour le moment avec ces critères. "
-    "Vous pouvez élargir la recherche : changez le quartier, la ville ou le budget."
-)
+_NO_RESULTS_TEXT: dict[str, str] = {
+    "fr": (
+        "Je n'ai pas encore de logement qui corresponde à votre budget. "
+        "Pour trouver plus vite, vous pouvez élargir la recherche : changez le "
+        "quartier, la ville ou le budget, et je relance tout de suite."
+    ),
+    "en": (
+        "I don't have a property matching your budget yet. To find one faster, "
+        "you can widen the search: change the neighbourhood, the city or the "
+        "budget, and I'll run it again right away."
+    ),
+}
 
-_SEARCH_OUTRO = "Répondez avec le numéro du logement qui vous intéresse."
+_SEARCH_OUTRO: dict[str, str] = {
+    "fr": "Répondez avec le numéro du logement qui vous intéresse.",
+    "en": "Reply with the number of the property you are interested in.",
+}
 
-_PROPERTY_TYPE_LABELS_FR: dict[str, str] = {
-    "APARTMENT": "Appartement",
-    "COMMERCIAL": "Local commercial",
-    "DUPLEX": "Duplex",
-    "HOUSE": "Maison",
-    "LAND": "Terrain",
-    "LOFT": "Loft",
-    "ROOM": "Chambre",
-    "STUDIO": "Studio",
+_PROPERTY_TYPE_LABELS: dict[str, dict[str, str]] = {
+    "fr": {
+        "APARTMENT": "Appartement",
+        "COMMERCIAL": "Local commercial",
+        "DUPLEX": "Duplex",
+        "HOUSE": "Maison",
+        "LAND": "Terrain",
+        "LOFT": "Loft",
+        "ROOM": "Chambre",
+        "STUDIO": "Studio",
+    },
+    "en": {
+        "APARTMENT": "Apartment",
+        "COMMERCIAL": "Commercial space",
+        "DUPLEX": "Duplex",
+        "HOUSE": "House",
+        "LAND": "Land",
+        "LOFT": "Loft",
+        "ROOM": "Room",
+        "STUDIO": "Studio",
+    },
+}
+
+_BEDROOM_LABELS: dict[str, tuple[str, str]] = {
+    "fr": ("chambre", "chambres"),
+    "en": ("bedroom", "bedrooms"),
+}
+
+_PRICE_SUFFIX: dict[str, str] = {"fr": "FCFA/mois", "en": "FCFA/month"}
+
+_RESULTS_INTRO: dict[str, str] = {
+    "fr": "J'ai trouvé {count} {word} :",
+    "en": "I found {count} {word}:",
+}
+
+_RESULTS_WORD: dict[str, tuple[str, str]] = {
+    "fr": ("logement", "logements"),
+    "en": ("property", "properties"),
 }
 
 
@@ -1071,24 +1250,30 @@ def _format_xaf(amount: int) -> str:
     return f"{amount:,}".replace(",", " ")
 
 
-def _hit_line(index: int, hit: ConversationPropertyHit) -> str:
-    kind = _PROPERTY_TYPE_LABELS_FR.get(hit.property_type, hit.property_type.title())
+def _hit_line(index: int, hit: ConversationPropertyHit, language: str) -> str:
+    types = _PROPERTY_TYPE_LABELS.get(language, _PROPERTY_TYPE_LABELS[_LANG_FR])
+    kind = types.get(hit.property_type, hit.property_type.title())
     details = [kind]
     if hit.bedrooms:
-        details.append(f"{hit.bedrooms} chambre{'s' if hit.bedrooms > 1 else ''}")
+        singular, plural = _BEDROOM_LABELS.get(language, _BEDROOM_LABELS[_LANG_FR])
+        details.append(f"{hit.bedrooms} {plural if hit.bedrooms > 1 else singular}")
     if hit.surface_m2:
         details.append(f"{hit.surface_m2} m2")
     place = ", ".join(part for part in (hit.neighbourhood, hit.city) if part)
     # The price is the public one: rent plus charges when they are billed on
     # top, which is the number a tenant actually compares.
-    return f"{index}. {' '.join(details)} - {place} - {_format_xaf(hit.price_xaf)} FCFA/mois"
+    suffix = _copy(_PRICE_SUFFIX, language)
+    return f"{index}. {' '.join(details)} - {place} - {_format_xaf(hit.price_xaf)} {suffix}"
 
 
-def _results_text(hits: Sequence[ConversationPropertyHit]) -> str:
+def _results_text(hits: Sequence[ConversationPropertyHit], language: str) -> str:
     count = len(hits)
-    lines = [f"J'ai trouvé {count} {'logement' if count == 1 else 'logements'} :"]
-    lines.extend(_hit_line(index, hit) for index, hit in enumerate(hits, start=1))
-    lines.append(_SEARCH_OUTRO)
+    singular, plural = _RESULTS_WORD.get(language, _RESULTS_WORD[_LANG_FR])
+    word = singular if count == 1 else plural
+    intro = _copy(_RESULTS_INTRO, language).format(count=count, word=word)
+    lines = [intro]
+    lines.extend(_hit_line(index, hit, language) for index, hit in enumerate(hits, start=1))
+    lines.append(_copy(_SEARCH_OUTRO, language))
     return "\n".join(lines)
 
 
@@ -1117,7 +1302,7 @@ def _search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
         city=city,
         neighbourhoods=(neighbourhood,) if neighbourhood else (),
         property_types=(str(property_type),) if property_type else (),
-        max_price_xaf=_optional_amount(rent),
+        budget_xaf=_optional_amount(rent),
         min_bedrooms=_optional_amount(bedrooms, minimum=1),
     )
 
@@ -1168,7 +1353,7 @@ def _collapse_repeats(text: str) -> str:
 def build_analysis_prompt(
     *,
     text: str | None,
-    language: str,
+    default_language: str,
     history: list[TurnSummary],
     flow: FlowName,
     step: FlowStep,
@@ -1187,7 +1372,11 @@ def build_analysis_prompt(
     public_known = _public_known_facts(known_facts)
     payload: dict[str, Any] = {
         "message": text or "",
-        "language": language if language in SUPPORTED_LANGUAGES else "fr",
+        # The language of the *message* is the model's to read; this is only the
+        # stand-in it keeps when the message is too short to tell.
+        "default_language": (
+            default_language if default_language in SUPPORTED_LANGUAGES else "fr"
+        ),
         "you_are_helping": _FLOW_ROLES.get(flow, _FLOW_ROLES[FlowName.SUPPORT]),
         "conversation": {
             "flow": flow.value,
@@ -1264,6 +1453,7 @@ def build_reply_prompt(
     next_key: str | None,
     history: list[TurnSummary],
     flow: FlowName,
+    known_facts: dict[str, Any],
 ) -> Prompt:
     """Ask the model to write the sentence this turn sends back.
 
@@ -1283,7 +1473,16 @@ def build_reply_prompt(
                 "understood": {
                     "intent": verdict.intent,
                     "accepted": verdict.accepted,
-                    "known_facts": verdict.facts.as_context() if verdict.accepted else {},
+                    # Everything the session holds, not only what this message
+                    # produced. A writer given one turn's extraction truthfully
+                    # reports having no memory, then invents a number to fill
+                    # the gap — and it is also how it asks for a field that was
+                    # answered three turns ago. This turn's facts win, because a
+                    # correction is the one case where they disagree.
+                    "known_facts": {
+                        **_public_known_facts(known_facts),
+                        **(verdict.facts.as_context() if verdict.accepted else {}),
+                    },
                 },
                 # None means "the message was not understood": ask for a rephrase
                 # rather than posing a question the platform never reached.

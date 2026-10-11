@@ -464,6 +464,66 @@ class TestAmountShorthand:
         assert classifier.shorthand_amount("2 millions") == 2_000_000
 
 
+class TestSearchVersusListingRouting:
+    """To rent is the tenant's verb; to list is the landlord's.
+
+    "Je veux louer un studio" is a tenant looking, and reading "louer" as the
+    act of listing flipped the whole form onto the landlord's questions.
+    """
+
+    def test_renting_is_a_search_not_a_listing(self) -> None:
+        match = DeterministicClassifier().classify("je veux louer un studio moderne")
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+        assert match.entities["standing"] == "MODERN"
+        assert match.entities["property_type"] == "STUDIO"
+
+    def test_owning_a_property_is_what_lists_it(self) -> None:
+        match = DeterministicClassifier().classify("je veux louer mon studio a douala")
+
+        assert match is not None
+        assert match.intent == "CREATE_PROPERTY"
+        assert match.entities["city"] == "Douala"
+
+    def test_a_message_the_regexes_miss_stays_undecided(self) -> None:
+        """The model is still the fallback reader: an intent the rules cannot
+        place returns nothing rather than a wrong guess."""
+        assert DeterministicClassifier().classify("quelle heure est il") is None
+
+
+class TestLocationEntity:
+    """A named place is a fact, and an unknown place is not."""
+
+    def test_a_known_city_is_read(self) -> None:
+        match = DeterministicClassifier().classify("je cherche un studio a Douala")
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+        assert match.entities["city"] == "Douala"
+
+    def test_a_district_carries_its_city(self) -> None:
+        match = DeterministicClassifier().classify("New Bell")
+
+        assert match is not None
+        assert match.intent == "COLLECT_LOCATION"
+        assert match.entities == {"city": "Douala", "neighbourhood": "New Bell"}
+
+    def test_a_city_with_an_unknown_district_keeps_the_city(self) -> None:
+        """Nkoabang is not in the index, but Yaoundé is: the message must still
+        resolve to the city rather than being dropped and asked again."""
+        match = DeterministicClassifier().classify("yaounde nkoabang")
+
+        assert match is not None
+        assert match.intent == "COLLECT_LOCATION"
+        assert match.entities["city"] == "Yaoundé"
+
+    def test_an_unknown_place_is_not_invented(self) -> None:
+        match = DeterministicClassifier().classify("je cherche a Wakanda")
+
+        assert match is None or "city" not in match.entities
+
+
 class TestPendingAnswerBinding:
     """A short answer means the open question, never the field of the month."""
 

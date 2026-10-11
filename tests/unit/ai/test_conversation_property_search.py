@@ -20,6 +20,7 @@ from loka.bounded_contexts.ai.application.ports import (
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
+    budget_band,
 )
 from loka.bounded_contexts.property.application.queries.search_properties import (
     PropertySearchCriteria,
@@ -91,7 +92,7 @@ class TestTranslation:
                 city="Yaoundé",
                 neighbourhoods=("Bastos",),
                 property_types=("APARTMENT", "STUDIO"),
-                max_price_xaf=180_000,
+                budget_xaf=180_000,
                 min_bedrooms=2,
             ),
             limit=5,
@@ -101,8 +102,11 @@ class TestTranslation:
             city="Yaoundé",
             neighbourhoods=("Bastos",),
             property_types=("APARTMENT", "STUDIO"),
-            max_price_xaf=180_000,
+            min_price_xaf=144_000,
+            max_price_xaf=189_000,
+            near_price_xaf=180_000,
             min_bedrooms=2,
+            sort="price_nearest",
         )
         assert reader.limit == 5
 
@@ -146,3 +150,26 @@ class TestTranslation:
         assert hits[0].bedrooms is None
         assert hits[0].surface_m2 is None
         assert hits[0].neighbourhood is None
+
+    async def test_without_a_budget_no_band_is_imposed(self) -> None:
+        """A search with no price stated stays a plain recent-first read."""
+        reader = StubSearchReader()
+        port = ConversationPropertySearch(FakeUnitOfWork(reader))
+
+        await port.search_for_conversation(ConversationSearchQuery(city="Douala"))
+
+        assert reader.criteria == PropertySearchCriteria(city="Douala")
+
+
+class TestBudgetBand:
+    """The budget is a target, not a ceiling: the band bounds how far it strays."""
+
+    def test_the_band_wraps_the_budget_asymmetrically(self) -> None:
+        assert budget_band(200_000) == (160_000, 210_000)
+
+    def test_a_listing_far_below_the_budget_is_left_out(self) -> None:
+        """90 000 should never surface a 50 000 room: too cheap reads as an insult."""
+        low, _ = budget_band(90_000)
+
+        assert low == 72_000
+        assert low > 50_000

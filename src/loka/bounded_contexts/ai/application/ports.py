@@ -78,16 +78,18 @@ class PropertyListing(Protocol):
 class ConversationSearchQuery:
     """One tenant search, stated in the facts the conversation accepted.
 
-    Deliberately not the Property context's search criteria: the pipeline knows
-    a city, a budget and a type, and a widening of the query language (a sort,
-    a cursor, a date filter) must not silently change what a conversation can
-    ask for. The adapter translates.
+    ``budget_xaf`` is the rent the tenant *asked for* — the centre of the band
+    the adapter matches around — not a hard ceiling. Deliberately not the
+    Property context's search criteria: the pipeline knows a city, a budget and
+    a type, and a widening of the query language (a sort, a cursor, a date
+    filter) must not silently change what a conversation can ask for. The
+    adapter translates.
     """
 
     city: str
     neighbourhoods: tuple[str, ...] = ()
     property_types: tuple[str, ...] = ()
-    max_price_xaf: int | None = None
+    budget_xaf: int | None = None
     min_bedrooms: int | None = None
 
 

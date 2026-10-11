@@ -219,6 +219,20 @@ class ConversationSession(AggregateRoot):
         self.assigned_property_id = None
         self._touch(now)
 
+    def record_pending_question(self, asked: str | None) -> None:
+        """Remember the question this turn actually asked, or that none was.
+
+        Clearing matters as much as writing. A question left behind after a turn
+        that asked nothing keeps describing something nobody said, and the next
+        short answer — a bare number, a bare "oui" — is then bound to that stale
+        field. Nothing looks wrong while it happens: the state is populated, the
+        logs are clean, and only the conversation makes no sense.
+        """
+        if asked:
+            self.context["next_question"] = asked
+        else:
+            self.context.pop("next_question", None)
+
     def _touch(self, now: datetime) -> None:
         self.revision += 1
         self.last_step_at = ensure_utc(now)

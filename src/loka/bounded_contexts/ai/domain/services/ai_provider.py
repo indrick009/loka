@@ -11,6 +11,25 @@ from typing import Any, Protocol
 
 from loka.shared.domain.errors import ExternalServiceUnavailable
 
+# The languages a conversation may be held in. Defined next to ``IntentResult``
+# because the model reports the conversation's language through that record, and
+# the pipeline stores it only to fall back on when a later message is too short
+# to tell ("150000" has no language of its own).
+SUPPORTED_LANGUAGES = frozenset({"fr", "en"})
+
+
+def normalise_language(value: Any, *, default: str | None = None) -> str | None:
+    """Read the language tag the model reported, or ``default`` if unusable.
+
+    The model answers with a bare code (``fr``), but a vendor sometimes adds a
+    region (``en-US``); the first two letters are what a conversation keeps.
+    """
+    if isinstance(value, str):
+        candidate = value.strip().casefold()[:2]
+        if candidate in SUPPORTED_LANGUAGES:
+            return candidate
+    return default
+
 
 class AIProvider(Protocol):
     @property
@@ -66,22 +85,63 @@ class IntentResult:
     def from_structured(
         cls, payload: dict[str, Any], *, language: str = "fr"
     ) -> IntentResult:
-        confidence = float(payload.get("confidence", 0.0))
-        if not 0.0 <= confidence <= 1.0:
-            raise ExternalServiceUnavailable(
-                "AI returned an out-of-range confidence", context={"confidence": confidence}
-            )
-        entities = payload.get("entities")
-        if not isinstance(entities, dict):
-            raise ExternalServiceUnavailable("AI returned a malformed entity map")
+        confidence = _confidence_of(payload.get("confidence", 0.0))
+        entities = _entities_of(payload.get("entities"))
         reply = payload.get("reply")
         return cls(
             intent=str(payload.get("intent", "UNKNOWN")),
             confidence=confidence,
             entities=entities,
-            language=language,
+            # The model read the message, so it decides the language; the caller's
+            # value is only the fallback for a completion that omitted it.
+            language=normalise_language(payload.get("language")) or language,
             reply=reply.strip() if isinstance(reply, str) and reply.strip() else None,
         )
+
+
+def _confidence_of(raw: Any) -> float:
+    """How sure the model says it is, or one typed failure.
+
+    ``float(None)`` and ``float([])`` raise ``TypeError``, not ``ValueError``,
+    and neither is a ``DomainError``: they escaped the adapter untyped and
+    killed the consumer on a path no handler was watching. Every bad answer a
+    provider can give has to arrive as the same typed error, or the pipeline
+    cannot decide whether to retry.
+    """
+    try:
+        confidence = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ExternalServiceUnavailable(
+            "AI returned a non-numeric confidence", context={"confidence": repr(raw)}
+        ) from exc
+    if not 0.0 <= confidence <= 1.0:
+        raise ExternalServiceUnavailable(
+            "AI returned an out-of-range confidence", context={"confidence": confidence}
+        )
+    return confidence
+
+
+def _entities_of(raw: Any) -> dict[str, Any]:
+    """The candidate facts, or an empty map when the model found none.
+
+    A model asked about a greeting or a meta-question has nothing to extract,
+    and roughly a third of the time it says so by writing ``null`` rather than
+    ``{}``. Refusing that answer cost **28% of all turns**: the exception
+    escaped the analysis, the consumer retried, and the user received no reply
+    at all — see ``docs/conversation-defects-v1.md`` (D1).
+
+    So "nothing extracted" is an ordinary outcome and passes through empty. A
+    map of the wrong type is not: that is a broken contract, and keeping it an
+    error is what buys one more sample from the provider and keeps the failure
+    visible in the metrics instead of silently emptying the facts.
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ExternalServiceUnavailable(
+            "AI returned a malformed entity map", context={"entities": type(raw).__name__}
+        )
+    return raw
 
 
 @dataclass(frozen=True, slots=True)

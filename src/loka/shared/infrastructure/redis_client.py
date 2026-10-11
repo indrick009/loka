@@ -7,6 +7,7 @@ performance optimisation whose loss only costs efficiency, never correctness.
 from __future__ import annotations
 
 import asyncio
+import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -18,9 +19,25 @@ from loka.shared.infrastructure.metrics import cache_operations_total
 
 _logger = get_logger(__name__)
 
+# Short enough that a freed lock is picked up promptly, long enough not to
+# hammer Redis while a turn runs.
+_LOCK_POLL_SECONDS = 0.25
+
 
 class NotAcquired(RuntimeError):
-    pass
+    """The lock is held by someone else. Try again shortly."""
+
+
+class LockBackendUnavailable(NotAcquired):
+    """The lock could not even be attempted: Redis itself is unreachable.
+
+    A subclass, so every ``except NotAcquired`` keeps failing closed — losing
+    mutual exclusion because the backend is down would be far worse than
+    delaying the work. But the two are different incidents: contention clears
+    by itself in seconds, an outage hits every conversation at once, and an
+    operator told "already being analysed" during an outage goes looking for a
+    stuck worker instead of for Redis.
+    """
 
 
 class RateLimiter(Protocol):
@@ -85,20 +102,42 @@ class RedisLock:
     end
     """
 
-    def __init__(self, redis: Redis, *, name: str, ttl_ms: int = 10_000) -> None:
+    def __init__(
+        self,
+        redis: Redis,
+        *,
+        name: str,
+        ttl_ms: int = 10_000,
+        wait_ms: int = 0,
+    ) -> None:
         self._redis = redis
         self._key = f"lock:{name}"
         self._ttl_ms = ttl_ms
-        self._token = f"{id(self)}:{asyncio.get_running_loop().time()}"
+        # How long to keep trying before giving up. Zero keeps the original
+        # fail-fast behaviour; a caller whose retry budget is shorter than the
+        # work it serialises needs to wait here instead, or its second message
+        # dead-letters while the first is still being processed.
+        self._wait_ms = wait_ms
+        # Globally unique. ``id(self)`` is only unique within one process, so
+        # two workers could mint the same token and one would then release the
+        # other's lock — the single failure this lock exists to prevent.
+        self._token = uuid.uuid4().hex
 
     async def __aenter__(self) -> RedisLock:
-        try:
-            acquired = await self._redis.set(self._key, self._token, nx=True, px=self._ttl_ms)
-        except RedisError as exc:
-            raise NotAcquired(f"lock backend unavailable: {exc}") from exc
-        if not acquired:
-            raise NotAcquired(f"could not acquire lock {self._key}")
-        return self
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._wait_ms / 1000
+        while True:
+            try:
+                acquired = await self._redis.set(
+                    self._key, self._token, nx=True, px=self._ttl_ms
+                )
+            except RedisError as exc:
+                raise LockBackendUnavailable(f"lock backend unavailable: {exc}") from exc
+            if acquired:
+                return self
+            if loop.time() >= deadline:
+                raise NotAcquired(f"could not acquire lock {self._key}")
+            await asyncio.sleep(_LOCK_POLL_SECONDS)
 
     async def __aexit__(self, *exc_info: object) -> None:
         try:

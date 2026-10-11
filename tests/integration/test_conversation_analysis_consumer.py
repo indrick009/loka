@@ -237,7 +237,7 @@ class TestEndToEnd:
         async with database.session() as session:
             row = await session.get(ConversationSessionRow, session_id)
         assert row is not None
-        assert row.step == "COLLECT_LOCATION"
+        assert row.step == "COLLECT_STANDING"
         assert row.context_json["property_type"] == "APARTMENT"
 
     async def test_a_redelivered_request_is_recorded_twice_but_changes_nothing(
@@ -261,7 +261,7 @@ class TestEndToEnd:
             row = await session.get(ConversationSessionRow, session_id)
         assert row is not None
         # Two turns, one step: the facts were already known, so nothing moved.
-        assert row.step == "COLLECT_LOCATION"
+        assert row.step == "COLLECT_STANDING"
 
 
 async def _wait_for_count(
@@ -346,7 +346,7 @@ class TestPipelineDisabled:
         async with database.session() as session:
             row = await session.get(ConversationSessionRow, session_id)
         assert row is not None
-        assert row.step == "COLLECT_LOCATION"
+        assert row.step == "COLLECT_STANDING"
 
     async def test_an_ambiguous_message_is_recorded_as_unknown_when_disabled(
         self,

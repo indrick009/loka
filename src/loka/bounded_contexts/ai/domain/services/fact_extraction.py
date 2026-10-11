@@ -165,6 +165,10 @@ QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_AVAILABILITY: "ask.availability",
     FlowStep.COLLECT_CONDITIONS: "ask.conditions",
     FlowStep.CONFIRM_PROPERTY: "ask.confirm_property",
+    # Reached once the listing is saved but the quality gate still wants photos.
+    # With no key here the landlord was told "c'est bien noté" and never asked
+    # for the one thing standing between a draft and a published listing.
+    FlowStep.COLLECT_MEDIA: "ask.media",
     FlowStep.PUBLISHED: "confirm.published",
 }
 
@@ -399,6 +403,28 @@ def question_key_for(step: FlowStep | None, flow: FlowName | None = None) -> str
         if search_key is not None:
             return search_key
     return QUESTION_BY_STEP.get(step)
+
+
+def question_to_ask(
+    *, next_step: FlowStep | None, flow: FlowName, pending: str | None
+) -> str | None:
+    """The question this turn puts to the user, decided once and in one place.
+
+    The form's next question comes first. When the turn moved no field — a
+    thank-you, a confirmation, a question about what Kora already knows — the
+    one still open is asked again instead of nothing, because a turn that
+    acknowledges and then asks nothing reads as the end of the conversation.
+    That was the single most common dead end in the thread: "c'est bien noté,
+    je vous pose la question suivante dès que j'ai besoin d'une précision",
+    followed by silence.
+
+    ``None`` means there is genuinely nothing open — a greeting on a fresh
+    session — and the outbound layer answers with what Kora can do instead.
+
+    Callers record exactly what this returns, which is what keeps the stored
+    pending question and the question actually asked from drifting apart.
+    """
+    return question_key_for(next_step, flow) or pending
 
 
 def _as_int(raw: Any) -> int:

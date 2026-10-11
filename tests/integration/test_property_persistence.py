@@ -302,3 +302,38 @@ async def test_search_excludes_archived_and_other_cities(session: AsyncSession) 
     search = PropertySearchRepository(session)
     result = await search.search(PropertySearchCriteria(city="Douala"))
     assert result.items == []
+
+
+async def test_price_nearest_orders_by_distance_to_the_budget(session: AsyncSession) -> None:
+    """A tenant's budget is a target: the closest prices come first, and the band
+    keeps a place far too cheap or far too dear off the screen."""
+    landlord_id = uuid.uuid4()
+    now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    repository = SqlAlchemyPropertyRepository(session)
+    projected: list[Property] = []
+    # The public price is rent + the 25 000 charges added by ``_listing``.
+    for index, rent in enumerate((95_000, 120_000, 130_000, 200_000)):
+        prop = _listing(landlord_id, now=now + timedelta(minutes=index), price=rent)
+        prop.publish(now=now + timedelta(minutes=index), actor_id=landlord_id)
+        prop.mark_verified(now=now + timedelta(minutes=index))
+        await repository.add(prop)
+        projected.append(prop)
+    await session.commit()
+    await _project(session, projected)
+
+    search = PropertySearchRepository(session)
+    result = await search.search(
+        PropertySearchCriteria(
+            city="Douala",
+            min_price_xaf=120_000,
+            max_price_xaf=157_500,
+            near_price_xaf=150_000,
+            sort="price_nearest",
+        )
+    )
+
+    # Public prices 120 000 / 145 000 / 155 000 / 225 000: the 225 000 is out of
+    # band, then the 145 000 (5 000 off) beats the 155 000 (also 5 000 off) on the
+    # price tie-break, and the 120 000 is last.
+    assert [item["price_xaf"] for item in result.items] == [145_000, 155_000, 120_000]
+    assert result.next_cursor is None

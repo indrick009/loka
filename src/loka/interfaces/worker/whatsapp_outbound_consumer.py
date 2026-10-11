@@ -83,6 +83,7 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             reply_kind=reply_kind,
             question_key=_optional_str(metadata, "question_key"),
             intent=_optional_str(metadata, "intent"),
+            language=_optional_str(metadata, "language"),
         )
 
         # A conversation may not answer faster than the platform can absorb its
