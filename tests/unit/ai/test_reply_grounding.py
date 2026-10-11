@@ -25,30 +25,31 @@ from typing import Any
 
 import pytest
 
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
-    _Verdict,
-    build_reply_prompt,
-)
+from loka.bounded_contexts.ai.application.services.prompts import build_reply_prompt
 from loka.bounded_contexts.ai.domain.services.fact_extraction import ExtractedFacts
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     FlowName,
-    FlowStep,
 )
 
 pytestmark = pytest.mark.unit
 
 
-def a_verdict(**overrides: Any) -> _Verdict:
-    """The accepted outcome of a turn, as ``_apply`` hands it over."""
+def an_outcome(**overrides: Any) -> dict[str, Any]:
+    """The accepted outcome of a turn, as ``_compose_reply`` hands it over.
+
+    Three plain values, not the use case's verdict object: the prompt builder
+    takes what it reads, so a test of the prompt needs nothing from the state
+    machine.
+    """
     base: dict[str, Any] = {
         "intent": "COLLECT_LOCATION",
-        "facts": ExtractedFacts(facts={"location": {"city": "Yaoundé"}}),
         "accepted": True,
-        "reason": None,
-        "next_step": FlowStep.COLLECT_PRICE,
+        "accepted_facts": ExtractedFacts(
+            facts={"location": {"city": "Yaoundé"}}
+        ).as_context(),
     }
     base.update(overrides)
-    return _Verdict(**base)
+    return base
 
 
 def payload_of(
@@ -57,7 +58,7 @@ def payload_of(
     prompt = build_reply_prompt(
         text="c'est à Biyem-Assi",
         language="fr",
-        verdict=a_verdict(),
+        **an_outcome(),
         next_key=next_key,
         history=[],
         flow=FlowName.PROPERTY_CREATION,

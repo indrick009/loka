@@ -335,11 +335,22 @@ Piloté par « lancer Housing », pas par « préparer 4 domaines » :
 6. **D9, D12 à D20** — par ordre de gêne constatée.
 
 Contraintes de code pour tous ces travaux : pas de gros fichiers, DDD,
-hexagonal, modulaire, SOLID. `analyse_conversation_message.py` fait aujourd'hui
-1 441 lignes et porte l'orchestration, la construction des prompts, la
-présentation des résultats et la confirmation d'annonce ; plusieurs correctifs
-ci-dessus sont l'occasion de l'éclater derrière des ports explicites plutôt que
-de l'allonger.
+hexagonal, modulaire, SOLID.
+
+`analyse_conversation_message.py` portait l'orchestration, la construction des
+prompts, la présentation des résultats et la confirmation d'annonce — 1 441
+lignes au moment du relevé, 1 654 après D3. Éclaté depuis le long de la ligne
+que ce relevé traçait :
+
+| Module | Rôle | Lignes |
+| --- | --- | --- |
+| `application/services/prompts.py` | *comment on demande* : persona, règle de prix, les deux prompts, le schéma de réponse, les gloses de questions | 462 |
+| `application/services/conversation_copy.py` | *les mots* que la plateforme écrit elle-même, FR et EN : champs manquants, résultats de recherche | 269 |
+| `use_cases/analyse_conversation_message.py` | *ce qui arrive ensuite* : la machine à états | 1 021 |
+
+`build_reply_prompt` ne reçoit plus le `_Verdict` du use case mais les trois
+valeurs qu'il lit (`intent`, `accepted`, `accepted_facts`) : prendre l'objet
+aurait fait importer au module de prompts la machine à états qui l'importe.
 
 ## Outillage
 
