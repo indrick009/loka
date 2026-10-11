@@ -33,6 +33,9 @@ class ServiceFeePaymentRow(Base):
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="CREATED")
     provider: Mapped[str | None] = mapped_column(String(32), nullable=True)
     provider_reference: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    # The hosted checkout page. Text, not String(n): a provider may lengthen
+    # its URLs without warning, and a truncated payment link is unusable.
+    provider_checkout_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
     callback_signature: Mapped[str | None] = mapped_column(String(128), nullable=True)
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)

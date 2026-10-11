@@ -31,7 +31,13 @@ class RawCallbackRecord:
 
 
 class PaymentRepository(Protocol):
-    """Lookups are keyed on the pair being unlocked: a tenant and a listing."""
+    """Lookups are keyed on the pair being unlocked: a tenant and a listing.
+
+    ``get_awaiting_confirmation`` is the exception, and the one query not asked
+    on behalf of a user: payments left pending because their webhook was never
+    delivered. A provider that does not retry makes this the difference between
+    a payer who is credited and one who is not.
+    """
 
     async def get(self, payment_id: Any) -> ServiceFeePayment | None: ...
 
@@ -46,6 +52,10 @@ class PaymentRepository(Protocol):
     async def get_by_provider_reference(
         self, provider: str, provider_reference: str
     ) -> ServiceFeePayment | None: ...
+
+    async def get_awaiting_confirmation(
+        self, *, provider: str, initiated_before: datetime, limit: int
+    ) -> list[ServiceFeePayment]: ...
 
     async def add(self, payment: ServiceFeePayment) -> None: ...
 

@@ -67,25 +67,9 @@ class GetServiceAccessStatusUseCase:
             )
 
         return ServiceAccessStatus(
-            payment=_payment_view(payment) if payment else None,
+            payment=PaymentStatusView.of(payment) if payment else None,
             grant=_grant_view(grant) if grant else None,
         )
-
-
-def _payment_view(payment: Any) -> PaymentStatusView:
-    return PaymentStatusView(
-        payment_id=str(payment.id),
-        status=payment.status.value,
-        amount_xaf=payment.amount.amount,
-        currency=payment.amount.currency,
-        purpose=payment.purpose.value,
-        provider=payment.provider,
-        provider_reference=payment.provider_reference,
-        attempt_count=payment.attempt_count,
-        expires_at=payment.expires_at,
-        paid_at=payment.paid_at,
-        settled=payment.is_settled,
-    )
 
 
 def _grant_view(grant: Any) -> ServiceAccessStatusView:

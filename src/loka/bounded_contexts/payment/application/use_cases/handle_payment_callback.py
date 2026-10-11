@@ -6,11 +6,18 @@ already-verified verdict. Settlement is idempotent on replay: the callback
 record's unique constraint, the aggregate's ``mark_succeeded`` guard and the
 one-active-grant-per-(tenant, listing) partial index all make duplicate
 delivery harmless.
+
+Verification is not confirmation. Some providers sign the body, which proves
+what they said; others, Fapshi among them, only echo a shared secret in a
+header, which proves who called and nothing about what the body contains.
+Where a :class:`PaymentStatusSource` exists, the announced status is therefore
+replaced by the one fetched from the provider before anything settles, and the
+webhook is downgraded to what it really is — a prompt to go and look.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -22,9 +29,11 @@ from loka.bounded_contexts.payment.application.dto.payment_dto import (
 )
 from loka.bounded_contexts.payment.application.ports import (
     PaymentGateway,
+    PaymentStatusSource,
     VerifiedCallback,
 )
 from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
+    CALLBACK_TOLERANCE_SECONDS,
     ServiceAccessGrant,
     ServiceFeePayment,
 )
@@ -71,10 +80,12 @@ class HandlePaymentCallbackUseCase:
         uow: UnitOfWork,
         *,
         gateway: PaymentGateway,
+        status_source: PaymentStatusSource | None = None,
         logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         self._uow = uow
         self._gateway = gateway
+        self._status_source = status_source
         self._logger = logger or structlog.get_logger(self.name)
 
     async def execute(
@@ -102,10 +113,16 @@ class HandlePaymentCallbackUseCase:
         if await callbacks.find(command.provider, verified.provider_event_id) is not None:
             return CallbackOutcome(replayed=True)
 
+        verified = await self._confirm(verified)
+
         callback = RawCallbackRecord(
             provider=command.provider,
             provider_event_id=verified.provider_event_id,
-            payload_signature=command.signature,
+            # Never the raw header. A provider that authenticates with a shared
+            # secret would have that secret copied into a table read by support
+            # tooling; the adapter's digest of the body is what disputes
+            # actually need anyway.
+            payload_signature=verified.audit_digest or command.signature,
             raw_payload=_record_payload(command.raw_body),
             payment_id=verified.payment_id,
             accepted=True,
@@ -145,6 +162,37 @@ class HandlePaymentCallbackUseCase:
             grant=_grant_view(grant) if grant else None,
         )
 
+    async def _confirm(self, announced: VerifiedCallback) -> VerifiedCallback:
+        """Turn what the provider said into what the provider confirms.
+
+        Run before the callback is recorded: a failed confirmation must leave
+        nothing behind, or the dedup row would make the next delivery — or the
+        reconciliation pass — look like a replay of an event that never
+        settled.
+        """
+        if self._status_source is None or announced.authoritative:
+            return announced
+
+        confirmed = await self._status_source.fetch_status(
+            provider_reference=announced.provider_reference
+        )
+        if confirmed.status != announced.status:
+            # Either a race, where the transaction moved on between the webhook
+            # and the fetch, or a forged body. Both are resolved the same way —
+            # the provider's answer wins — but the disagreement is worth seeing.
+            self._logger.warning(
+                "payment_callback_contradicted",
+                provider_reference=announced.provider_reference,
+                announced=announced.status,
+                confirmed=confirmed.status,
+            )
+        return replace(
+            confirmed,
+            provider_event_id=announced.provider_event_id,
+            audit_digest=announced.audit_digest,
+            payment_id=confirmed.payment_id or announced.payment_id,
+        )
+
     async def _settle(
         self,
         payment: ServiceFeePayment,
@@ -152,21 +200,47 @@ class HandlePaymentCallbackUseCase:
         now: datetime,
         signature: str,
     ) -> ServiceAccessGrant | None:
-        if verified.status.upper() == "FAILED":
+        payments: PaymentRepository = self._uow.repository("payment")
+        status = verified.status.upper()
+
+        if status == "FAILED":
             payment.mark_failed(
                 reason=verified.rejection_reason or "provider reported failure",
                 now=now,
             )
-            await self._uow.repository("payment").save(payment)
+            await payments.save(payment)
+            return None
+
+        if status == "EXPIRED":
+            # The payer never finished and the provider will take no more money
+            # on this handle. ``expire`` is a no-op on a payment that is already
+            # terminal, so an EXPIRED arriving after a success cannot undo it.
+            payment.expire(now=now)
+            await payments.save(payment)
+            return None
+
+        if status != "SUCCEEDED":
+            # CREATED or PENDING: nothing has happened yet. Recorded above,
+            # acted on here not at all — a transition invented for a pending
+            # payment is a free unlock.
+            self._logger.info(
+                "payment_callback_not_terminal",
+                payment_id=str(payment.id),
+                status=status,
+            )
             return None
 
         payment.mark_succeeded(
             provider_reference=verified.provider_reference,
-            signature=signature,
+            signature=verified.audit_digest or signature,
             now=now,
             provider_reported_at=verified.provider_reported_at,
+            # A fetched verdict may be old: reconciliation exists precisely to
+            # settle a payment made an hour ago. A pushed one must be fresh,
+            # because an old pushed message cannot be told from a replayed one.
+            tolerance_seconds=None if verified.authoritative else CALLBACK_TOLERANCE_SECONDS,
         )
-        await self._uow.repository("payment").save(payment)
+        await payments.save(payment)
 
         grants: AccessGrantRepository = self._uow.repository("payment_grant")
         grant = await grants.get_active_for_listing(payment.tenant_id, payment.property_id)
@@ -187,19 +261,7 @@ def _record_payload(raw_body: bytes) -> dict[str, Any]:
 
 
 def _payment_view(payment: ServiceFeePayment) -> PaymentStatusView:
-    return PaymentStatusView(
-        payment_id=str(payment.id),
-        status=payment.status.value,
-        amount_xaf=payment.amount.amount,
-        currency=payment.amount.currency,
-        purpose=payment.purpose.value,
-        provider=payment.provider,
-        provider_reference=payment.provider_reference,
-        attempt_count=payment.attempt_count,
-        expires_at=payment.expires_at,
-        paid_at=payment.paid_at,
-        settled=payment.is_settled,
-    )
+    return PaymentStatusView.of(payment)
 
 
 def _grant_view(grant: ServiceAccessGrant) -> ServiceAccessStatusView:

@@ -7,6 +7,7 @@ callback, so they must not share a virtual method name.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -96,6 +97,29 @@ class SqlAlchemyPaymentRepository:
         )
         row = result.scalar_one_or_none()
         return payment_from_row(row) if row is not None else None
+
+    async def get_awaiting_confirmation(
+        self, *, provider: str, initiated_before: datetime, limit: int
+    ) -> list[ServiceFeePayment]:
+        """Payments that have a provider handle and no verdict.
+
+        Ordered oldest first so a backlog drains in the order the payers
+        waited, and bounded by ``limit`` because the provider rate-limits the
+        status endpoint: a sweep that asks about everything asks about nothing.
+        Served by ``ix_payment_status_time``.
+        """
+        result = await self._session.execute(
+            select(ServiceFeePaymentRow)
+            .where(
+                ServiceFeePaymentRow.provider == provider,
+                ServiceFeePaymentRow.status == "PENDING_CONFIRMATION",
+                ServiceFeePaymentRow.provider_reference.is_not(None),
+                ServiceFeePaymentRow.updated_at < initiated_before,
+            )
+            .order_by(ServiceFeePaymentRow.updated_at.asc())
+            .limit(limit)
+        )
+        return [payment_from_row(row) for row in result.scalars().all()]
 
     async def add(self, payment: ServiceFeePayment) -> None:
         self._session.add(ServiceFeePaymentRow(**payment_to_row(payment)))

@@ -24,6 +24,11 @@ from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
 
 CALLBACK_TOLERANCE_SECONDS = 300
+
+# How long a payment handle lives when the provider states no window of its
+# own. Overridden per initiation by providers that do: Fapshi keeps a payment
+# link payable for 24 hours.
+DEFAULT_LINK_TTL_SECONDS = 1800
 GRANT_TTL_DAYS = 30
 
 
@@ -75,6 +80,7 @@ class ServiceFeePayment(AggregateRoot):
         "payment_id",
         "property_id",
         "provider",
+        "provider_checkout_url",
         "provider_reference",
         "purpose",
         "status",
@@ -106,12 +112,16 @@ class ServiceFeePayment(AggregateRoot):
         self.status = PaymentStatus.CREATED
         self.provider: str | None = None
         self.provider_reference: str | None = None
+        # The page the payer actually opens. Stored, not recomputed: a hosted
+        # checkout URL is the provider's to mint, so a payer who lost the
+        # message can only be sent the same link again if we kept it.
+        self.provider_checkout_url: str | None = None
         self.idempotency_key = idempotency_key
         self.callback_signature: str | None = None
         self.paid_at: datetime | None = None
         self.failure_reason: str | None = None
         self.attempt_count = 0
-        self.expires_at = ensure_utc(now) + timedelta(minutes=30)
+        self.expires_at = ensure_utc(now) + timedelta(seconds=DEFAULT_LINK_TTL_SECONDS)
         self.created_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
 
@@ -130,7 +140,16 @@ class ServiceFeePayment(AggregateRoot):
         provider: str,
         provider_reference: str,
         now: datetime,
+        checkout_url: str | None = None,
+        link_ttl_seconds: int | None = None,
     ) -> None:
+        """Bind this payment to a provider handle.
+
+        ``link_ttl_seconds`` is how long that provider will keep accepting
+        money. When it says nothing, the platform's own half-hour applies; when
+        it does, its window wins, because telling a payer their link expired
+        while the provider would still honour it costs a sale for nothing.
+        """
         if self.status not in (PaymentStatus.CREATED, PaymentStatus.FAILED):
             raise InvalidStateTransition(
                 f"cannot initiate a payment in state {self.status.value}",
@@ -138,9 +157,12 @@ class ServiceFeePayment(AggregateRoot):
             )
         self.provider = provider
         self.provider_reference = provider_reference
+        self.provider_checkout_url = checkout_url
         self.status = PaymentStatus.PENDING_CONFIRMATION
         self.attempt_count += 1
-        self.expires_at = ensure_utc(now) + timedelta(minutes=30)
+        self.expires_at = ensure_utc(now) + timedelta(
+            seconds=link_ttl_seconds or DEFAULT_LINK_TTL_SECONDS
+        )
         self.failure_reason = None
         self._touch(now)
         self.record(
@@ -161,11 +183,20 @@ class ServiceFeePayment(AggregateRoot):
         signature: str,
         now: datetime,
         provider_reported_at: datetime | None = None,
+        tolerance_seconds: int | None = CALLBACK_TOLERANCE_SECONDS,
     ) -> ServiceFeePayment:
         """Apply a verified gateway callback.
 
         Idempotent: replaying the same callback is a no-op, which is what makes
         duplicate webhook delivery safe.
+
+        ``tolerance_seconds`` is how stale a reported payment time may be. The
+        window exists so a captured callback cannot be replayed days later to
+        unlock a listing for free. ``None`` disables it, and is only correct
+        when the caller fetched this verdict from the provider itself: then the
+        age of the message proves nothing, because there was no message —
+        which is exactly the case when reconciliation finds a payment made an
+        hour ago and still owed its grant.
         """
         if self.status is PaymentStatus.SUCCEEDED:
             if self.provider_reference != provider_reference:
@@ -182,7 +213,10 @@ class ServiceFeePayment(AggregateRoot):
             raise InvalidStateTransition("payment must be initiated before it can complete")
 
         reported = ensure_utc(provider_reported_at or now)
-        if abs((ensure_utc(now) - reported).total_seconds()) > CALLBACK_TOLERANCE_SECONDS:
+        if (
+            tolerance_seconds is not None
+            and abs((ensure_utc(now) - reported).total_seconds()) > tolerance_seconds
+        ):
             raise InvalidStateTransition(
                 "callback timestamp is outside the tolerance window",
                 context={"now": now.isoformat(), "provider_reported_at": reported.isoformat()},

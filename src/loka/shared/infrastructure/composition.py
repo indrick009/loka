@@ -60,7 +60,10 @@ from loka.bounded_contexts.landlord.infrastructure.composition import (
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     MESSAGING_REPOSITORY_FACTORIES,
 )
-from loka.bounded_contexts.payment.application.ports import PaymentGateway
+from loka.bounded_contexts.payment.application.ports import (
+    PaymentGateway,
+    PaymentStatusSource,
+)
 from loka.bounded_contexts.payment.application.use_cases.get_service_access_status import (
     GetServiceAccessStatusUseCase,
 )
@@ -70,8 +73,14 @@ from loka.bounded_contexts.payment.application.use_cases.handle_payment_callback
 from loka.bounded_contexts.payment.application.use_cases.initiate_service_fee import (
     InitiateServiceFeeUseCase,
 )
+from loka.bounded_contexts.payment.application.use_cases.reconcile_pending_payments import (
+    ReconcilePendingPaymentsUseCase,
+)
 from loka.bounded_contexts.payment.infrastructure.composition import (
     PAYMENT_REPOSITORY_FACTORIES,
+)
+from loka.bounded_contexts.payment.infrastructure.gateways.fapshi_gateway import (
+    FapshiPaymentGateway,
 )
 from loka.bounded_contexts.payment.infrastructure.gateways.mock_gateway import (
     MockPaymentGateway,
@@ -142,12 +151,30 @@ def create_property_from_conversation_use_case(
 
 
 def payment_gateway(settings: Settings) -> PaymentGateway:
-    """Bind the configured payment provider. Only the mock exists today."""
+    """Bind the configured payment provider.
+
+    An unknown name raises rather than quietly falling back to the mock: a
+    production deploy with a typo in ``PAYMENT__GATEWAY`` would otherwise mint
+    fake references and grant every unlock for free.
+    """
     if settings.payment.gateway == "mock":
         return MockPaymentGateway(
             webhook_secret=settings.payment.webhook_secret.get_secret_value()
         )
+    if settings.payment.gateway == "fapshi":
+        return FapshiPaymentGateway(settings.payment.fapshi)
     raise ValueError(f"unsupported payment gateway: {settings.payment.gateway!r}")
+
+
+def payment_status_source(settings: Settings) -> PaymentStatusSource | None:
+    """The provider's own answer, where the provider offers one.
+
+    ``None`` is a complete answer, not a missing feature: a gateway that signs
+    its webhooks has already proved what it said, and there is nothing to go
+    and confirm.
+    """
+    gateway = payment_gateway(settings)
+    return gateway if isinstance(gateway, PaymentStatusSource) else None
 
 
 def initiate_service_fee_use_case(
@@ -163,7 +190,22 @@ def initiate_service_fee_use_case(
 def handle_payment_callback_use_case(
     uow: SqlAlchemyUnitOfWork, settings: Settings
 ) -> HandlePaymentCallbackUseCase:
-    return HandlePaymentCallbackUseCase(uow, gateway=payment_gateway(settings))
+    return HandlePaymentCallbackUseCase(
+        uow,
+        gateway=payment_gateway(settings),
+        status_source=payment_status_source(settings),
+    )
+
+
+def reconcile_pending_payments_use_case(
+    uow: SqlAlchemyUnitOfWork, settings: Settings
+) -> ReconcilePendingPaymentsUseCase:
+    source = payment_status_source(settings)
+    if source is None:
+        raise ValueError(
+            f"{settings.payment.gateway!r} cannot be reconciled: it exposes no status endpoint"
+        )
+    return ReconcilePendingPaymentsUseCase(uow, status_source=source)
 
 
 def get_service_access_status_use_case(

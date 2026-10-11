@@ -61,11 +61,16 @@ class InitiateServiceFeeUseCase:
         *,
         gateway: PaymentGateway,
         service_fee_xaf: int = 1000,
+        payment_message: str = "Kora - contact du bailleur",
         logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         self._uow = uow
         self._gateway = gateway
         self._service_fee_xaf = service_fee_xaf
+        # What the payer reads on the provider's checkout page and on their
+        # mobile-money confirmation. It is the only wording in this flow Kora
+        # does not control the layout of, so it stays short and names Kora.
+        self._payment_message = payment_message
         self._logger = logger or structlog.get_logger(self.name)
 
     async def execute(
@@ -122,6 +127,11 @@ class InitiateServiceFeeUseCase:
             initiation = await self._gateway.initiate(
                 payment_id=str(payment.id),
                 amount_xaf=payment.amount.amount,
+                # Named arguments a provider may ignore: whoever pays and why.
+                # A support question is then one search in the provider's own
+                # dashboard instead of a join nobody can run from there.
+                user_id=str(command.tenant_id),
+                message=self._payment_message,
             )
         except Exception as exc:  # provider boundary: any transport error is a gateway fault
             raise PaymentGatewayError(
@@ -136,6 +146,8 @@ class InitiateServiceFeeUseCase:
             provider=initiation.provider,
             provider_reference=initiation.provider_reference,
             now=now,
+            checkout_url=initiation.provider_url,
+            link_ttl_seconds=initiation.link_ttl_seconds,
         )
         if payment.persisted_version == 0:
             await payments.add(payment)
@@ -154,16 +166,4 @@ class InitiateServiceFeeUseCase:
 
     @staticmethod
     def _view(payment: ServiceFeePayment) -> PaymentStatusView:
-        return PaymentStatusView(
-            payment_id=str(payment.id),
-            status=payment.status.value,
-            amount_xaf=payment.amount.amount,
-            currency=payment.amount.currency,
-            purpose=payment.purpose.value,
-            provider=payment.provider,
-            provider_reference=payment.provider_reference,
-            attempt_count=payment.attempt_count,
-            expires_at=payment.expires_at,
-            paid_at=payment.paid_at,
-            settled=payment.is_settled,
-        )
+        return PaymentStatusView.of(payment)

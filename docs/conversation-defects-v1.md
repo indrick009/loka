@@ -18,7 +18,7 @@ appels réels ; **observé** sur au moins une occurrence en conversation ;
 
 ## État au 11 octobre 2026
 
-**Corrigés et vérifiés** : D1, D2, D3, D4, D5, D7, D8, D9, D13, D18 — 10 sur 20.
+**Corrigés et vérifiés** : D1, D2, D3, D4, D5, D7, D8, D9, D11, D13, D18 — 11 sur 20.
 
 | Défaut | Correction | Preuve |
 | --- | --- | --- |
@@ -39,7 +39,18 @@ sur 384 fichiers, **38 tests d'intégration** sur la zone touchée.
 Quatre assertions d'intégration périmées ont aussi été corrigées : elles
 attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 
-**Reste ouvert** : D6, D10, D11, D12, D14, D15, D16, D17, D19, D20.
+**Reste ouvert** : D6, D10, D12, D14, D15, D16, D17, D19, D20.
+
+**D11 — ce qui est fait et ce qui ne l'est pas.** L'intégration Fapshi est
+complète du côté du fournisseur : création du lien de paiement, authentification
+du webhook, confirmation de chaque notification contre `GET /payment-status`, et
+un rattrapage pour les webhooks jamais livrés (Fapshi n'en envoie qu'un, sans
+réessai). Ce qui manque est côté conversation : **aucun flux WhatsApp
+n'initie un paiement**. `InitiateServiceFeeUseCase` n'est appelé que par
+`POST /payments/listings/{id}/initiate`, une route authentifiée. Le locataire
+n'a donc pas encore de chemin vers son lien de paiement — c'est du travail de
+flux conversationnel, pas d'intégration, et il dépend de l'étape « choix d'une
+annonce » des résultats de recherche.
 
 ---
 
@@ -57,7 +68,7 @@ attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 | D8 | Le rédacteur n'a pas les faits de la session | Grave | **corrigé** |
 | D9 | Une fourchette interne divulguée comme engagement commercial | Grave | **corrigé** |
 | D10 | `AVAILABILITY_CHECK` déclaré, jamais implémenté | Grave | lu dans le code |
-| D11 | Aucun paiement réel — Fapshi absent | Grave | lu dans le code |
+| D11 | Aucun paiement réel — Fapshi absent | Grave | **corrigé** (côté fournisseur) |
 | D12 | Langue non persistante | Important | **observé** |
 | D13 | Identité instable | Important | **corrigé** |
 | D14 | Aucun compteur de répétition | Important | observé |
@@ -288,7 +299,7 @@ prix, un minimum ou un tarif. 20 formulations de la question.
 | # | Défaut | Mécanisme / preuve |
 | --- | --- | --- |
 | D10 | `AVAILABILITY_CHECK` jamais implémenté | Flow et intents présents dans `fact_extraction.py` et `conversation_session.py`, aucun use case. Or la spec en fait la condition bloquante avant tout paiement. |
-| D11 | Aucun paiement réel | `payment/infrastructure/gateways/` ne contient que `mock_gateway.py`. `service_fee_xaf=1000` est bien codé (`initiate_service_fee.py:53`), mais rien n'encaisse. |
+| D11 | Aucun paiement réel | `payment/infrastructure/gateways/` ne contenait que `mock_gateway.py`. `service_fee_xaf=1000` était bien codé, mais rien n'encaissait. **Corrigé** : `fapshi_gateway.py`, plus `reconcile_pending_payments.py` parce que Fapshi n'envoie qu'un webhook par événement et ne réessaie jamais. Reste le flux WhatsApp qui remet le lien au locataire. |
 | D12 | Langue non persistante | `:520` réécrit `session.language` à chaque message. Observé : fil anglais (`lang=en`) basculé en `fr` par une seule question française. |
 | D13 | Identité instable | `SYSTEM_PROMPT` (`:95-118`) écrit aussi `reply` et ne contient **aucune persona** ; `REPLY_SYSTEM_PROMPT` (`:128`) dit « You are Loka ». Deux rédacteurs, un sans nom → « Loka », « Kasa », compte « Kora ». |
 | D14 | Aucun compteur de répétition | `render_reply` est un lookup de dictionnaire. Observé : `ask.charges` envoyée 3× à l'identique. |
@@ -330,7 +341,7 @@ Piloté par « lancer Housing », pas par « préparer 4 domaines » :
 2. **D4, D5, D7, D8** — le cœur conversationnel : actes actionnables, état propre,
    rédacteur ancré.
 3. **D3** — le pipeline média, sans lequel Housing ne peut pas publier.
-4. **D10, D11** — disponibilité puis Fapshi : le revenu.
+4. **D10** — la disponibilité, puis le flux WhatsApp qui remet le lien de paiement : D11 est encaissable mais pas encore atteignable depuis une conversation.
 5. **D6** — cycle de vie des tâches ; indispensable au **deuxième** domaine.
 6. **D9, D12 à D20** — par ordre de gêne constatée.
 

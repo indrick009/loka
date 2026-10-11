@@ -7,13 +7,19 @@ aggregates upwards.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:  # pragma: no cover - import for typing only
+    from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
+        ServiceFeePayment,
+    )
 
 
 class PaymentStatusView:
     __slots__ = (
         "amount_xaf",
         "attempt_count",
+        "checkout_url",
         "currency",
         "expires_at",
         "paid_at",
@@ -39,6 +45,7 @@ class PaymentStatusView:
         expires_at: datetime,
         paid_at: datetime | None,
         settled: bool,
+        checkout_url: str | None = None,
     ) -> None:
         self.payment_id = payment_id
         self.status = status
@@ -51,6 +58,31 @@ class PaymentStatusView:
         self.expires_at = expires_at
         self.paid_at = paid_at
         self.settled = settled
+        self.checkout_url = checkout_url
+
+    @classmethod
+    def of(cls, payment: ServiceFeePayment) -> PaymentStatusView:
+        """The single place a payment becomes a response.
+
+        Three use cases answered the same question with three copies of this
+        mapping, so a field added for one of them was missing from the other
+        two. There is nothing to choose between them: a payment projects one
+        way.
+        """
+        return cls(
+            payment_id=str(payment.id),
+            status=payment.status.value,
+            amount_xaf=payment.amount.amount,
+            currency=payment.amount.currency,
+            purpose=payment.purpose.value,
+            provider=payment.provider,
+            provider_reference=payment.provider_reference,
+            attempt_count=payment.attempt_count,
+            expires_at=payment.expires_at,
+            paid_at=payment.paid_at,
+            settled=payment.is_settled,
+            checkout_url=payment.provider_checkout_url,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -65,6 +97,7 @@ class PaymentStatusView:
             "expires_at": self.expires_at.isoformat(),
             "paid_at": self.paid_at.isoformat() if self.paid_at else None,
             "settled": self.settled,
+            "checkout_url": self.checkout_url,
         }
 
 

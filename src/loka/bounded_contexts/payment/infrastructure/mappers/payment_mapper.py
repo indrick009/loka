@@ -38,6 +38,7 @@ def payment_to_row(payment: ServiceFeePayment) -> dict[str, Any]:
         "status": payment.status.value,
         "provider": payment.provider,
         "provider_reference": payment.provider_reference,
+        "provider_checkout_url": payment.provider_checkout_url,
         "idempotency_key": payment.idempotency_key,
         "callback_signature": payment.callback_signature,
         "failure_reason": payment.failure_reason,
@@ -67,6 +68,7 @@ def payment_from_row(row: ServiceFeePaymentRow) -> ServiceFeePayment:
     payment.status = PaymentStatus(row.status)
     payment.provider = row.provider
     payment.provider_reference = row.provider_reference
+    payment.provider_checkout_url = row.provider_checkout_url
     payment.callback_signature = row.callback_signature
     payment.failure_reason = row.failure_reason
     payment.attempt_count = row.attempt_count

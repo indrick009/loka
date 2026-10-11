@@ -109,11 +109,51 @@ class WhatsAppSettings(BaseModel):
     max_outbound_per_minute: int = 120
 
 
+class FapshiSettings(BaseModel):
+    """Credentials and endpoints for Fapshi, the mobile-money provider.
+
+    Sandbox and live are two hosts with two separate credential pairs, so the
+    base URL is configuration rather than a flag derived from the key: a live
+    key aimed at the sandbox host is refused with a 403, which is a loud
+    failure instead of a test payment quietly taken for a real one.
+
+    ``webhook_secret`` is not a signing key. Fapshi echoes this exact value in
+    the ``x-wh-secret`` header, so it identifies the caller and proves nothing
+    about the body — which is why the webhook is confirmed against the status
+    endpoint before any payment settles.
+    """
+
+    base_url: str = "https://sandbox.fapshi.com"
+    api_user: SecretStr = SecretStr("")
+    api_key: SecretStr = SecretStr("")
+    webhook_secret: SecretStr = SecretStr("")
+    request_timeout_seconds: float = 15.0
+    # Where the payer lands after the checkout page. Empty on purpose: on
+    # WhatsApp the conversation resumes in the thread, not on a web page, and
+    # the confirmation the payer should trust is the one Kora sends.
+    redirect_url: str = ""
+    # Fapshi payment links live 24 hours. Kept here rather than in the
+    # aggregate because it is the provider's rule, not the platform's.
+    link_ttl_seconds: int = 86_400
+
+    def is_configured(self) -> bool:
+        return bool(
+            self.api_user.get_secret_value()
+            and self.api_key.get_secret_value()
+            and self.webhook_secret.get_secret_value()
+        )
+
+
 class PaymentSettings(BaseModel):
     service_fee_xaf: int = 1000
     webhook_secret: SecretStr = SecretStr("change-me")
     gateway: str = "mock"
     callback_tolerance_seconds: int = 300
+    fapshi: FapshiSettings = Field(default_factory=FapshiSettings)
+    # A payment that stayed pending longer than this is reconciled against the
+    # provider. Fapshi sends one webhook per event and never retries, so a
+    # single dropped request is money taken and access never granted.
+    reconcile_after_minutes: int = 10
 
 
 class FraudSettings(BaseModel):
