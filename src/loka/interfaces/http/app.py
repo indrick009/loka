@@ -20,9 +20,7 @@ from loka.interfaces.http.routers import fraud as fraud_router
 from loka.interfaces.http.routers import landlord as landlord_router
 from loka.interfaces.http.routers import payments as payments_router
 from loka.interfaces.http.routers import properties as properties_router
-from loka.interfaces.http.routers import rental as rental_router
 from loka.interfaces.http.routers import reports as reports_router
-from loka.interfaces.http.routers import visit as visit_router
 from loka.interfaces.http.routers import whatsapp as whatsapp_router
 from loka.shared.application.context import (
     new_id,
@@ -156,8 +154,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(properties_router.router)
     app.include_router(landlord_router.router)
-    app.include_router(rental_router.router)
-    app.include_router(visit_router.router)
     app.include_router(payments_router.router)
     app.include_router(reports_router.router)
     app.include_router(fraud_router.router)

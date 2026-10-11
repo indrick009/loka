@@ -134,7 +134,6 @@ class Identifier(Generic[T]):
 UserId = Identifier[object]
 PropertyId = Identifier[object]
 ApplicationId = Identifier[object]
-VisitId = Identifier[object]
 PaymentId = Identifier[object]
 ConversationId = Identifier[object]
 MessageId = Identifier[object]

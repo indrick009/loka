@@ -70,16 +70,21 @@ async def _truncate_everything(db: Database) -> None:
 async def _prepare_schema(settings: Settings) -> None:
     """Rebuild the schema from the migrations once per session.
 
-    ``Base.metadata.drop_all`` leaves ``alembic_version`` untouched, so it has to
-    be cleared as well or Alembic would consider the database up to date and
-    skip the very migrations the tests are meant to exercise.
+    The whole schema goes, not ``Base.metadata.drop_all``: a table a migration
+    once created but the code no longer models is absent from the metadata, so
+    ``drop_all`` leaves it standing and the replayed ``create_table`` collides
+    with it. Dropping a context is exactly when that happens, and the failure
+    reads as 110 unrelated errors rather than as a stale table.
+
+    ``alembic_version`` goes with it — otherwise Alembic considers the database
+    up to date and skips the very migrations the tests are meant to exercise.
     """
     db = Database(settings.database, application_name="loka-test-migrate")
     await db.connect()
     try:
         async with db.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.execute(text("DROP TABLE IF EXISTS alembic_version"))
+            await conn.execute(text("DROP SCHEMA public CASCADE"))
+            await conn.execute(text("CREATE SCHEMA public"))
         _run_migrations(settings)
     finally:
         await db.dispose()

@@ -181,14 +181,16 @@ _CLARIFY_TEXT_EN = (
     'for a studio in Douala at 150,000 FCFA".'
 )
 
+# Offering to schedule a viewing was a promise the platform cannot keep: Kora
+# introduces a tenant to a landlord and stops there. Naming it here is how a
+# user ends up waiting for a visit nobody will arrange.
 SUPPORT_TEXT = (
-    "Je peux vous aider à publier un logement, à en chercher un ou à "
-    "planifier une visite. Dites-moi simplement ce dont vous avez besoin."
+    "Je peux vous aider à publier un logement ou à en trouver un. "
+    "Dites-moi simplement ce dont vous avez besoin."
 )
 
 _SUPPORT_TEXT_EN = (
-    "I can help you list a property, find one, or plan a visit. Just tell me "
-    "what you need."
+    "I can help you list a property or find one. Just tell me what you need."
 )
 
 # Intents where the platform understood the message but has no question to ask:

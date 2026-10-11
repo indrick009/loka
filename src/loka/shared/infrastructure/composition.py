@@ -85,47 +85,6 @@ from loka.bounded_contexts.property.application.use_cases.publish_property impor
 from loka.bounded_contexts.property.infrastructure.composition import (
     PROPERTY_REPOSITORY_FACTORIES,
 )
-from loka.bounded_contexts.rental.application.use_cases.confirm_rental import (
-    ConfirmRentalUseCase,
-)
-from loka.bounded_contexts.rental.application.use_cases.decide_rental_application import (
-    DecideRentalApplicationUseCase,
-)
-from loka.bounded_contexts.rental.application.use_cases.express_rental_interest import (
-    ExpressRentalInterestUseCase,
-)
-from loka.bounded_contexts.rental.application.use_cases.get_rental_application import (
-    GetRentalApplicationUseCase,
-)
-from loka.bounded_contexts.rental.application.use_cases.propose_rental_terms import (
-    ProposeRentalTermsUseCase,
-)
-from loka.bounded_contexts.rental.application.use_cases.withdraw_rental_application import (
-    WithdrawRentalApplicationUseCase,
-)
-from loka.bounded_contexts.rental.infrastructure.composition import (
-    RENTAL_REPOSITORY_FACTORIES,
-)
-from loka.bounded_contexts.rental.infrastructure.composition import (
-    property_directory as rental_property_directory,
-)
-from loka.bounded_contexts.visit.application.use_cases.cancel_visit import CancelVisitUseCase
-from loka.bounded_contexts.visit.application.use_cases.complete_visit import (
-    CompleteVisitUseCase,
-)
-from loka.bounded_contexts.visit.application.use_cases.get_visit import GetVisitUseCase
-from loka.bounded_contexts.visit.application.use_cases.request_visit import (
-    RequestVisitUseCase,
-)
-from loka.bounded_contexts.visit.application.use_cases.schedule_visit import (
-    ScheduleVisitUseCase,
-)
-from loka.bounded_contexts.visit.infrastructure.composition import (
-    VISIT_REPOSITORY_FACTORIES,
-)
-from loka.bounded_contexts.visit.infrastructure.composition import (
-    property_directory as visit_property_directory,
-)
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -136,8 +95,6 @@ _CONTEXT_FACTORIES: tuple[dict[str, Any], ...] = (
     MESSAGING_REPOSITORY_FACTORIES,
     PAYMENT_REPOSITORY_FACTORIES,
     FRAUD_REPOSITORY_FACTORIES,
-    RENTAL_REPOSITORY_FACTORIES,
-    VISIT_REPOSITORY_FACTORIES,
 )
 
 
@@ -282,63 +239,3 @@ def adjudicate_landlord_verification_use_case(
         adjudicator=verification_adjudicator(settings),
         urls=evidence_url_provider(settings),
     )
-
-
-def express_rental_interest_use_case(uow: SqlAlchemyUnitOfWork) -> ExpressRentalInterestUseCase:
-    return ExpressRentalInterestUseCase(uow, properties=rental_property_directory(uow))
-
-
-def propose_rental_terms_use_case(uow: SqlAlchemyUnitOfWork) -> ProposeRentalTermsUseCase:
-    return ProposeRentalTermsUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
-
-
-def decide_rental_application_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> DecideRentalApplicationUseCase:
-    return DecideRentalApplicationUseCase(
-        uow,
-        landlords=uow.repository(LANDLORD_DIRECTORY),
-        properties=rental_property_directory(uow),
-    )
-
-
-def confirm_rental_use_case(uow: SqlAlchemyUnitOfWork) -> ConfirmRentalUseCase:
-    return ConfirmRentalUseCase(
-        uow,
-        landlords=uow.repository(LANDLORD_DIRECTORY),
-        properties=rental_property_directory(uow),
-    )
-
-
-def withdraw_rental_application_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> WithdrawRentalApplicationUseCase:
-    return WithdrawRentalApplicationUseCase(
-        uow, properties=rental_property_directory(uow)
-    )
-
-
-def get_rental_application_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> GetRentalApplicationUseCase:
-    return GetRentalApplicationUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
-
-
-def request_visit_use_case(uow: SqlAlchemyUnitOfWork) -> RequestVisitUseCase:
-    return RequestVisitUseCase(uow, properties=visit_property_directory(uow))
-
-
-def schedule_visit_use_case(uow: SqlAlchemyUnitOfWork) -> ScheduleVisitUseCase:
-    return ScheduleVisitUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
-
-
-def cancel_visit_use_case(uow: SqlAlchemyUnitOfWork) -> CancelVisitUseCase:
-    return CancelVisitUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
-
-
-def complete_visit_use_case(uow: SqlAlchemyUnitOfWork) -> CompleteVisitUseCase:
-    return CompleteVisitUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
-
-
-def get_visit_use_case(uow: SqlAlchemyUnitOfWork) -> GetVisitUseCase:
-    return GetVisitUseCase(uow, landlords=uow.repository(LANDLORD_DIRECTORY))
