@@ -2,7 +2,8 @@
 
 > Mis à jour le 11 octobre 2026 : définition de la caution (§4.7), autorité du
 > bailleur sur la disponibilité et décompte des quantités (§9), frontière de fin
-> d'intervention (§10).
+> d'intervention (§10), et l'avance exigée par le bailleur ajoutée en étape 8
+> (le parcours bailleur compte désormais 10 étapes).
 
 ### 1. Le problème
 
@@ -38,15 +39,12 @@ Le bailleur peut avoir un ou plusieurs logements à louer. Il commence la conver
 | 5 | Prix du loyer | Le bailleur peut écrire « 60mil », « 50mil », « 60k » ou « 50000 ». Kora interprète selon le contexte immobilier camerounais : « 50mil » signifie 50 000 FCFA, pas 50 millions (il n'existe pratiquement pas de studio à 50 millions). |
 | 6 | Électricité et eau | Incluses dans le loyer ou non. Certains logements n'ont pas d'eau : la question et la réponse doivent être **très claires** pour bien comprendre la situation. |
 | 7 | Caution | Y a-t-il une caution ? Si oui, **combien de mois**. La caution est une avance **en plus** du nombre de mois payés, remboursable le jour où le locataire part. Coût d'entrée = (mois d'avance + mois de caution) × loyer : 6 mois d'avance plus 2 de caution, c'est 8 mois versés dont 2 reviennent. C'est **le bailleur** qui la fixe ; Kora l'enregistre et l'affiche, ne détient pas l'argent et n'arbitre pas le remboursement. |
-| 8 | Sécurité | Gardien, parking. Point subtil : ces équipements concernent généralement les loyers à partir de 70 000 FCFA. |
-| 9 | Photos | **Très important.** Dernière étape. |
+| 8 | Avance | Combien de **mois de loyer** le bailleur exige d'avance, en plus de la caution. Habitude observée : 3 à 6 mois. C'est l'axe sur lequel la §8 négocie, et ce que Kora compare au nombre de mois dont dispose le locataire. |
+| 9 | Sécurité | Gardien, parking. Point subtil : ces équipements concernent généralement les loyers à partir de 70 000 FCFA. |
+| 10 | Photos | **Très important.** Dernière étape. |
 
 Une fois les informations collectées, Kora publie le ou les logements.
 
-> **À confirmer.** La §8 négocie sur l'avance exigée par le bailleur
-> (« le bailleur demande un an d'avance et le locataire a 5 mois »), mais les 9
-> étapes ci-dessus ne la collectent pas. Soit elle devient une étape, soit la
-> négociation ne porte que sur le prix. À trancher avant d'implémenter la §8.
 
 ### 5. Bailleur avec plusieurs logements
 

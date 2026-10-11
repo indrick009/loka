@@ -46,9 +46,19 @@ sending someone to a restaurant for a dish that is not cooking today. A standing
 dish catalogue with an `available` boolean is the wrong model — staleness becomes
 invisible, and the default drifts toward "available".
 
-Decide explicitly: when does a daily menu stop being searchable — at a fixed
-hour, at midnight, or after a window? There is no correct answer in the spec;
-pick one, write it down, and make it visible to the restaurateur.
+**Closing is the restaurateur's call, with midnight as a backstop.** Settled 11
+October, and deliberately the same shape as a landlord declaring a property
+taken: the owner of the thing decides, Kora never infers.
+
+| What the restaurateur writes | Effect |
+| --- | --- |
+| "le ndolè est terminé" | that dish alone leaves today's menu |
+| "c'est fini pour aujourd'hui" | the whole daily menu leaves the searches |
+
+The automatic midnight expiry is what bounds the damage of forgetting: a
+restaurateur who never closes sends nobody to yesterday's menu. Without it, the
+one promise the product makes — only what is cooking today — decays silently
+every night.
 
 ## Restaurateur flow
 

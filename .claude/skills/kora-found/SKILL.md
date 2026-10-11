@@ -18,9 +18,9 @@ metadata:
 # Kora Found
 
 Source of truth: **`conception_metier/kora-found-v1.md`**. This skill carries the
-engineering consequences. Note that the spec marks its `[Sécurité]` rules as
-**proposals awaiting validation** — confirm them with the product owner before
-treating them as settled.
+engineering consequences. The spec's `[Sécurité]` rules were **accepted as V1
+rules on 11 October** — treat them as requirements, not suggestions. Any of them
+can be reopened, but the default is protected.
 
 **Priority 2.** §11 is explicit: Found must not delay Housing, Food or Dating.
 Do not start building it while those are in flight.
@@ -148,14 +148,17 @@ something to build:
 Two of these are easy to forget because they are not features: the **search rate
 limit** and the **retention deadline**. Both need a number, decided before launch.
 
-## What to settle before building
+## Two numbers still to pick
+
+Tuning, not design — but a human queue with no stated response time is a queue
+that grows in silence, and a retention policy with no deadline is data kept for
+ever.
 
 - The retention period for finder photos and claimant evidence, and what deletion
   actually removes.
-- Who on the team validates, how they are notified, and what their SLA is — a
-  human in the loop with no response time is a queue that silently grows.
-- Whether the `[Sécurité]` proposals in the spec are accepted as written. They are
-  marked as awaiting your validation.
+- Who on the team validates, how they are notified, and within how long.
+
+The same two gaps exist for complaints — see `conception_metier/kora-avis-plaintes-v1.md`.
 
 ## Related skills
 

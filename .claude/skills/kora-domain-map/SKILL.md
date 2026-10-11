@@ -36,12 +36,19 @@ is sound and is the starting point, not something to replace.
 | **Food** | Restaurants, recurring menus, menu of the day, dish search, reservation requests. | To build — `kora-food` |
 | **Dating** | Profiles, preferences, discovery, matches. | To build — `kora-dating` |
 | **Found** | Lost/found declarations, ownership proof, controlled restitution. Priority 2. | To build — `kora-found` |
-| **Payment** | The 1 000 FCFA unlock. Shared by Housing and Found. | Exists, but `mock_gateway.py` only — no Fapshi |
+| **Payment** | Two models, different shapes: the 1 000 FCFA contact unlock (Housing, Dating, Found) and the restaurant's 2 000 FCFA weekly subscription (Food). | Exists, but `mock_gateway.py` only — no Fapshi, and no subscription model at all |
 | **Trust & Safety** | Fraud, abuse, minors, AI-generated photos, fishing for names. Today `fraud`. | Exists; scope widens sharply with Dating and Found |
+| **Reviews & Complaints** | A complaint names the provider to sanction or ban; a review decides which offers Kora puts forward. Shared by all four domains. | To specify — `conception_metier/kora-avis-plaintes-v1.md` |
 
-Four business domains, four shared contexts. That is the whole map. Resist
-adding a fifth shared context: one that exists "to hold common things" becomes
-the place every domain quietly couples through.
+Four business domains, five shared contexts. That is the whole map. Resist
+adding a sixth: a context that exists "to hold common things" becomes the place
+every domain quietly couples through.
+
+Reviews & Complaints is the newest, and it is genuinely shared rather than a
+catch-all: the thing sanctioned is a **provider** — a landlord, a restaurateur,
+a finder, a dating profile — and a provider is not owned by any one domain.
+Sanctioning an offer instead would let a banned landlord republish under a new
+listing.
 
 ## The dependency rule
 

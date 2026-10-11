@@ -1,8 +1,10 @@
 ---
 name: kora-unlock-payment
 description: >-
-  The 1 000 FCFA unlock that is Kora's entire revenue model — what the user pays
-  for, what must be true before they are ever asked, and what is revealed after.
+  Kora's two revenue models — the 1 000 FCFA contact unlock in Housing, Dating
+  and Found, and the restaurant's 2 000 FCFA weekly subscription in Food — what
+  each one buys, what must be true before anyone is asked, and what is revealed
+  after.
   Use this skill whenever you touch payments, the Fapshi integration, the
   service fee, contact or location disclosure, availability checks before a
   charge, payment callbacks, or refunds. Use it too when adding a paid step to
@@ -19,20 +21,37 @@ metadata:
 
 Kora replaces the estate agent. An agent charges a 5 000 FCFA viewing fee and
 then a full month's rent in commission. **Kora charges 1 000 FCFA, once, to the
-person who receives the contact.** That number is the product.
+person who receives the contact.**
 
-Shared today by Housing (`conception_metier/kora-housing-v1.md` §9) and Found
-(`kora-found-v1.md` §8). Dating and Food have no paid step in V1.
+**There are two models, and they are not the same shape.** Confirmed 11 October.
+Do not assume the unlock applies everywhere: Food works the other way round.
 
-## What the money buys
+### Model 1 — the consumer unlocks a contact, once
 
-| Domain | Payer | Unlocked |
+| Domain | Payer | What 1 000 FCFA buys |
 | --- | --- | --- |
 | Housing | the tenant | the landlord's phone number **and** the property's location |
+| Dating | whoever unlocks | a way to reach the other person |
 | Found | the document's owner | contact with the finder |
 
-Nothing else is sold. No viewing fee, no commission, no subscription, and no
-charge to the landlord, the restaurant or the finder.
+One payment, one disclosure, and the relationship ends there.
+
+### Model 2 — the provider subscribes, weekly
+
+| Domain | Payer | What 2 000 FCFA/week buys |
+| --- | --- | --- |
+| Food | the **restaurant** | the right to publish a daily menu and receive requests |
+
+The client pays nothing in Food: not to search, not to request a dish.
+
+**This is a different payment lifecycle, not a variant of the first.** A
+subscription recurs, so it has renewals, an expiry, a grace period and a lapse —
+none of which an unlock has. Model the two separately rather than bending the
+unlock aggregate to carry a subscription; the only thing they genuinely share is
+the payment gateway.
+
+Nothing else is sold: no viewing fee, no commission on a lease, no charge to the
+landlord or the finder, and nothing taken from the client in Food.
 
 **And the relationship ends there.** Confirmed by the owner, 11 Oct:
 

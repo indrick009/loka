@@ -118,13 +118,25 @@ Practical requirements the spec implies:
   require, keep photos in private encrypted storage, and never put them or the
   description in logs.
 
+## What a match unlocks, and the payment
+
+Settled 11 October. A match does **not** open a conversation inside Kora: it
+opens the right to pay **1 000 FCFA** to unlock the other person's contact, the
+same unlock model as Housing and Found.
+
+**Unlocking requires a reciprocal match. Consent always precedes payment.** This
+is the rule the whole domain's safety rests on — without it, anyone could buy
+anyone's number, and the mandatory controls would not compensate. It is also why
+revenue here is deliberately lower than a model that sells access on demand.
+
+Kora is a matchmaker, not a chat application: here too its work ends at the
+introduction.
+
 ## Scope
 
-V1 is registration, the two-level match, and the controls. Premium features are
-mentioned as a possibility elsewhere but are **not** part of this spec — do not
-build billing, boosts or tiers here. Likes and matches are the interaction
-surface; messaging between matched users is not described, so settle what
-"match" lets two people actually do before implementing it.
+V1 is registration, the two-level match, the controls, and the unlock above.
+Premium features are mentioned as a possibility elsewhere but are **not** part of
+this spec — do not build boosts or tiers here.
 
 ## Related skills
 

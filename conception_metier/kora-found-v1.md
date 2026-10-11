@@ -1,6 +1,9 @@
 ## KORA FOUND — VISION ET FLUX MÉTIER (V1)
 
-> Les sections 1 à 6 décrivent ta vision. Les règles marquées **[Sécurité]** sont des propositions ajoutées à ta demande pour limiter les risques. Elles sont à valider.
+> Les sections 1 à 6 décrivent la vision du produit. Les règles marquées
+> **[Sécurité]** ont été ajoutées pour limiter les risques, et sont
+> **validées le 11 octobre 2026** : ce sont des règles V1 à part entière, pas
+> des propositions. Chacune reste rouvrable, mais par défaut on part protégé.
 
 ### 1. Le problème
 

@@ -27,7 +27,7 @@ The business in one line: renting in Cameroon goes through an agent who charges 
 and tenant directly for **1 000 FCFA**, paid by the tenant. Kora is not a
 property-management platform — keep the scope that narrow.
 
-## Landlord flow: the order Kora requires
+## Landlord flow: the ten steps Kora requires
 
 | # | Information | Notes |
 | --- | --- | --- |
@@ -38,8 +38,9 @@ property-management platform — keep the scope that narrow.
 | 5 | Rent | "60mil", "60k", "50000" all mean thousands — see `docs/local-market-knowledge.md` |
 | 6 | **Electricity and water** | included in the rent or not. **Some lodgings have no water at all** — the question and the answer must make that case unambiguous. |
 | 7 | **Deposit (caution)** | is there one, and **how many months** |
-| 8 | **Security** | guard, parking. Subtlety: these usually exist from ~70 000 FCFA upward |
-| 9 | **Photos** | **last step**, mandatory |
+| 8 | **Advance** | how many **months of rent** the landlord requires up front, on top of the caution. Observed habit: 3 to 6 months. This is the axis §8 negotiates on, and what the tenant's declared capacity is compared against |
+| 9 | **Security** | guard, parking. Subtlety: these usually exist from ~70 000 FCFA upward |
+| 10 | **Photos** | **last step**, mandatory |
 
 Then Kora publishes the lodging or lodgings.
 
@@ -226,12 +227,12 @@ happened. Only the landlord knows. With `quantity = 2`, "is it still available?"
 means "are any left?", which is exactly why the two declarations above are
 different events.
 
-## Still open — do not resolve by writing code
+## No open business questions
 
-**The landlord's required advance.** §8 negotiates on it — "le bailleur demande
-un an d'avance et le locataire a 5 mois" — but none of the nine collection steps
-asks for it. Either it becomes a step, or negotiation covers the price only.
-Settle it before implementing §8.
+All four settled as of 11 October. The landlord's required advance became a
+collection step (step 8, after the caution), so the landlord flow is now **ten**
+steps and the matching compares a declared requirement against the tenant's
+declared capacity — not against a market assumption.
 
 ## Scope
 
