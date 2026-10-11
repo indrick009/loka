@@ -244,3 +244,80 @@ class TestSuspension:
         assert not prop.is_publicly_visible
         with pytest.raises(InvariantViolation):
             prop.set_rent(Money(1), now=now)
+
+def kora_spec_property(now: datetime, *, with_photos: bool = True) -> Property:
+    """A listing carrying exactly what the Kora spec's ten steps collect.
+
+    No minimum duration, no availability date, no entry conditions — the spec
+    never asks for any of them, and the owner confirmed on 11 October that Kora
+    connects a landlord and a tenant rather than negotiating a lease. See
+    ``conception_metier/kora-housing-v1.md`` §4.
+
+    A landlord could follow those ten steps to the letter and still be refused
+    publication, because the gate demanded three fields nobody had asked him
+    for. That is what these cases pin down.
+    """
+    prop = Property(property_id=uuid.uuid4(), landlord_id=uuid.uuid4(), now=now)
+    prop.set_type(PropertyType.STUDIO, now=now)
+    prop.set_location(Location(city="Yaounde", neighbourhood="Biyem-Assi"), now=now)
+    prop.set_rent(Money(60_000), now=now)
+    prop.set_charges(Money(0), ChargingPolicy.INCLUDED, now=now)
+    prop.set_deposit(Money(120_000), now=now)
+    if with_photos:
+        for media in build_media(1):
+            prop.add_media(media, now=now)
+    return prop
+
+
+class TestASpecConformingListingCanPublish:
+    def test_the_ten_steps_leave_nothing_blocking(self, now: datetime) -> None:
+        assert kora_spec_property(now).blocking_issues() == frozenset()
+
+    @pytest.mark.parametrize(
+        "dropped",
+        [
+            DataQualityIssue.MISSING_MINIMUM_DURATION,
+            DataQualityIssue.MISSING_AVAILABILITY_DATE,
+            DataQualityIssue.AMBIGUOUS_CONDITIONS,
+        ],
+    )
+    def test_the_dropped_requirements_no_longer_block(
+        self, now: datetime, dropped: DataQualityIssue
+    ) -> None:
+        assert dropped not in kora_spec_property(now).blocking_issues()
+
+
+class TestWhatStillBlocks:
+    """Dropping three requirements must not quietly drop the rest."""
+
+    def test_photos_are_still_mandatory(self, now: datetime) -> None:
+        """Step 10 of the spec, marked 'très important'."""
+        issues = kora_spec_property(now, with_photos=False).blocking_issues()
+
+        assert DataQualityIssue.MISSING_PHOTOS in issues
+
+    def test_a_vague_location_still_blocks(self, now: datetime) -> None:
+        """The spec makes the location step blocking: an unplaceable listing
+        cannot be matched to anyone."""
+        prop = Property(property_id=uuid.uuid4(), landlord_id=uuid.uuid4(), now=now)
+        prop.set_type(PropertyType.STUDIO, now=now)
+        prop.set_rent(Money(60_000), now=now)
+        prop.set_charges(Money(0), ChargingPolicy.INCLUDED, now=now)
+        prop.set_deposit(Money(120_000), now=now)
+        for media in build_media(1):
+            prop.add_media(media, now=now)
+
+        assert DataQualityIssue.VAGUE_LOCATION in prop.blocking_issues()
+
+    def test_an_unstated_charging_policy_still_blocks(self, now: datetime) -> None:
+        """Step 6: water and electricity included or not. The spec insists the
+        answer be unambiguous, because some lodgings have no water at all."""
+        prop = Property(property_id=uuid.uuid4(), landlord_id=uuid.uuid4(), now=now)
+        prop.set_type(PropertyType.STUDIO, now=now)
+        prop.set_location(Location(city="Yaounde", neighbourhood="Biyem-Assi"), now=now)
+        prop.set_rent(Money(60_000), now=now)
+        prop.set_deposit(Money(120_000), now=now)
+        for media in build_media(1):
+            prop.add_media(media, now=now)
+
+        assert DataQualityIssue.MISSING_CHARGES in prop.blocking_issues()

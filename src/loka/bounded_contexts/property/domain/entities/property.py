@@ -314,16 +314,21 @@ class Property(AggregateRoot):
             issues.add(DataQualityIssue.MISSING_PHOTOS)
         if self.rent is None or self.charging_policy is ChargingPolicy.UNKNOWN:
             issues.add(DataQualityIssue.MISSING_CHARGES)
-        if self.minimum_duration is None:
-            issues.add(DataQualityIssue.MISSING_MINIMUM_DURATION)
-        if self.availability is None:
-            issues.add(DataQualityIssue.MISSING_AVAILABILITY_DATE)
+        # The minimum duration, the availability date and the entry conditions
+        # are deliberately *not* blocking. Kora's ten collection steps never ask
+        # for them: it puts a landlord and a tenant in touch, it does not
+        # negotiate a lease — see conception_metier/kora-housing-v1.md §4 and
+        # §10. Requiring them meant a landlord could answer every question he
+        # was actually asked and still be refused publication, for three fields
+        # nobody had mentioned to him.
+        #
+        # The fields themselves remain, and their setters still clear the
+        # matching issue, so a landlord who volunteers "disponible
+        # immédiatement" has it recorded. Optional, not forbidden.
         if self.location is None or not self.location.is_publishable():
             issues.add(DataQualityIssue.VAGUE_LOCATION)
         if self.deposit is None:
             issues.add(DataQualityIssue.MISSING_DEPOSIT)
-        if self.conditions is None:
-            issues.add(DataQualityIssue.AMBIGUOUS_CONDITIONS)
         return frozenset(issues)
 
     def usable_photos(self) -> list[PropertyMedia]:
