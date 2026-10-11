@@ -320,7 +320,7 @@ class TestASharedPositionAnswersTheLocationQuestion:
             # The rest of the form is answered, so the location is the only
             # thing left to ask for and the question cannot be about anything
             # else.
-            context={"property_type": "APARTMENT", "standing": "MODERN"},
+            context={"property_type": "APARTMENT", "standing": "MODERN", "quantity": 1},
         )
         use_case, message_id, _, _ = _build(
             session, kind=MessageKind.LOCATION, location=OPEN_SEA

@@ -17,6 +17,7 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     FLOW_BY_OPENING_INTENT,
     MAX_PLAUSIBLE_RENT_XAF,
     MIN_PLAUSIBLE_RENT_XAF,
+    PROPERTY_REQUIREMENTS,
     SUPPORTED_INTENTS,
     FactExtractor,
     is_supported_intent,
@@ -177,98 +178,55 @@ class TestConversationOrder:
 
         assert step is FlowStep.COLLECT_STANDING
 
-    def test_the_form_order_is_type_standing_location_rent_then_entry_conditions(
+    def test_the_form_walks_the_ten_steps_of_the_spec_in_order(
         self, extractor: FactExtractor
     ) -> None:
-        """The order matches how a listing is described here: what it is, where,
-        for how much, and then the move-in cost (charges, caution, duration,
-        availability, conditions) that the quality gate needs to publish."""
-        cases = [
+        """The order of conception_metier/kora-housing-v1.md §4, step by step.
+
+        What it is, how many, where, for how much, then the real move-in cost —
+        water and electricity, the caution in months, the advance in months —
+        then the guard and the parking. The photos are step ten and are chased
+        by the quality gate, not by this form: no message produces a ``media``
+        fact, so requiring one here would park the conversation for ever.
+
+        Three fields this form used to ask for are gone: the minimum duration,
+        the availability date and the free-text conditions. Kora introduces a
+        landlord to a tenant, it does not negotiate a lease (§10).
+        """
+        answered: dict[str, object] = {}
+        expected_steps = [
             ({"property_type": "APARTMENT"}, FlowStep.COLLECT_STANDING),
-            ({"property_type": "APARTMENT", "standing": "MODERN"}, FlowStep.COLLECT_LOCATION),
+            ({"standing": "MODERN"}, FlowStep.COLLECT_QUANTITY),
+            ({"quantity": 2}, FlowStep.COLLECT_LOCATION),
+            ({"city": "Douala"}, FlowStep.COLLECT_PRICE),
+            ({"price": 250_000}, FlowStep.COLLECT_CHARGES),
+            ({"charges": 0, "charging_policy": "INCLUDED"}, FlowStep.COLLECT_DEPOSIT),
+            ({"deposit_months": 2}, FlowStep.COLLECT_ADVANCE),
+            ({"advance_months": 6}, FlowStep.COLLECT_SECURITY),
             (
-                {"property_type": "APARTMENT", "standing": "MODERN", "city": "Douala"},
-                FlowStep.COLLECT_PRICE,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                },
-                FlowStep.COLLECT_CHARGES,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                    "charges": 0,
-                    "charging_policy": "INCLUDED",
-                },
-                FlowStep.COLLECT_DEPOSIT,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                    "charges": 0,
-                    "charging_policy": "INCLUDED",
-                    "deposit": 250_000,
-                },
-                FlowStep.COLLECT_MINIMUM_DURATION,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                    "charges": 0,
-                    "charging_policy": "INCLUDED",
-                    "deposit": 250_000,
-                    "minimum_duration_months": 12,
-                },
-                FlowStep.COLLECT_AVAILABILITY,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                    "charges": 0,
-                    "charging_policy": "INCLUDED",
-                    "deposit": 250_000,
-                    "minimum_duration_months": 12,
-                    "availability": "IMMEDIATE",
-                },
-                FlowStep.COLLECT_CONDITIONS,
-            ),
-            (
-                {
-                    "property_type": "APARTMENT",
-                    "standing": "MODERN",
-                    "city": "Douala",
-                    "price": 250_000,
-                    "charges": 0,
-                    "charging_policy": "INCLUDED",
-                    "deposit": 250_000,
-                    "minimum_duration_months": 12,
-                    "availability": "IMMEDIATE",
-                    "conditions": "Caution deux mois, avance de trois mois.",
-                },
+                {"amenities": {"security": True, "parking": False}},
                 FlowStep.CONFIRM_PROPERTY,
             ),
         ]
-        for entities, expected in cases:
-            facts = extractor.validate(entities)
+        for given, expected in expected_steps:
+            answered.update(given)
+            facts = extractor.validate(dict(answered))
             step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
-            assert step is expected, entities
+            assert step is expected, answered
+
+    @pytest.mark.parametrize(
+        "dropped",
+        ["minimum_duration_months", "availability", "conditions"],
+    )
+    def test_the_dropped_questions_are_never_asked(
+        self, extractor: FactExtractor, dropped: str
+    ) -> None:
+        """Their steps and setters remain — optional, not asked.
+
+        A landlord who volunteers "disponible immédiatement" still has it
+        recorded; he is never stopped to be asked for it.
+        """
+        assert dropped not in {name for name, _ in PROPERTY_REQUIREMENTS}
 
     def test_a_listing_intent_starts_from_what_is_already_known(
         self, extractor: FactExtractor
@@ -276,7 +234,12 @@ class TestConversationOrder:
         """A landlord who says everything in one message must not be asked for
         the type of property they just named."""
         facts = extractor.validate(
-            {"property_type": "APARTMENT", "standing": "MODERN", "city": "Douala"}
+            {
+                "property_type": "APARTMENT",
+                "standing": "MODERN",
+                "quantity": 1,
+                "city": "Douala",
+            }
         )
 
         step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
@@ -314,7 +277,7 @@ class TestConversationOrder:
             "COLLECT_LOCATION",
             facts,
             flow=FlowName.PROPERTY_CREATION,
-            known={"property_type": "STUDIO", "standing": "MODERN"},
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
         )
 
         assert step is FlowStep.COLLECT_PRICE
@@ -544,14 +507,43 @@ class TestPendingAnswerBinding:
         assert match is not None
         assert match.entities["minimum_duration_months"] == 5
 
-    def test_a_deposit_answer_is_not_stored_as_rent(self) -> None:
+    def test_a_bare_number_under_the_caution_question_is_months(self) -> None:
+        """"2" is two months of rent, not two francs and not a rent too small.
+
+        The caution is a multiple of the rent here, so the unit of the answer is
+        decided by the question that is open — not by the size of the number.
+        """
         classifier = DeterministicClassifier()
 
-        match = classifier.classify("500 000", pending="ask.deposit")
+        match = classifier.classify("2", pending="ask.deposit")
 
         assert match is not None
         assert match.intent == "COLLECT_DEPOSIT"
-        assert match.entities == {"deposit": 500_000}
+        assert match.entities == {"deposit_months": 2}
+
+    def test_no_caution_is_an_answer_of_zero(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("0", pending="ask.deposit")
+
+        assert match is not None
+        assert match.entities == {"deposit_months": 0}
+
+    def test_an_advance_answer_binds_to_the_advance(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("6 mois", pending="ask.advance")
+
+        assert match is not None
+        assert match.intent == "COLLECT_ADVANCE"
+        assert match.entities == {"advance_months": 6}
+
+    def test_a_franc_amount_under_a_months_question_goes_to_the_model(self) -> None:
+        """Handed back rather than stored: 250 000 months is a typo, and the
+        landlord has to be asked again instead of having it recorded."""
+        classifier = DeterministicClassifier()
+
+        assert classifier.classify("250000", pending="ask.deposit") is None
 
     def test_an_open_budget_question_binds_the_answer_as_a_price(self) -> None:
         """A tenant's budget is priced like a rent: the open question, not the
@@ -604,16 +596,43 @@ class TestEntryConditions:
         assert facts.get("charges") == 15_000
         assert facts.get("charging_policy") == "EXTRA"
 
-    def test_a_deposit_is_kept(self, extractor: FactExtractor) -> None:
-        facts = extractor.validate({"deposit": 500_000})
+    def test_the_caution_is_kept_in_months(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"deposit_months": 2})
 
-        assert facts.get("deposit") == 500_000
+        assert facts.get("deposit_months") == 2
 
-    def test_a_negative_deposit_is_refused(self, extractor: FactExtractor) -> None:
-        facts = extractor.validate({"deposit": -1})
+    def test_no_caution_is_zero_months_not_a_missing_answer(
+        self, extractor: FactExtractor
+    ) -> None:
+        """"Aucune caution" is an ordinary answer and must advance the form."""
+        facts = extractor.validate({"deposit_months": 0})
 
-        assert not facts.has("deposit")
-        assert "deposit" in facts.rejected
+        assert facts.get("deposit_months") == 0
+
+    def test_the_advance_is_kept_in_months(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"advance_months": 6})
+
+        assert facts.get("advance_months") == 6
+
+    def test_a_caution_given_in_francs_is_refused_not_converted(
+        self, extractor: FactExtractor
+    ) -> None:
+        """Converting would mean dividing by a rent that may not be known yet,
+        or may be corrected later. A wrong number of months is a listing the
+        matching misplaces, so the landlord is asked again instead."""
+        facts = extractor.validate({"deposit": 250_000})
+
+        assert not facts.has("deposit_months")
+        assert "deposit_months" in facts.rejected
+
+    @pytest.mark.parametrize("months", [-1, 25])
+    def test_an_implausible_number_of_months_is_refused(
+        self, extractor: FactExtractor, months: int
+    ) -> None:
+        facts = extractor.validate({"deposit_months": months})
+
+        assert not facts.has("deposit_months")
+        assert "deposit_months" in facts.rejected
 
     def test_availability_normalises_to_a_token(self, extractor: FactExtractor) -> None:
         assert extractor.validate({"availability": "immédiatement"}).get(

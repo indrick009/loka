@@ -25,6 +25,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     ChargingPolicy,
     PropertyStanding,
     PropertyType,
+    RentMonths,
     SurfaceArea,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import (
@@ -46,24 +47,34 @@ MAX_PLAUSIBLE_RENT_XAF = 500_000_000
 # surface are deliberately *not* asked: they are rarely known and rarely used,
 # and the answer that sells the place is the photos.
 #
-# The entry conditions come after the rent because in this market the monthly
-# price is only half the story: the real move-in cost is an *avance* (several
-# months up front), a *caution* (the deposit) and the monthly charges. The form
-# therefore collects exactly what the Property quality gate needs to publish —
-# charges, deposit, minimum duration, availability and the free-text conditions
-# (where avance and agency fees are stated) — instead of reporting them missing
-# only at the end.
+# The entry money comes after the rent because in this market the monthly price
+# is only half the story: the real move-in cost is an *avance* (several months
+# up front) plus a *caution* (refundable, on top of the advance) plus the
+# monthly charges. Both are counted in months of rent, not in francs.
+#
+# This is the ten-step form of conception_metier/kora-housing-v1.md §4, in its
+# order. Three fields the form used to ask for — the minimum duration, the
+# availability date and the free-text conditions — are deliberately absent:
+# Kora introduces a landlord to a tenant and does not negotiate a lease (§10).
+# Their steps, entities and setters all remain, so a landlord who volunteers
+# "disponible immédiatement" still has it recorded. Optional, not asked.
 PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
     ("standing", FlowStep.COLLECT_STANDING),
+    ("quantity", FlowStep.COLLECT_QUANTITY),
     ("location", FlowStep.COLLECT_LOCATION),
     ("rent", FlowStep.COLLECT_PRICE),
     ("charges", FlowStep.COLLECT_CHARGES),
-    ("deposit", FlowStep.COLLECT_DEPOSIT),
-    ("minimum_duration_months", FlowStep.COLLECT_MINIMUM_DURATION),
-    ("availability", FlowStep.COLLECT_AVAILABILITY),
-    ("conditions", FlowStep.COLLECT_CONDITIONS),
+    ("deposit_months", FlowStep.COLLECT_DEPOSIT),
+    ("advance_months", FlowStep.COLLECT_ADVANCE),
+    ("security", FlowStep.COLLECT_SECURITY),
 )
+
+# Step 10 of the form — the photos — is not in that list, and must not be: no
+# message ever produces a ``media`` fact, so requiring one here would park the
+# form on COLLECT_MEDIA and never reach the confirmation. Photos are chased by
+# the quality gate instead, which is what sends ``ask.media`` once the listing
+# exists and still has none.
 
 # The tenant's form is a different shape. A search only needs what narrows the
 # catalogue — the type, the place, the budget — and every further field a
@@ -162,7 +173,10 @@ QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_PRICE: "ask.rent",
     FlowStep.COLLECT_FEATURES: "ask.features",
     FlowStep.COLLECT_CHARGES: "ask.charges",
+    FlowStep.COLLECT_QUANTITY: "ask.quantity",
     FlowStep.COLLECT_DEPOSIT: "ask.deposit",
+    FlowStep.COLLECT_ADVANCE: "ask.advance",
+    FlowStep.COLLECT_SECURITY: "ask.security",
     FlowStep.COLLECT_MINIMUM_DURATION: "ask.minimum_duration",
     FlowStep.COLLECT_AVAILABILITY: "ask.availability",
     FlowStep.COLLECT_CONDITIONS: "ask.conditions",
@@ -285,13 +299,33 @@ class FactExtractor:
             keep("amenities", lambda: _build_amenities(entities))
         if "amenities_hints" in present:
             keep("amenities_hints", lambda: _build_amenities(entities, hints=True))
-        if "deposit" in present:
+        if "quantity" in present:
+            keep("quantity", lambda: _build_quantity(present["quantity"]))
+        if "deposit_months" in present:
             keep(
-                "deposit",
-                lambda: Money(amount=_as_int(present["deposit"]))
-                .require_non_negative(reason="deposit cannot be negative")
-                .amount,
+                "deposit_months",
+                lambda: RentMonths(months=_as_int(present["deposit_months"])).months,
             )
+        elif "deposit" in present:
+            # The landlord answered the caution in francs. Refused rather than
+            # converted: dividing by a rent that may not be known yet, or may
+            # be corrected later, produces a number of months nobody stated —
+            # and a wrong number of months is a listing the matching misplaces.
+            # Rejected facts are what make the question get asked again.
+            rejected["deposit_months"] = (
+                "la caution se compte en mois de loyer, pas en francs"
+            )
+        if "advance_months" in present:
+            keep(
+                "advance_months",
+                lambda: RentMonths(months=_as_int(present["advance_months"])).months,
+            )
+        if "amenities" in present and _states_security(entities):
+            # Step 9 is answered by either half of it: a landlord who says
+            # "il y a un gardien" has answered, and so has one who says
+            # "pas de parking". A listing that merely mentioned the internet
+            # has not, which is why this is its own fact and not ``amenities``.
+            keep("security", lambda: _build_security(entities))
         if "minimum_duration_months" in present:
             keep("minimum_duration_months", lambda: _as_int(present["minimum_duration_months"]))
         if "availability" in present:
@@ -546,6 +580,58 @@ def _build_charges(entities: dict[str, Any]) -> tuple[int, str, dict[str, int] |
 
 
 _AMENITY_AXES = ("parking", "water", "electricity", "internet", "security")
+
+
+def _states_security(entities: dict[str, Any]) -> bool:
+    """Whether step 9 was actually answered, not merely approached."""
+    raw = entities.get("amenities")
+    if not isinstance(raw, dict):
+        return False
+    return isinstance(raw.get("security"), bool) or isinstance(raw.get("parking"), bool)
+
+
+def _build_security(entities: dict[str, Any]) -> dict[str, object]:
+    """The two axes step 9 asks about: a guard, and parking.
+
+    A separate fact from ``amenities`` so that "the landlord answered the
+    security question" and "the landlord mentioned some amenity" cannot be
+    confused — the first advances the form, the second must not.
+    """
+    raw = entities.get("amenities")
+    if not isinstance(raw, dict):
+        raise ValidationFailed(
+            "amenities must be an object",
+            context={"entity": "amenities", "value": repr(raw)},
+        )
+    stated: dict[str, object] = {}
+    for axis in ("security", "parking"):
+        value = raw.get(axis)
+        if isinstance(value, bool):
+            stated[axis] = value
+    return stated
+
+
+def _build_quantity(raw: Any) -> int:
+    """How many identical lodgings one listing stands for (§5).
+
+    Same type, same characteristics, same price: one listing, quantity two.
+    Different prices are two listings, because a tenant is comparing a price —
+    splitting that case is the conversation's job, not this function's.
+    """
+    quantity = _as_int(raw)
+    if quantity < 1:
+        raise ValidationFailed(
+            "a listing must stand for at least one lodging",
+            context={"entity": "quantity", "value": repr(raw)},
+        )
+    if quantity > 50:
+        # Past this it is a price, a surface or a typo that wandered into the
+        # wrong field, and a listing claiming fifty studios is not credible.
+        raise ValidationFailed(
+            "a single listing cannot stand for more than 50 lodgings",
+            context={"entity": "quantity", "value": repr(raw)},
+        )
+    return quantity
 
 
 def _build_amenities(entities: dict[str, Any], *, hints: bool = False) -> dict[str, object]:

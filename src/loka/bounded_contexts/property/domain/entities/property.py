@@ -31,6 +31,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyStanding,
     PropertyStatus,
     PropertyType,
+    RentMonths,
     SurfaceArea,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import Location
@@ -107,6 +108,7 @@ class Amenities:
 
 class Property(AggregateRoot):
     __slots__ = (
+        "advance_months",
         "amenities",
         "availability",
         "bedrooms",
@@ -115,7 +117,7 @@ class Property(AggregateRoot):
         "conditions",
         "created_at",
         "data_quality_issues",
-        "deposit",
+        "deposit_months",
         "description",
         "is_verified",
         "landlord_id",
@@ -154,7 +156,13 @@ class Property(AggregateRoot):
         self.rent: Money | None = None
         self.charges: Money | None = None
         self.charging_policy = ChargingPolicy.UNKNOWN
-        self.deposit: Money | None = None
+        # Both counted in months of rent, because that is how this market
+        # counts entry money: "je paye 6 mois de loyer et j'ajoute deux mois
+        # comme caution remboursable". Francs would decouple the day the
+        # landlord corrects his rent, and the tenant's "j'ai 4 mois" would need
+        # converting before it could be compared with what is being asked.
+        self.deposit_months: RentMonths | None = None
+        self.advance_months: RentMonths | None = None
         self.bedrooms: BedroomCount | None = None
         self.surface_area: SurfaceArea | None = None
         self.amenities = Amenities()
@@ -165,7 +173,12 @@ class Property(AggregateRoot):
         self.media: list[PropertyMedia] = []
         # One listing can stand for several identical lodgings (§5). It is what
         # makes "is it still available?" mean "are any left?".
-        self.quantity: int = 1
+        #
+        # ``None`` means the landlord has not been asked yet, which is not the
+        # same as one lodging. Without the distinction, step 3 of the form is
+        # the single step that could never be reported as missing, so a
+        # landlord who skipped it would never be prompted again.
+        self.quantity: int | None = None
         self.landlord_rules: str | None = None
         self.last_availability_confirmed_at: datetime | None = None
         self.data_quality_issues: set[DataQualityIssue] = set()
@@ -232,12 +245,48 @@ class Property(AggregateRoot):
         self.data_quality_issues.discard(DataQualityIssue.MISSING_CHARGES)
         self._touch(now)
 
-    def set_deposit(self, deposit: Money, *, now: datetime) -> None:
+    def set_deposit_months(self, deposit: RentMonths, *, now: datetime) -> None:
+        """The refundable caution, in months of rent.
+
+        Zero is a real answer — "aucune caution" is ordinary here — which is why
+        it is recorded rather than left unset. The landlord fixes it; Kora
+        stores it, shows it, and neither holds the money nor arbitrates its
+        return (see conception_metier/kora-housing-v1.md §4.7).
+        """
         self._assert_editable()
-        self.deposit = deposit.require_non_negative(reason="deposit cannot be negative")
+        self.deposit_months = deposit
         self.pending_draft_steps.discard(PropertyDraftData.DEPOSIT)
         self.data_quality_issues.discard(DataQualityIssue.MISSING_DEPOSIT)
         self._touch(now)
+
+    def set_advance_months(self, advance: RentMonths, *, now: datetime) -> None:
+        """How many months of rent the landlord wants up front.
+
+        On top of the caution, and spent rather than returned. This is the
+        figure the matching compares against what a tenant says he can pay.
+        """
+        self._assert_editable()
+        self.advance_months = advance
+        self.data_quality_issues.discard(DataQualityIssue.MISSING_ADVANCE)
+        self._touch(now)
+
+    @property
+    def entry_months(self) -> int | None:
+        """Months a tenant must hand over to move in: advance plus caution.
+
+        ``None`` while either is unknown: a partial total read as a total is
+        worse than no total, because a tenant would budget against it.
+        """
+        if self.deposit_months is None or self.advance_months is None:
+            return None
+        return self.advance_months.months + self.deposit_months.months
+
+    def entry_cost(self) -> Money | None:
+        """What moving in costs in francs, at this listing's rent."""
+        months = self.entry_months
+        if months is None or self.rent is None:
+            return None
+        return Money(amount=self.rent.amount * months, currency=self.rent.currency)
 
     def set_quantity(self, quantity: int, *, now: datetime) -> None:
         """How many identical lodgings this one listing stands for.
@@ -250,11 +299,22 @@ class Property(AggregateRoot):
         if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1:
             self._reject("a listing must stand for at least one lodging", quantity=quantity)
         self.quantity = quantity
+        self.data_quality_issues.discard(DataQualityIssue.MISSING_QUANTITY)
         self._touch(now)
 
     @property
+    def lodgings(self) -> int:
+        """How many are on offer, reading an unanswered step as one.
+
+        Everything downstream — "are any left?", search, the decrement — needs a
+        number, and one lodging is the only safe reading of a listing nobody
+        said was plural.
+        """
+        return 1 if self.quantity is None else self.quantity
+
+    @property
     def is_exhausted(self) -> bool:
-        return self.quantity == 0
+        return self.lodgings == 0
 
     def declare_one_taken(self, *, now: datetime) -> None:
         """The landlord says one of them is gone.
@@ -268,7 +328,7 @@ class Property(AggregateRoot):
         """
         if self.is_exhausted:
             self._reject("every lodging of this listing is already taken")
-        self.quantity -= 1
+        self.quantity = self.lodgings - 1
         self._touch(now)
 
     def set_rooms(
@@ -363,8 +423,13 @@ class Property(AggregateRoot):
         # immédiatement" has it recorded. Optional, not forbidden.
         if self.location is None or not self.location.is_publishable():
             issues.add(DataQualityIssue.VAGUE_LOCATION)
-        if self.deposit is None:
+        if self.deposit_months is None:
             issues.add(DataQualityIssue.MISSING_DEPOSIT)
+        if self.advance_months is None:
+            # Blocking, unlike the three fields above, because the form really
+            # does ask for it (step 8) and because a listing with no advance
+            # cannot be matched: the tenant's months have nothing to meet.
+            issues.add(DataQualityIssue.MISSING_ADVANCE)
         return frozenset(issues)
 
     def usable_photos(self) -> list[PropertyMedia]:
@@ -380,18 +445,26 @@ class Property(AggregateRoot):
         ]
 
     def completeness_score(self) -> float:
+        """How much of the form the landlord actually answered.
+
+        One check per step of the ten the landlord is asked (§4), and nothing
+        else. It used to count the minimum duration, the availability date and
+        the free-text conditions — three questions the form no longer asks — so
+        a listing conforming perfectly to the spec scored 7 out of 10 and was
+        reported back to its owner as incomplete.
+        """
         total = 10
         checks = (
             self.property_type is not None,
+            self.standing is not None,
+            self.quantity is not None,
             self.location is not None and self.location.is_publishable(),
             self.rent is not None,
             self.charging_policy is not ChargingPolicy.UNKNOWN,
+            self.deposit_months is not None,
+            self.advance_months is not None,
+            self.amenities.security is not None or self.amenities.parking is not None,
             bool(self.usable_photos()),
-            self.bedrooms is not None,
-            self.minimum_duration is not None,
-            self.availability is not None,
-            self.deposit is not None,
-            self.conditions is not None,
         )
         return sum(checks) / total
 

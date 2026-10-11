@@ -25,6 +25,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyStanding,
     PropertyStatus,
     PropertyType,
+    RentMonths,
     SurfaceArea,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import (
@@ -66,7 +67,12 @@ def to_row(prop: Property) -> dict[str, Any]:
         "charges_xaf": charges.amount if charges else None,
         "public_price_xaf": public.amount if public else None,
         "charging_policy": prop.charging_policy.value,
-        "deposit_xaf": prop.deposit.amount if prop.deposit else None,
+        "deposit_months": prop.deposit_months.months if prop.deposit_months else None,
+        "advance_months": prop.advance_months.months if prop.advance_months else None,
+        # Left null on purpose: the amount is derived from the months and the
+        # rent, so writing it would create a second truth that drifts the day a
+        # landlord corrects his rent.
+        "deposit_xaf": None,
         "quantity": prop.quantity,
         "currency": rent.currency if rent else "XAF",
         "bedrooms": prop.bedrooms.count if prop.bedrooms else None,
@@ -153,7 +159,12 @@ def from_row(row: PropertyRow, media_rows: list[PropertyMediaRow] | None = None)
     prop.rent = Money(row.rent_xaf, row.currency) if row.rent_xaf is not None else None
     prop.charges = Money(row.charges_xaf, row.currency) if row.charges_xaf is not None else None
     prop.charging_policy = ChargingPolicy(row.charging_policy)
-    prop.deposit = Money(row.deposit_xaf, row.currency) if row.deposit_xaf is not None else None
+    prop.deposit_months = (
+        RentMonths(row.deposit_months) if row.deposit_months is not None else None
+    )
+    prop.advance_months = (
+        RentMonths(row.advance_months) if row.advance_months is not None else None
+    )
     prop.quantity = row.quantity
     if row.bedrooms is not None:
         prop.bedrooms = BedroomCount(row.bedrooms, row.bathrooms or 0)

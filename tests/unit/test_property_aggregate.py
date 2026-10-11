@@ -27,6 +27,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     Duration,
     PropertyStatus,
     PropertyType,
+    RentMonths,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import Location
 from loka.bounded_contexts.property.domain.value_objects.money import Money
@@ -54,7 +55,9 @@ def complete_property(now: datetime, **overrides: object) -> Property:
     prop.set_location(Location(city="Douala", neighbourhood="Bastos"), now=now)
     prop.set_rent(Money(300_000), now=now)
     prop.set_charges(Money(25_000), ChargingPolicy.EXTRA, now=now)
-    prop.set_deposit(Money(500_000), now=now)
+    prop.set_deposit_months(RentMonths(2), now=now)
+    prop.set_advance_months(RentMonths(6), now=now)
+    prop.set_quantity(1, now=now)
     prop.set_rooms(BedroomCount(2, 2), None, now=now)
     prop.set_minimum_duration(Duration(12), now=now)
     prop.set_availability(AvailabilityWindow(date.today()), now=now)
@@ -262,7 +265,9 @@ def kora_spec_property(now: datetime, *, with_photos: bool = True) -> Property:
     prop.set_location(Location(city="Yaounde", neighbourhood="Biyem-Assi"), now=now)
     prop.set_rent(Money(60_000), now=now)
     prop.set_charges(Money(0), ChargingPolicy.INCLUDED, now=now)
-    prop.set_deposit(Money(120_000), now=now)
+    prop.set_deposit_months(RentMonths(2), now=now)
+    prop.set_advance_months(RentMonths(6), now=now)
+    prop.set_quantity(1, now=now)
     if with_photos:
         for media in build_media(1):
             prop.add_media(media, now=now)
@@ -303,7 +308,9 @@ class TestWhatStillBlocks:
         prop.set_type(PropertyType.STUDIO, now=now)
         prop.set_rent(Money(60_000), now=now)
         prop.set_charges(Money(0), ChargingPolicy.INCLUDED, now=now)
-        prop.set_deposit(Money(120_000), now=now)
+        prop.set_deposit_months(RentMonths(2), now=now)
+        prop.set_advance_months(RentMonths(6), now=now)
+        prop.set_quantity(1, now=now)
         for media in build_media(1):
             prop.add_media(media, now=now)
 
@@ -316,7 +323,9 @@ class TestWhatStillBlocks:
         prop.set_type(PropertyType.STUDIO, now=now)
         prop.set_location(Location(city="Yaounde", neighbourhood="Biyem-Assi"), now=now)
         prop.set_rent(Money(60_000), now=now)
-        prop.set_deposit(Money(120_000), now=now)
+        prop.set_deposit_months(RentMonths(2), now=now)
+        prop.set_advance_months(RentMonths(6), now=now)
+        prop.set_quantity(1, now=now)
         for media in build_media(1):
             prop.add_media(media, now=now)
 

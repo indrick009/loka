@@ -408,7 +408,8 @@ class TestDeterministicShortCircuit:
 
         assert model.calls == 0
         assert session.context["standing"] == "NON_MODERN"
-        assert report.next_step == "COLLECT_LOCATION"
+        # Step 3 of the form, which the standing answer unblocks.
+        assert report.next_step == "COLLECT_QUANTITY"
 
     async def test_a_bare_greeting_costs_no_model_call(
         self,
@@ -607,7 +608,7 @@ class TestLlmFirst:
         model = StubModel(
             result=_model_result(
                 intent="PROPERTY_SEARCH",
-                entities={"property_type": "STUDIO", "standing": "MODERN"},
+                entities={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
             )
         )
         use_case, _, _, _ = build(
@@ -787,6 +788,7 @@ class TestModelWrittenReply:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                     },
                 )
@@ -827,6 +829,7 @@ class TestModelWrittenReply:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                     },
                 )
@@ -1220,6 +1223,7 @@ class TestSessionAdvancement:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                     }
                 )
@@ -1268,6 +1272,7 @@ class TestSessionAdvancement:
         )
         session.context["property_type"] = "STUDIO"
         session.context["standing"] = "MODERN"
+        session.context["quantity"] = 1
 
         use_case, _, _, _ = build(
             uow,
@@ -1303,14 +1308,14 @@ class TestSessionAdvancement:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                         "price": 250_000,
                         "charges": 0,
                         "charging_policy": "INCLUDED",
-                        "deposit": 250_000,
-                        "minimum_duration_months": 12,
-                        "availability": "IMMEDIATE",
-                        "conditions": "Caution deux mois, avance de trois mois.",
+                        "deposit_months": 2,
+                        "advance_months": 6,
+                        "amenities": {"security": True, "parking": False},
                     }
                 )
             ),
@@ -1339,6 +1344,7 @@ class TestSessionAdvancement:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                         "price": 250_000,
                     }
@@ -1364,6 +1370,7 @@ class TestSessionAdvancement:
         )
         session.context["property_type"] = "STUDIO"
         session.context["standing"] = "MODERN"
+        session.context["quantity"] = 1
         session.context["next_question"] = "ask.location"
 
         use_case, _, _, _ = build(
@@ -1418,6 +1425,7 @@ class TestTheStagedReply:
                     entities={
                         "property_type": "APARTMENT",
                         "standing": "MODERN",
+                        "quantity": 1,
                         "city": "Douala",
                     }
                 )
@@ -1569,13 +1577,13 @@ class TestSingleCallReply:
         assert [f["field"] for f in payload["required_fields"]] == [
             "property_type",
             "standing",
+            "quantity",
             "location",
             "rent",
             "charges",
-            "deposit",
-            "minimum_duration_months",
-            "availability",
-            "conditions",
+            "deposit_months",
+            "advance_months",
+            "security",
         ]
         studio = payload["price_reference_monthly_xaf"]["STUDIO"]
         assert studio["min"] < studio["max"]
@@ -1598,6 +1606,7 @@ class TestSingleCallReply:
         )
         session.context["property_type"] = "APARTMENT"
         session.context["standing"] = "MODERN"
+        session.context["quantity"] = 1
         session.context["rent"] = 250_000
         session.context["next_question"] = "ask.location"
         model = StubModel(result=_model_result(intent="COLLECT_LOCATION"))

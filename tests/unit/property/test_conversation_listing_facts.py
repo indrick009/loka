@@ -33,7 +33,12 @@ FULL_FACTS: dict[str, Any] = {
     "rent": 250_000,
     "charges": 0,
     "charging_policy": "INCLUDED",
-    "deposit": 250_000,
+    # Entry money in months of rent, as the form now asks for it, plus the two
+    # steps that used to be missing from this set entirely.
+    "deposit_months": 2,
+    "advance_months": 6,
+    "quantity": 2,
+    "security": {"security": True, "parking": False},
     "minimum_duration_months": 12,
     "availability": "IMMEDIATE",
     "conditions": "Caution deux mois, avance de trois mois.",
@@ -52,7 +57,11 @@ class TestApplyConversationFacts:
 
         assert prop.charges is not None and prop.charges.amount == 0
         assert prop.charging_policy is ChargingPolicy.INCLUDED
-        assert prop.deposit is not None and prop.deposit.amount == 250_000
+        assert prop.deposit_months is not None and prop.deposit_months.months == 2
+        assert prop.advance_months is not None and prop.advance_months.months == 6
+        assert prop.quantity == 2
+        assert prop.amenities.security is True
+        assert prop.amenities.parking is False
         assert prop.minimum_duration is not None and prop.minimum_duration.months == 12
         assert prop.availability is not None
         assert prop.availability.available_from == NOW.date()
@@ -74,4 +83,4 @@ class TestApplyConversationFacts:
         _apply_facts(prop, facts, now=NOW)
 
         assert prop.rent is None
-        assert prop.deposit is not None
+        assert prop.deposit_months is not None

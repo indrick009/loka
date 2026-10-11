@@ -36,13 +36,33 @@ QUESTION_TEXT: dict[str, str] = {
         "Combien de chambres ?\n"
         "Vous pouvez aussi indiquer la superficie en m2."
     ),
+    # Step 6 asks about water and electricity by name. "Les charges" alone got
+    # answered "oui" by landlords whose lodging has no running water at all,
+    # and the tenant discovered it on the visit.
     "ask.charges": (
-        "Les charges mensuelles sont-elles incluses dans le loyer ?\n"
-        "Si non, quel est leur montant en FCFA ?"
+        "L'eau et l'électricité sont-elles incluses dans le loyer ?\n"
+        "Précisez aussi si le logement a bien l'eau courante et l'électricité.\n"
+        "Si elles ne sont pas incluses, indiquez le montant mensuel en FCFA."
     ),
+    "ask.quantity": (
+        "Combien de logements identiques louez-vous ?\n"
+        "Même type, mêmes caractéristiques, même loyer. Répondez 1 s'il n'y en "
+        "a qu'un."
+    ),
+    # Months, not francs: the caution is a multiple of the rent here, and an
+    # amount stored decouples the day the landlord corrects his rent.
     "ask.deposit": (
-        "Quel est le montant de la caution (dépôt de garantie), en FCFA ?\n"
-        "C'est la somme remboursable demandée au locataire à l'entrée."
+        "Demandez-vous une caution ? Si oui, combien de mois de loyer ?\n"
+        "La caution s'ajoute à l'avance et vous la remboursez au départ du "
+        "locataire. Répondez 0 s'il n'y a pas de caution."
+    ),
+    "ask.advance": (
+        "Combien de mois de loyer demandez-vous d'avance ?\n"
+        "En plus de la caution. Habituellement entre 3 et 6 mois."
+    ),
+    "ask.security": (
+        "Y a-t-il un gardien ? Et un parking ?\n"
+        "Répondez simplement, par exemple : gardien oui, parking non."
     ),
     "ask.minimum_duration": "Quelle est la durée minimale de location souhaitée ?",
     "ask.availability": (
@@ -111,12 +131,28 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "You can also give the surface area in m2."
     ),
     "ask.charges": (
-        "Are the monthly charges included in the rent?\n"
-        "If not, what is their amount in FCFA?"
+        "Are water and electricity included in the rent?\n"
+        "Please also say whether the property actually has running water and "
+        "electricity.\n"
+        "If they are not included, give the monthly amount in FCFA."
+    ),
+    "ask.quantity": (
+        "How many identical lodgings are you renting out?\n"
+        "Same type, same characteristics, same rent. Answer 1 if there is only "
+        "one."
     ),
     "ask.deposit": (
-        "What is the security deposit amount, in FCFA?\n"
-        "It is the refundable sum asked from the tenant on move-in."
+        "Do you ask for a caution? If so, how many months of rent?\n"
+        "The caution is added to the advance and you refund it when the tenant "
+        "leaves. Answer 0 if there is none."
+    ),
+    "ask.advance": (
+        "How many months of rent do you want up front?\n"
+        "On top of the caution. Usually between 3 and 6 months."
+    ),
+    "ask.security": (
+        "Is there a guard? And parking?\n"
+        "Answer plainly, for example: guard yes, parking no."
     ),
     "ask.minimum_duration": "What is the minimum rental duration you want?",
     "ask.availability": (

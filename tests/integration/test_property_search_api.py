@@ -28,6 +28,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     ChargingPolicy,
     Duration,
     PropertyType,
+    RentMonths,
     SurfaceArea,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import Location
@@ -70,7 +71,9 @@ def _published_listing(
     prop.set_location(Location(city=city, neighbourhood=neighbourhood), now=now)
     prop.set_rent(Money(price), now=now)
     prop.set_charges(Money(25_000), ChargingPolicy.EXTRA, now=now)
-    prop.set_deposit(Money(price * 2), now=now)
+    prop.set_deposit_months(RentMonths(2), now=now)
+    prop.set_advance_months(RentMonths(6), now=now)
+    prop.set_quantity(1, now=now)
     prop.set_rooms(BedroomCount(2, 1), SurfaceArea(65), now=now)
     prop.set_minimum_duration(Duration(6), now=now)
     prop.set_availability(AvailabilityWindow(now.date() + timedelta(days=5)), now=now)

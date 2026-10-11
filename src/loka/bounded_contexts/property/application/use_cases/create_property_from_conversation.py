@@ -42,6 +42,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyStanding,
     PropertyStatus,
     PropertyType,
+    RentMonths,
     SurfaceArea,
 )
 from loka.bounded_contexts.property.domain.value_objects.location import (
@@ -240,26 +241,42 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
             if parts:
                 breakdown_note = "charges détaillées — " + ", ".join(parts)
 
-    amenities = facts.get("amenities")
-    if isinstance(amenities, Mapping):
+    # Two facts feed the same five axes. ``amenities`` is whatever the landlord
+    # happened to mention; ``security`` is his answer to step 9, which asks
+    # about the guard and the parking by name. Merged in that order so the
+    # answered question wins over the passing remark.
+    stated: dict[str, object] = {}
+    for source in ("amenities", "security"):
+        value = facts.get(source)
+        if isinstance(value, Mapping):
+            stated.update(value)
+    if stated:
         current = prop.amenities
         guard(
             lambda: prop.update_amenities(
                 Amenities(
-                    parking=amenities.get("parking", current.parking),
-                    water=amenities.get("water", current.water),
-                    electricity=amenities.get("electricity", current.electricity),
-                    internet=amenities.get("internet", current.internet),
-                    security=amenities.get("security", current.security),
-                    extras=frozenset(str(extra) for extra in amenities.get("extras") or ()),
+                    parking=_flag(stated, "parking", current.parking),
+                    water=_flag(stated, "water", current.water),
+                    electricity=_flag(stated, "electricity", current.electricity),
+                    internet=_flag(stated, "internet", current.internet),
+                    security=_flag(stated, "security", current.security),
+                    extras=_extras(stated),
                 ),
                 now=now,
             )
         )
 
-    deposit = facts.get("deposit")
-    if isinstance(deposit, int) and not isinstance(deposit, bool):
-        guard(lambda: prop.set_deposit(Money(amount=deposit), now=now))
+    quantity = facts.get("quantity")
+    if isinstance(quantity, int) and not isinstance(quantity, bool):
+        guard(lambda: prop.set_quantity(quantity, now=now))
+
+    deposit_months = facts.get("deposit_months")
+    if isinstance(deposit_months, int) and not isinstance(deposit_months, bool):
+        guard(lambda: prop.set_deposit_months(RentMonths(months=deposit_months), now=now))
+
+    advance_months = facts.get("advance_months")
+    if isinstance(advance_months, int) and not isinstance(advance_months, bool):
+        guard(lambda: prop.set_advance_months(RentMonths(months=advance_months), now=now))
 
     window = _availability_window(facts.get("availability"), now)
     if window is not None:
@@ -311,3 +328,22 @@ def _coordinates_of(location: Mapping[str, Any]) -> Coordinates | None:
     with contextlib.suppress(DomainError):
         return Coordinates(latitude=float(latitude), longitude=float(longitude))
     return None
+
+
+def _flag(stated: Mapping[str, object], axis: str, current: bool | None) -> bool | None:
+    """One amenity axis, keeping what is already known when nothing was said.
+
+    ``None`` means unknown and must survive: it is what distinguishes "no
+    parking" from "nobody asked", and that difference drives the quality report
+    sent back to the landlord.
+    """
+    value = stated.get(axis)
+    return value if isinstance(value, bool) else current
+
+
+def _extras(stated: Mapping[str, object]) -> frozenset[str]:
+    """Free-text amenities, ignored unless they came as a list of labels."""
+    raw = stated.get("extras")
+    if not isinstance(raw, list):
+        return frozenset()
+    return frozenset(str(extra) for extra in raw)

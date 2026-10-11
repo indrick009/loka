@@ -226,9 +226,44 @@ LOCATION_HINT_PATTERN = re.compile(
 _BILLABLE_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
     "ask.rent": ("COLLECT_PRICE", "price"),
     "ask.search_budget": ("COLLECT_PRICE", "price"),
-    "ask.deposit": ("COLLECT_DEPOSIT", "deposit"),
     "ask.charges": ("COLLECT_CHARGES", "charges"),
 }
+
+# The caution and the advance are counted in months of rent, so a bare "2"
+# under either is two months — not two francs, and not a number too small to be
+# a rent. Separate from the duration binder because zero is a real answer here:
+# "aucune caution" is ordinary, while a lease of zero months is nonsense.
+_MONTH_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
+    "ask.deposit": ("COLLECT_DEPOSIT", "deposit_months"),
+    "ask.advance": ("COLLECT_ADVANCE", "advance_months"),
+}
+
+# Questions whose answer is counted in something other than francs. A bare
+# number given to one of these is months, a count or a date — never a price —
+# so if it does not parse in that unit it must not be bound at all.
+_UNIT_BOUND_QUESTIONS = frozenset(
+    {
+        "ask.deposit",
+        "ask.advance",
+        "ask.quantity",
+        "ask.minimum_duration",
+        "ask.availability",
+    }
+)
+
+# A number on its own, with or without a money suffix: "2", "250 000", "60k".
+_BARE_AMOUNT_PATTERN = re.compile(
+    r"^\s*\d[\d\s.,]*\s*(?:k|m|mil|mille|f|fr|frs|fcfa|xaf)?\s*$", re.IGNORECASE
+)
+# "2", "2 mois", "02". Zero is allowed; the caller decides whether it means
+# anything for the field it is binding to.
+_MONTH_COUNT_PATTERN = re.compile(
+    r"^\s*(?P<count>\d{1,3})\s*(?:mois|month[s]?)?\s*$", re.IGNORECASE
+)
+# The heaviest entry the business spec cites is a year of advance; RentMonths
+# refuses past two years, and this stops short of it for the same reason.
+_MAX_ENTRY_MONTHS = 24
+
 _DURATION_ANSWER_PATTERN = re.compile(
     r"^\s*(?P<count>\d{1,2})\s*(?:mois|month[s]?)?\s*$", re.IGNORECASE
 )
@@ -267,6 +302,14 @@ class DeterministicClassifier:
         answer = self.pending_answer(normalized, pending)
         if answer is not None:
             return answer
+        if pending in _UNIT_BOUND_QUESTIONS and _BARE_AMOUNT_PATTERN.match(normalized):
+            # The open question fixes the unit of a bare answer, and this one
+            # did not parse in that unit. Falling through to the generic rules
+            # is how "250000" answered to the caution question was stored as
+            # the rent: a number that failed the question's own unit must reach
+            # the model, which will ask again, rather than be bound to whatever
+            # field a pattern happens to match.
+            return None
 
         availability = self._first_match(AVAILABILITY_PATTERNS, normalized)
         if availability:
@@ -440,6 +483,34 @@ class DeterministicClassifier:
                 # number to bind.
                 entities["charging_policy"] = "EXTRA"
             return DeterministicMatch(intent=intent, confidence=0.95, entities=entities)
+
+        months_field = _MONTH_ANSWER_FIELDS.get(pending)
+        if months_field is not None:
+            match = _MONTH_COUNT_PATTERN.match(normalized)
+            if match is None:
+                return None
+            months = int(match.group("count"))
+            if months > _MAX_ENTRY_MONTHS:
+                # Past two years it is a franc amount answered to a months
+                # question. Handing it back to the model is how the landlord
+                # gets asked again instead of having a typo stored.
+                return None
+            intent, field = months_field
+            return DeterministicMatch(
+                intent=intent, confidence=0.95, entities={field: months}
+            )
+
+        if pending == "ask.quantity":
+            match = _MONTH_COUNT_PATTERN.match(normalized)
+            if match is not None:
+                quantity = int(match.group("count"))
+                if 1 <= quantity <= 50:
+                    return DeterministicMatch(
+                        intent="COLLECT_QUANTITY",
+                        confidence=0.95,
+                        entities={"quantity": quantity},
+                    )
+            return None
 
         if pending == "ask.minimum_duration":
             match = _DURATION_ANSWER_PATTERN.match(normalized)

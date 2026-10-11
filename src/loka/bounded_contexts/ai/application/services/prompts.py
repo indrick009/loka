@@ -106,7 +106,15 @@ QUESTION_TOPICS: dict[str, str] = {
     "ask.rent": "the monthly rent, in XAF",
     "ask.features": "the number of bedrooms and bathrooms, and the surface in m2",
     "ask.charges": "whether charges are included and, if not, their monthly amount",
-    "ask.deposit": "the refundable deposit (caution) the tenant must pay, in XAF",
+    "ask.quantity": "how many identical lodgings are on offer in this one listing",
+    "ask.deposit": (
+        "the refundable caution, expressed in MONTHS of rent, not in francs "
+        "(zero is a valid answer)"
+    ),
+    "ask.advance": (
+        "how many MONTHS of rent must be paid up front, on top of the caution"
+    ),
+    "ask.security": "whether there is a guard and whether there is parking",
     "ask.minimum_duration": "the minimum rental duration",
     "ask.availability": "when the property becomes available (a date, or immediately)",
     "ask.conditions": (
@@ -147,8 +155,25 @@ _LANDLORD_TOPICS: dict[str, str] = {
         "whether the charges on the landlord's property are included in the "
         "rent and, if not, their monthly amount"
     ),
+    "ask.quantity": (
+        "how many lodgings of this exact type, characteristics and price the "
+        "landlord is listing at once"
+    ),
     "ask.deposit": (
-        "the refundable deposit (caution) the landlord asks of the tenant, in XAF"
+        "the refundable caution the landlord asks, in MONTHS of rent. In this "
+        "market the caution is counted in months and is paid on top of the "
+        "advance: six months of advance plus two of caution means eight months "
+        "handed over, two of which come back when the tenant leaves. Zero is a "
+        "valid answer. If the landlord replies with an amount in francs, ask "
+        "again for the number of months."
+    ),
+    "ask.advance": (
+        "how many months of rent the landlord wants up front, on top of the "
+        "caution. Three to six months is the usual range here."
+    ),
+    "ask.security": (
+        "whether the landlord's property has a guard and whether it has "
+        "parking"
     ),
     "ask.minimum_duration": "the minimum duration the landlord wants for the rental",
     "ask.availability": "when the landlord's property becomes available (a date, or immediately)",
@@ -192,7 +217,10 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.rent": "price",
     "ask.features": "bedrooms, bathrooms, surface_area",
     "ask.charges": "charges and charging_policy",
-    "ask.deposit": "deposit",
+    "ask.quantity": "quantity",
+    "ask.deposit": "deposit_months",
+    "ask.advance": "advance_months",
+    "ask.security": "amenities.security and amenities.parking",
     "ask.minimum_duration": "minimum_duration_months",
     "ask.availability": "availability",
     "ask.conditions": "conditions",
@@ -228,7 +256,14 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 # the landlord gives both; the code sums them for ``charges``.
                 "water_charges": {"type": "integer"},
                 "electricity_charges": {"type": "integer"},
+                # Entry money in months of rent, which is how this market
+                # states it. ``deposit`` survives only so that an answer given
+                # in francs is visible and can be refused, instead of being
+                # read as a number of months.
+                "deposit_months": {"type": "integer"},
+                "advance_months": {"type": "integer"},
                 "deposit": {"type": "integer"},
+                "quantity": {"type": "integer"},
                 "minimum_duration_months": {"type": "integer"},
                 "availability": {"type": "string"},
                 "conditions": {"type": "string"},

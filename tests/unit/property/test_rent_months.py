@@ -68,8 +68,15 @@ class TestRentMonths:
 
 
 class TestQuantity:
-    def test_a_listing_is_one_lodging_by_default(self) -> None:
-        assert a_property().quantity == 1
+    def test_an_unasked_listing_has_no_declared_quantity(self) -> None:
+        """``None``, not one: step 3 of the form has to be reportable as missing.
+
+        Everything downstream still reads one, through ``lodgings``.
+        """
+        prop = a_property()
+
+        assert prop.quantity is None
+        assert prop.lodgings == 1
 
     def test_identical_lodgings_share_one_listing(self) -> None:
         """Two identical studios: one listing, quantity two (§5)."""

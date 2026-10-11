@@ -50,6 +50,13 @@ class DataQualityIssue(StrEnum):
     VAGUE_LOCATION = "VAGUE_LOCATION"
     SUSPICIOUS_PRICE = "SUSPICIOUS_PRICE"
     MISSING_DEPOSIT = "MISSING_DEPOSIT"
+    # Step 8 of the landlord's form: how many months of rent he wants up front.
+    # Separate from the caution because they are separate sums with separate
+    # fates — the advance is spent, the caution comes back — and because the
+    # advance is the axis the matching negotiates on.
+    MISSING_ADVANCE = "MISSING_ADVANCE"
+    MISSING_SECURITY = "MISSING_SECURITY"
+    MISSING_QUANTITY = "MISSING_QUANTITY"
     AMBIGUOUS_CONDITIONS = "AMBIGUOUS_CONDITIONS"
 
 class ChargingPolicy(StrEnum):

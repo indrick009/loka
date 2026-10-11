@@ -41,6 +41,24 @@ attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 
 **Reste ouvert** : D6, D10, D12, D14, D15, D16, D17, D19, D20.
 
+**Hors numérotation — le parcours bailleur réaligné sur la spec.** Le
+formulaire posait neuf questions ; la spec (§4) en pose dix, et ce n'étaient pas
+les mêmes. Trois questions abandonnées par le métier étaient encore posées — la
+durée minimale, la date de disponibilité, les conditions en texte libre — et
+quatre ajoutées ne l'étaient jamais : le nombre de logements identiques, la
+caution en mois, l'avance en mois, le gardien et le parking. Corrigé :
+`PROPERTY_REQUIREMENTS` suit maintenant l'ordre de la spec, la caution et
+l'avance sont comptées en **mois de loyer** (`RentMonths`), et une réponse
+donnée en francs est refusée plutôt que convertie. `completeness_score()`
+comptait les trois champs abandonnés : une annonce parfaitement conforme
+plafonnait à 7/10 et son bailleur s'entendait dire qu'elle était incomplète.
+
+Un bug trouvé au passage : un montant en francs répondu à la question caution
+retombait sur les règles génériques du classificateur déterministe et était
+enregistré comme **le loyer**. Même piège latent sur la durée minimale et la
+disponibilité. Une question dont l'unité n'est pas le franc ne laisse plus un
+nombre nu être lié à un autre champ.
+
 **D11 — ce qui est fait et ce qui ne l'est pas.** L'intégration Fapshi est
 complète du côté du fournisseur : création du lien de paiement, authentification
 du webhook, confirmation de chaque notification contre `GET /payment-status`, et

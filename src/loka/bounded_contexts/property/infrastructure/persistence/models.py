@@ -41,12 +41,17 @@ class PropertyRow(Base):
     charges_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     public_price_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     charging_policy: Mapped[str] = mapped_column(String(16), nullable=False, default="UNKNOWN")
+    # Entry money, counted in months of rent (§4.7 and §4.8). The caution comes
+    # back when the tenant leaves; the advance does not.
+    deposit_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    advance_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Superseded by deposit_months and no longer written. Kept for one revision
+    # so a rollback has somewhere to land; dropped in the contract step.
     deposit_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    # How many identical lodgings this one listing stands for. Never null: a
-    # listing is at least one lodging, and zero means every one is taken.
-    quantity: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1, server_default="1"
-    )
+    # How many identical lodgings this one listing stands for. Null means the
+    # landlord was never asked, which is not the same as one: without the
+    # difference, step 3 of the form could never be reported as missing.
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
 
     bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -46,16 +46,34 @@ Then Kora publishes the lodging or lodgings.
 
 ### Delta against the code today
 
-`docs/conversational-engine.md` documents the current order:
-`property_type → standing → location → rent → charges → deposit →
-minimum_duration_months → availability → conditions → CONFIRM`.
+**Mostly closed.** The landlord's form now walks the spec's order
+(`PROPERTY_REQUIREMENTS` in `ai/domain/services/fact_extraction.py`):
 
-| Change | Nature |
+`property_type → standing → quantity → location → rent → charges →
+deposit_months → advance_months → security → CONFIRM`
+
+The photos are step 10 and are not in that list on purpose: no message produces
+a `media` fact, so requiring one there would park the conversation for ever.
+They are chased by the quality gate, which sends `ask.media` once the listing
+exists and still has none.
+
+The three fields the spec dropped — `minimum_duration_months`, `availability`
+and the free-text `conditions` — keep their steps, entities and setters but are
+never asked. Optional, not forbidden: a landlord who volunteers "disponible
+immédiatement" still has it recorded.
+
+What is still open: splitting one conversation into two listings when the
+landlord has different types or different prices (§5 rows two and three). The
+quantity question records a number; it does not yet split.
+
+| Change | State |
 | --- | --- |
-| "Several lodgings?" as step 3 | **New.** Drives quantity and listing splitting. |
-| Location offers WhatsApp share first, and is blocking | **New.** The gateway drops non-text messages today, so this is unimplementable until media reaches the backend. |
-| `charges` becomes electricity and water, stated separately | **Change.** The schema already carries `water_charges` and `electricity_charges` — the flow does not use them, and "no water" is not representable as included/extra. |
-| Deposit expressed in **months** | **Change.** Stored as an XAF amount today. Months is what landlords say; derive the amount from the rent. |
+| "Several lodgings?" as step 3 | **Asked.** Records `quantity`; does not yet split one conversation into several listings. |
+| Location offers WhatsApp share first | **Done** (D3): a shared position reaches the backend and answers the location question. |
+| `charges` becomes electricity and water, by name | **Asked.** The sentence now names water and electricity; the schema already carried `water_charges` and `electricity_charges`. |
+| Deposit expressed in **months** | **Done.** `RentMonths` on the aggregate, `deposit_months` and `advance_months` columns, and a franc amount answered to the question is refused rather than converted. |
+| Advance as its own step | **Done.** Step 8, blocking for publication: a listing with no advance has nothing for a tenant's months to meet. |
+| Guard and parking as step 9 | **Asked.** Fills `Amenities.security` and `Amenities.parking`. |
 | Security (guard, parking) as a collection step | **Change.** `amenities` already has `parking` and `security` booleans; no step collects them. |
 | Photos as the explicit last step | **Partially present.** The quality gate reports `MISSING_PHOTOS`, but there is no media pipeline. |
 | `minimum_duration` and `conditions` | **Dropped** — decided 11 Oct. Kora connects people, it does not negotiate leases. The quality gate has to stop requiring them. |
@@ -97,9 +115,10 @@ is a listing that lies.
 That sentence is a constraint on us, not a convenience for the tenant. Every
 extra question is work the matching engine refused to do.
 
-**Delta:** Loka asks three of these — type, location, budget. **Months of advance
-is missing**, and it is not cosmetic: §8 makes the advance an explicit axis of
-mismatch and negotiation. `standing`, `charges`, `deposit`, `availability` are
+**Delta:** Loka asks three of these — type, location, budget. **The tenant's
+months of advance is still missing**, and it is not cosmetic: §8 makes the
+advance an explicit axis of mismatch and negotiation, and the landlord's side of
+that comparison now exists (`advance_months`) while the tenant's does not. `standing`, `charges`, `deposit`, `availability` are
 correctly never asked of a tenant, and must stay that way — the existing docs
 already explain why: a question the tenant cannot answer is a thread that stops.
 
