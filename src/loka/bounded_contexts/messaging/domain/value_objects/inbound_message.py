@@ -1,10 +1,15 @@
 """Inbound WhatsApp message.
 
 The gateway delivers whatever the network sent, so this object is where the
-platform decides what a message is allowed to be. A row with neither text nor
-media cannot be processed downstream, and an id the gateway may resend is the
-only thing standing between a redelivery and a duplicated command, so both are
+platform decides what a message is allowed to be. A row carrying nothing at all
+cannot be processed downstream, and an id the gateway may resend is the only
+thing standing between a redelivery and a duplicated command, so both are
 enforced here rather than in the handler.
+
+"Nothing at all" is the part that was wrong: a shared position is content. All
+four specifications name the WhatsApp location pin as the preferred way to say
+where something is, and a pin arrives with no text, so a message judged empty
+unless it had text or media silently dropped the best answer a user can give.
 """
 
 from __future__ import annotations
@@ -20,6 +25,7 @@ from loka.shared.domain.errors import ValidationFailed
 
 MAX_EXTERNAL_MESSAGE_ID = 180
 MAX_CONVERSATION_REF = 96
+MAX_LOCATION_LABEL = 160
 
 
 class MessageKind(StrEnum):
@@ -32,6 +38,41 @@ class MessageKind(StrEnum):
     LOCATION = "LOCATION"
     CONTACT = "CONTACT"
     UNSUPPORTED = "UNSUPPORTED"
+
+
+@dataclass(frozen=True, slots=True)
+class SharedLocation:
+    """A position the user sent, as WhatsApp delivered it.
+
+    Messaging keeps its own point rather than borrowing the property context's
+    ``Coordinates``: what arrived is a fact about the message, and translating
+    it into a listing's location is somebody else's decision.
+
+    ``label`` is the place name WhatsApp attaches when the user shares a place
+    rather than dropping a pin. It is free text from the network, so it is
+    carried, never trusted as a neighbourhood on its own.
+    """
+
+    latitude: float
+    longitude: float
+    label: str | None = None
+
+    def __post_init__(self) -> None:
+        if not -90 <= self.latitude <= 90:
+            raise ValidationFailed(
+                "latitude is outside the world", context={"latitude": self.latitude}
+            )
+        if not -180 <= self.longitude <= 180:
+            raise ValidationFailed(
+                "longitude is outside the world", context={"longitude": self.longitude}
+            )
+        # Null Island is what a dropped coordinate field looks like on the
+        # wire, and acting on it would publish a listing in the Atlantic.
+        if self.latitude == 0 and self.longitude == 0:
+            raise ValidationFailed("a position at (0, 0) is a missing position")
+        if self.label is not None:
+            cleaned = self.label.strip()[:MAX_LOCATION_LABEL]
+            object.__setattr__(self, "label", cleaned or None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,15 +89,16 @@ class InboundMessage:
     received_at: datetime
     text: str | None = None
     media_object_key: str | None = None
+    location: SharedLocation | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self._require_text(self.provider, "provider", 32)
         self._require_text(self.external_message_id, "external_message_id", MAX_EXTERNAL_MESSAGE_ID)
         self._require_text(self.conversation_ref, "conversation_ref", MAX_CONVERSATION_REF)
-        if self.text is None and self.media_object_key is None:
+        if self.text is None and self.media_object_key is None and self.location is None:
             raise ValidationFailed(
-                "an inbound message must carry text or a media object",
+                "an inbound message must carry text, a media object or a location",
                 context={
                     "provider": self.provider,
                     "external_message_id": self.external_message_id,
@@ -67,6 +109,10 @@ class InboundMessage:
     @property
     def has_media(self) -> bool:
         return self.media_object_key is not None
+
+    @property
+    def has_location(self) -> bool:
+        return self.location is not None
 
     @property
     def has_text(self) -> bool:

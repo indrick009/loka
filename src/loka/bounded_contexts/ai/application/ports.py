@@ -73,6 +73,26 @@ class PropertyListing(Protocol):
         now: datetime,
     ) -> ConversationListingResult | None: ...
 
+    async def attach_media_from_conversation(
+        self,
+        *,
+        property_id: uuid.UUID,
+        object_key: str,
+        kind: str,
+        now: datetime,
+    ) -> bool:
+        """Attach one stored object to a draft listing.
+
+        ``kind`` is ``PHOTO`` or ``DOCUMENT`` as a plain string: the AI context
+        reads the property domain's value objects but should not have to import
+        its media enum to hand over a key.
+
+        ``False`` means there was nothing to attach it to. A refusal by the
+        listing itself — already attached, past the photo limit — raises, so
+        the caller can tell "no draft yet" from "the draft said no".
+        """
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationSearchQuery:

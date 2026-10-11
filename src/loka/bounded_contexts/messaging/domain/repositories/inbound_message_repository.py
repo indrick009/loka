@@ -6,7 +6,11 @@ import uuid
 from dataclasses import dataclass
 from typing import Protocol
 
-from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import InboundMessage
+from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
+    InboundMessage,
+    MessageKind,
+    SharedLocation,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,9 +21,12 @@ class StoredInboundMessage:
     session_id: uuid.UUID | None
     sender_user_id: uuid.UUID | None
     processed: bool
-    # Only populated by `get_by_id`: the analysis stage needs the text back,
+    # Only populated by `get_by_id`: the analysis stage needs the content back,
     # while the ingestion dedupe path deliberately never reads it.
     text: str | None = None
+    kind: MessageKind = MessageKind.TEXT
+    location: SharedLocation | None = None
+    media_object_key: str | None = None
 
 
 class InboundMessageRepository(Protocol):

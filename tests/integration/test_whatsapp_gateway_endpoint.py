@@ -165,6 +165,25 @@ class TestAccepted:
         inner = gateway.broker.published[0]["payload"]["payload"]
         assert inner["media_object_key"] == "inbound/1.jpg"
 
+    async def test_a_position_only_delivery_is_accepted(self, gateway: Gateway) -> None:
+        """D3: the pin is the preferred answer, and it arrives with no text."""
+        delivery = {
+            **DELIVERY,
+            "text": None,
+            "message_kind": "LOCATION",
+            "location": {"latitude": 3.8905, "longitude": 11.5139, "label": "Bastos"},
+        }
+
+        response = await gateway.http.post(
+            "/integrations/whatsapp/events", json=delivery, headers=auth()
+        )
+
+        assert response.status_code == 202, response.text
+        inner = gateway.broker.published[0]["payload"]["payload"]
+        assert inner["location"]["latitude"] == 3.8905
+        assert inner["location"]["longitude"] == 11.5139
+        assert inner["location"]["label"] == "Bastos"
+
     async def test_two_deliveries_are_not_merged_by_the_transport(
         self, gateway: Gateway
     ) -> None:
@@ -213,10 +232,15 @@ class TestFailClosed:
 
 
 class TestRefused:
-    async def test_a_delivery_with_neither_text_nor_media_is_refused(
+    async def test_a_delivery_carrying_nothing_at_all_is_refused(
         self, gateway: Gateway
     ) -> None:
-        delivery = {**DELIVERY, "text": "   ", "media_object_key": None}
+        delivery = {
+            **DELIVERY,
+            "text": "   ",
+            "media_object_key": None,
+            "location": None,
+        }
 
         response = await gateway.http.post(
             "/integrations/whatsapp/events", json=delivery, headers=auth()
@@ -224,6 +248,39 @@ class TestRefused:
 
         assert response.status_code == 422
         assert response.json()["code"] == "validation_failed"
+        assert gateway.broker.published == []
+
+    async def test_a_position_outside_the_world_is_rejected(
+        self, gateway: Gateway
+    ) -> None:
+        """A transport sending nonsense must not become a listing nobody can find."""
+        delivery = {
+            **DELIVERY,
+            "text": None,
+            "message_kind": "LOCATION",
+            "location": {"latitude": 99.0, "longitude": 11.5139},
+        }
+
+        response = await gateway.http.post(
+            "/integrations/whatsapp/events", json=delivery, headers=auth()
+        )
+
+        assert response.status_code == 422
+        assert gateway.broker.published == []
+
+    async def test_a_half_sent_position_is_rejected(self, gateway: Gateway) -> None:
+        delivery = {
+            **DELIVERY,
+            "text": None,
+            "message_kind": "LOCATION",
+            "location": {"latitude": 3.8905},
+        }
+
+        response = await gateway.http.post(
+            "/integrations/whatsapp/events", json=delivery, headers=auth()
+        )
+
+        assert response.status_code == 422
         assert gateway.broker.published == []
 
     async def test_a_missing_required_field_is_rejected(self, gateway: Gateway) -> None:

@@ -22,8 +22,14 @@ from loka.bounded_contexts.messaging.domain.entities.conversation_session import
     SESSION_IDLE_TIMEOUT,
     FlowStep,
 )
+from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
+    MessageKind,
+)
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     receive_inbound_message_use_case,
+)
+from loka.bounded_contexts.messaging.infrastructure.persistence.inbound_message_repository import (
+    SqlAlchemyInboundMessageRepository,
 )
 from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
     ConversationSessionRow,
@@ -371,3 +377,44 @@ async def test_the_provider_timestamp_is_bounded(
         row = await session.get(InboundMessageRow, receipt.message_id)
         assert row is not None
         assert abs(row.provider_timestamp - NOW) <= timedelta(days=7)
+
+
+async def test_a_shared_position_is_ingested_and_readable_again(
+    database: Database, integration_settings: Settings
+) -> None:
+    """D3: the pin reaches the table, and the analysis stage can read it back.
+
+    Round-tripping matters more than storing: the position is useless if the
+    columns hold it but ``get_by_id`` does not return it, which is exactly how
+    a field that looks persisted never reaches the pipeline.
+    """
+    receipt = await _execute(
+        database,
+        integration_settings,
+        _command(
+            text=None,
+            message_kind="LOCATION",
+            latitude=3.8905,
+            longitude=11.5139,
+            location_label="Bastos, Yaoundé",
+        ),
+        now=NOW,
+    )
+
+    async with database.session() as session:
+        row = await session.get(InboundMessageRow, receipt.message_id)
+        assert row is not None
+        assert row.text is None
+        assert row.location_latitude == pytest.approx(3.8905)
+        assert row.location_longitude == pytest.approx(11.5139)
+        assert row.location_label == "Bastos, Yaoundé"
+
+    async with database.session() as session:
+        stored = await SqlAlchemyInboundMessageRepository(session).get_by_id(
+            receipt.message_id
+        )
+    assert stored is not None
+    assert stored.location is not None
+    assert stored.location.latitude == pytest.approx(3.8905)
+    assert stored.location.label == "Bastos, Yaoundé"
+    assert stored.kind is MessageKind.LOCATION

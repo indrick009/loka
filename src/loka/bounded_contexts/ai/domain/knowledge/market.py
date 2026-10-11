@@ -16,6 +16,7 @@ The two hard problems it solves:
 
 from __future__ import annotations
 
+import math
 import re
 import unicodedata
 from dataclasses import dataclass
@@ -57,6 +58,11 @@ SOURCES: dict[str, Source] = {
         key="onviiit",
         label="Onviiit — Le contrat de bail au Cameroun",
         url="https://onviiit.com/2023/07/28/le-contrat-de-bail-au-cameroun/",
+    ),
+    "geonames": Source(
+        key="geonames",
+        label="GeoNames — Cameroon populated places (city centroids)",
+        url="https://www.geonames.org/CM/",
     ),
     "lanation": Source(
         key="lanation",
@@ -204,6 +210,83 @@ EXPRESSIONS: tuple[Expression, ...] = (
 # published listing can state its real move-in cost.
 ADVANCE_MONTHS_TYPICAL = (3, 6)  # njikam / onviiit — advance, OBSERVED
 CAUTION_MONTHS_TYPICAL = (1, 2)  # onviiit — caution, OBSERVED
+
+
+@dataclass(frozen=True, slots=True)
+class CityCentre:
+    """A city's centroid and the distance out to which a pin still means it.
+
+    ``radius_km`` is the built-up area the market covers, not the commune's
+    legal boundary: Douala and Yaoundé sprawl, a provincial town does not.
+    Generous is wrong in a specific way — it would name a city for a pin in the
+    bush outside it — so the radii stay close to where the listings are.
+    """
+
+    city: str
+    latitude: float
+    longitude: float
+    radius_km: float
+    source: str = "geonames"
+    confidence: Confidence = Confidence.OBSERVED
+
+
+# Centroids for the cities the alias table already knows, so a pin and a typed
+# name can never produce two spellings of one place.
+CITY_CENTRES: tuple[CityCentre, ...] = (
+    CityCentre("Douala", 4.0511, 9.7679, 30.0),
+    CityCentre("Yaoundé", 3.8480, 11.5021, 30.0),
+    CityCentre("Bafoussam", 5.4737, 10.4179, 15.0),
+    CityCentre("Bamenda", 5.9597, 10.1459, 15.0),
+    CityCentre("Garoua", 9.3017, 13.3921, 15.0),
+    CityCentre("Maroua", 10.5910, 14.3159, 15.0),
+    CityCentre("Ngaoundéré", 7.3167, 13.5833, 15.0),
+    CityCentre("Bertoua", 4.5775, 13.6846, 12.0),
+    CityCentre("Buea", 4.1527, 9.2410, 10.0),
+    CityCentre("Limbé", 4.0228, 9.1958, 10.0),
+    CityCentre("Kumba", 4.6363, 9.4469, 12.0),
+    CityCentre("Kribi", 2.9405, 9.9098, 12.0),
+    CityCentre("Dschang", 5.4468, 10.0534, 12.0),
+    CityCentre("Ebolowa", 2.9000, 11.1500, 12.0),
+)
+
+EARTH_RADIUS_KM = 6371.0
+
+
+def distance_km(
+    latitude: float, longitude: float, other_latitude: float, other_longitude: float
+) -> float:
+    """Great-circle distance. Plain haversine: no projection, no dependency."""
+    lat1, lat2 = math.radians(latitude), math.radians(other_latitude)
+    delta_lat = lat2 - lat1
+    delta_lon = math.radians(other_longitude - longitude)
+    inner = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
+    )
+    return 2 * EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(inner)))
+
+
+def resolve_city_by_coordinates(latitude: float, longitude: float) -> str | None:
+    """The city a shared position falls in, else ``None``.
+
+    This is what lets a WhatsApp pin answer the location question without the
+    user being asked their city — the thing a pin obviously already says.
+
+    ``None`` for a point outside every known market, and that is deliberate:
+    there is no geocoding service behind this, so the alternative to admitting
+    ignorance is naming the nearest city however far away it is, which would
+    file a listing in a town the landlord never mentioned. Asking him costs one
+    message; a wrong city costs a tenant a journey.
+
+    The nearest centre wins among overlapping radii, because Buea and Limbé are
+    close enough that the first match in a list would be an arbitrary answer.
+    """
+    best: tuple[float, str] | None = None
+    for centre in CITY_CENTRES:
+        distance = distance_km(latitude, longitude, centre.latitude, centre.longitude)
+        if distance <= centre.radius_km and (best is None or distance < best[0]):
+            best = (distance, centre.city)
+    return best[1] if best is not None else None
 
 
 def normalize(text: str) -> str:

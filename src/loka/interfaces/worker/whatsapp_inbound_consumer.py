@@ -77,6 +77,7 @@ def parse_inbound_payload(payload: dict[str, Any]) -> ReceiveInboundMessageComma
     media = body.get("media_object_key")
     metadata = body.get("metadata")
     kind = body.get("message_kind")
+    latitude, longitude, label = _location(body.get("location"))
     return ReceiveInboundMessageCommand(
         provider=require("provider"),
         external_message_id=require("external_message_id"),
@@ -86,7 +87,35 @@ def parse_inbound_payload(payload: dict[str, Any]) -> ReceiveInboundMessageComma
         provider_timestamp=_parse_timestamp(body.get("provider_timestamp")),
         text=text if isinstance(text, str) and text.strip() else None,
         media_object_key=media if isinstance(media, str) and media.strip() else None,
+        latitude=latitude,
+        longitude=longitude,
+        location_label=label,
         metadata=metadata if isinstance(metadata, dict) else {},
+    )
+
+
+def _location(raw: Any) -> tuple[float | None, float | None, str | None]:
+    """Read the position off the envelope, or report none.
+
+    A malformed position is permanent, not retryable: the same body will be
+    malformed on every redelivery. It is told apart from "no position" so a
+    broken transport shows up in the DLQ instead of silently sending every
+    pin to the wrong place.
+    """
+    if raw is None:
+        return None, None, None
+    if not isinstance(raw, dict):
+        raise PermanentHandlerError("inbound message location is not an object")
+    latitude, longitude = raw.get("latitude"), raw.get("longitude")
+    if not isinstance(latitude, int | float) or not isinstance(longitude, int | float):
+        raise PermanentHandlerError(
+            "inbound message location needs a numeric latitude and longitude"
+        )
+    label = raw.get("label")
+    return (
+        float(latitude),
+        float(longitude),
+        label if isinstance(label, str) and label.strip() else None,
     )
 
 

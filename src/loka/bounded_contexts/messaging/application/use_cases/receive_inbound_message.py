@@ -43,10 +43,12 @@ from loka.bounded_contexts.messaging.domain.repositories.inbound_message_reposit
 from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
     InboundMessage,
     MessageKind,
+    SharedLocation,
 )
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
+from loka.shared.domain.errors import ValidationFailed
 
 # A gateway timestamp is untrusted input used to order a conversation. Without
 # a bound, one clock-skewed or spoofed message would sort forever at one end of
@@ -64,6 +66,9 @@ class ReceiveInboundMessageCommand:
     provider_timestamp: datetime
     text: str | None = None
     media_object_key: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_label: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -115,6 +120,7 @@ class ReceiveInboundMessageUseCase:
             received_at=received_at,
             text=command.text,
             media_object_key=command.media_object_key,
+            location=_location_of(command),
             metadata={
                 **command.metadata,
                 "raw_kind": command.message_kind,
@@ -160,6 +166,7 @@ class ReceiveInboundMessageUseCase:
                     message_kind=kind.value,
                     has_text=message.has_text,
                     has_media=message.has_media,
+                    has_location=message.has_location,
                     text_length=len(message.text or ""),
                 ),
                 # Staged in the same transaction: a durable message nobody
@@ -237,6 +244,30 @@ class ReceiveInboundMessageUseCase:
             sender_user_id=stored.sender_user_id,
             duplicated=duplicated,
         )
+
+
+def _location_of(command: ReceiveInboundMessageCommand) -> SharedLocation | None:
+    """Build the point the user sent, or refuse a half-sent one.
+
+    One coordinate without the other locates nothing, and defaulting the
+    missing half to zero would place the listing in the Atlantic. The pair is
+    all-or-nothing.
+    """
+    if command.latitude is None and command.longitude is None:
+        return None
+    if command.latitude is None or command.longitude is None:
+        raise ValidationFailed(
+            "a shared position needs both a latitude and a longitude",
+            context={
+                "latitude": command.latitude,
+                "longitude": command.longitude,
+            },
+        )
+    return SharedLocation(
+        latitude=command.latitude,
+        longitude=command.longitude,
+        label=command.location_label,
+    )
 
 
 def _resolve_kind(raw: str) -> MessageKind:

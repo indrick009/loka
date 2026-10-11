@@ -19,7 +19,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loka.bounded_contexts.messaging.domain.repositories.inbound_message_repository import (
     StoredInboundMessage,
 )
-from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import InboundMessage
+from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
+    InboundMessage,
+    MessageKind,
+    SharedLocation,
+)
 from loka.bounded_contexts.messaging.infrastructure.persistence.models import InboundMessageRow
 
 
@@ -59,6 +63,11 @@ class SqlAlchemyInboundMessageRepository:
                 InboundMessageRow.sender_user_id,
                 InboundMessageRow.processed,
                 InboundMessageRow.text,
+                InboundMessageRow.message_kind,
+                InboundMessageRow.location_latitude,
+                InboundMessageRow.location_longitude,
+                InboundMessageRow.location_label,
+                InboundMessageRow.media_object_key,
             ).where(InboundMessageRow.id == message_id)
         )
         row = result.one_or_none()
@@ -70,6 +79,9 @@ class SqlAlchemyInboundMessageRepository:
             sender_user_id=row[2],
             processed=bool(row[3]),
             text=row[4],
+            kind=_kind_of(row[5]),
+            location=_point_of(row[6], row[7], row[8]),
+            media_object_key=row[9],
         )
 
     async def add_if_absent(self, message: InboundMessage) -> StoredInboundMessage | None:
@@ -88,6 +100,9 @@ class SqlAlchemyInboundMessageRepository:
                 message_kind=message.kind.value,
                 text=message.text,
                 media_object_key=message.media_object_key,
+                location_latitude=message.location.latitude if message.location else None,
+                location_longitude=message.location.longitude if message.location else None,
+                location_label=message.location.label if message.location else None,
                 processed=False,
                 provider_timestamp=message.provider_timestamp,
                 received_at=message.received_at,
@@ -127,3 +142,25 @@ class SqlAlchemyInboundMessageRepository:
             .where(InboundMessageRow.id == message_id)
             .values(processed=True)
         )
+
+
+def _kind_of(raw: str) -> MessageKind:
+    """A kind the enum has since lost must not lose the whole message."""
+    try:
+        return MessageKind(raw)
+    except ValueError:
+        return MessageKind.UNSUPPORTED
+
+
+def _point_of(
+    latitude: float | None, longitude: float | None, label: str | None
+) -> SharedLocation | None:
+    """Rebuild the point, or nothing when the row carries no position.
+
+    A row with only one coordinate cannot exist — the domain refuses the pair —
+    so a half-filled row is corruption, and reading it as "no position" is
+    safer than inventing the missing half.
+    """
+    if latitude is None or longitude is None:
+        return None
+    return SharedLocation(latitude=latitude, longitude=longitude, label=label)

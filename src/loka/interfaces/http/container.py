@@ -15,6 +15,7 @@ from redis.asyncio import Redis
 from loka.shared.infrastructure.broker.topology import Broker
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
+from loka.shared.infrastructure.object_storage.media import MediaStorage
 
 if TYPE_CHECKING:
     from loka.interfaces.http.auth import BearerTokenAuthenticator
@@ -31,6 +32,10 @@ class Container:
     # request to a 503 the transport can retry instead of taking the process
     # down with it.
     broker: Broker | None = None
+    # Installed during startup. Chat media goes here before the delivery that
+    # references it is queued, so a key on the bus always points at bytes that
+    # exist.
+    media_storage: MediaStorage | None = None
 
 
 def get_container(request: Request) -> Container:

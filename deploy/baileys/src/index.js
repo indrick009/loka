@@ -14,6 +14,8 @@
  *   GET  /health  liveness plus pairing state
  *   GET  /qr      page showing the pairing QR code
  *   POST /send    {"to": "6xxxxxxxxx", "text": "..."}
+ *                 {"to": "...", "image": "<base64|url>", "caption": "..."}
+ *                 {"to": "...", "location": {"latitude": .., "longitude": ..}}
  *   POST /logout  unlinks the session so a new QR can be scanned
  */
 
@@ -28,8 +30,17 @@ const {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
+  downloadMediaMessage,
   DisconnectReason,
 } = require('@whiskeysockets/baileys');
+const {
+  carriesContent,
+  extractText,
+  kindOf,
+  locationOf,
+  mediaDescriptorOf,
+  uploadMedia,
+} = require('./media');
 
 const PORT = Number(process.env.PORT || 3000);
 const AUTH_DIR = process.env.AUTH_DIR || path.join(process.cwd(), 'auth');
@@ -37,6 +48,10 @@ const SESSION_NAME = process.env.SESSION_NAME || 'loka-main';
 const PLATFORM_URL =
   process.env.PLATFORM_URL || 'http://api:8000/integrations/whatsapp/events';
 const PLATFORM_API_KEY = process.env.PLATFORM_API_KEY || '';
+// Derived rather than configured separately: two URLs that can disagree is one
+// more way for media to go somewhere the events never mention.
+const PLATFORM_MEDIA_URL =
+  process.env.PLATFORM_MEDIA_URL || PLATFORM_URL.replace(/\/events$/, '/media');
 const FORWARD_ATTEMPTS = Number(process.env.FORWARD_ATTEMPTS || 4);
 const RECONNECT_DELAY_MS = Number(process.env.RECONNECT_DELAY_MS || 3000);
 const MAX_RECONNECT_DELAY_MS = Number(process.env.MAX_RECONNECT_DELAY_MS || 60000);
@@ -142,35 +157,6 @@ function senderPhone(key) {
   return null;
 }
 
-function extractText(message) {
-  if (!message) return null;
-  const candidates = [
-    message.conversation,
-    message.extendedTextMessage && message.extendedTextMessage.text,
-    message.imageMessage && message.imageMessage.caption,
-    message.videoMessage && message.videoMessage.caption,
-    message.documentMessage && message.documentMessage.caption,
-    message.buttonsResponseMessage && message.buttonsResponseMessage.selectedDisplayText,
-    message.templateButtonReplyMessage &&
-      message.templateButtonReplyMessage.selectedDisplayText,
-    message.listResponseMessage && message.listResponseMessage.title,
-  ];
-  const found = candidates.find((value) => typeof value === 'string' && value.trim());
-  return found ? found.trim() : null;
-}
-
-function kindOf(message) {
-  if (!message) return 'TEXT';
-  if (message.imageMessage) return 'IMAGE';
-  if (message.videoMessage) return 'VIDEO';
-  if (message.audioMessage) return 'AUDIO';
-  if (message.documentMessage) return 'DOCUMENT';
-  if (message.stickerMessage) return 'STICKER';
-  if (message.locationMessage || message.liveLocationMessage) return 'LOCATION';
-  if (message.contactMessage || message.contactsArrayMessage) return 'CONTACT';
-  return 'TEXT';
-}
-
 /**
  * Why an entry is not forwarded, or null when it is.
  *
@@ -190,7 +176,10 @@ function skipReason(message, key) {
   if (!jid.endsWith('@s.whatsapp.net') && !jid.endsWith('@lid')) return 'not_a_user_jid';
   if (message && message.protocolMessage) return 'protocol';
   if (message && message.reactionMessage) return 'reaction';
-  if (!extractText(message)) return 'no_text';
+  // Was `no_text`, which discarded every photo and every shared position —
+  // the preferred answer in all four specifications — while `kindOf` right
+  // above had already recognised them. Text, bytes or a pin each count.
+  if (!carriesContent(message)) return 'empty';
   return null;
 }
 
@@ -229,71 +218,119 @@ async function forward(delivery) {
   return false;
 }
 
-function handleIncoming(messages, upsertType) {
+async function handleIncoming(messages, upsertType) {
   log.info({ count: messages.length, upsert_type: upsertType }, 'messages.upsert received');
   for (const entry of messages) {
-    const message = entry.message;
-    const key = entry.key || {};
-    const reason = skipReason(message, key);
-    if (reason) {
-      log.info(
-        {
-          external_message_id: key.id,
-          remote_jid: key.remoteJid || null,
-          from_me: Boolean(key.fromMe),
-          upsert_type: upsertType,
-          kind: kindOf(message),
-          reason,
-        },
-        'delivery skipped'
+    try {
+      await handleOne(entry, upsertType);
+    } catch (error) {
+      // One malformed entry must not abandon the rest of the batch.
+      log.error(
+        { external_message_id: entry.key && entry.key.id, error: error.message },
+        'delivery handling failed'
       );
-      continue;
     }
+  }
+}
 
-    const text = extractText(message);
-    const senderJid = key.participant || key.remoteJid;
-    const timestamp = Number(entry.messageTimestamp || Math.floor(Date.now() / 1000));
-    const phone = senderPhone(key);
-
+async function handleOne(entry, upsertType) {
+  const message = entry.message;
+  const key = entry.key || {};
+  const reason = skipReason(message, key);
+  if (reason) {
     log.info(
       {
         external_message_id: key.id,
         remote_jid: key.remoteJid || null,
-        sender_jid: senderJid,
+        from_me: Boolean(key.fromMe),
         upsert_type: upsertType,
         kind: kindOf(message),
-        sender_phone: phone,
-        sender_pn: key.senderPn || null,
-        sender_lid: key.senderLid || null,
-        participant_pn: key.participantPn || null,
-        participant_lid: key.participantLid || null,
+        reason,
       },
-      'delivery accepted'
+      'delivery skipped'
     );
-
-    // A message with no phone number cannot be attributed to any session, and
-    // the log above is where to look when one disappears.
-    if (!phone) {
-      log.warn({ external_message_id: key.id, remote_jid: key.remoteJid || null }, 'delivery skipped');
-      continue;
-    }
-
-    rememberLid(phone, key);
-
-    forward({
-      provider: 'baileys',
-      external_message_id: key.id,
-      conversation_ref: key.remoteJid,
-      sender_phone: phone,
-      message_kind: kindOf(message),
-      provider_timestamp: new Date(timestamp * 1000).toISOString(),
-      text,
-      metadata: {
-        pushName: entry.pushName || null,
-        session_name: SESSION_NAME,
-      },
-    });
+    return;
   }
+
+  const text = extractText(message);
+  const location = locationOf(message);
+  const descriptor = mediaDescriptorOf(message);
+  const senderJid = key.participant || key.remoteJid;
+  const timestamp = Number(entry.messageTimestamp || Math.floor(Date.now() / 1000));
+  const phone = senderPhone(key);
+
+  log.info(
+    {
+      external_message_id: key.id,
+      remote_jid: key.remoteJid || null,
+      sender_jid: senderJid,
+      upsert_type: upsertType,
+      kind: kindOf(message),
+      has_media: Boolean(descriptor),
+      has_location: Boolean(location),
+      sender_phone: phone,
+      sender_pn: key.senderPn || null,
+      sender_lid: key.senderLid || null,
+      participant_pn: key.participantPn || null,
+      participant_lid: key.participantLid || null,
+    },
+    'delivery accepted'
+  );
+
+  // A message with no phone number cannot be attributed to any session, and
+  // the log above is where to look when one disappears.
+  if (!phone) {
+    log.warn(
+      { external_message_id: key.id, remote_jid: key.remoteJid || null },
+      'delivery skipped'
+    );
+    return;
+  }
+
+  rememberLid(phone, key);
+
+  // The bytes go first, so the key on the delivery always names an object that
+  // exists. A photo that could not be stored is reported and the message is
+  // still forwarded when it carries a caption or a pin — losing the photo is
+  // bad, losing the sentence the landlord wrote with it is worse.
+  let mediaObjectKey = null;
+  if (descriptor) {
+    mediaObjectKey = await uploadMedia({
+      entry,
+      descriptor,
+      sock: gateway.sock,
+      mediaUrl: PLATFORM_MEDIA_URL,
+      apiKey: PLATFORM_API_KEY,
+      log,
+      download: downloadMediaMessage,
+    });
+    if (!mediaObjectKey && !text && !location) {
+      log.error(
+        { external_message_id: key.id, kind: descriptor.kind },
+        'delivery skipped: media could not be stored and nothing else was sent'
+      );
+      return;
+    }
+  }
+
+  await forward({
+    provider: 'baileys',
+    external_message_id: key.id,
+    conversation_ref: key.remoteJid,
+    sender_phone: phone,
+    // The stored kind follows what actually survived: an IMAGE whose bytes
+    // were lost but whose caption arrived is a text message, and claiming
+    // otherwise promises the pipeline a photo it can never read.
+    message_kind: mediaObjectKey || !descriptor ? kindOf(message) : 'TEXT',
+    provider_timestamp: new Date(timestamp * 1000).toISOString(),
+    text,
+    media_object_key: mediaObjectKey,
+    location,
+    metadata: {
+      pushName: entry.pushName || null,
+      session_name: SESSION_NAME,
+    },
+  });
 }
 
 async function showQr(qr) {
@@ -423,7 +460,7 @@ async function startSocket() {
     // a real message the user is waiting for, one from last week is history
     // the platform has already answered.
     try {
-      handleIncoming(messages, type);
+      await handleIncoming(messages, type);
     } catch (error) {
       log.error({ error: error.message }, 'inbound handling failed');
     }
@@ -532,9 +569,17 @@ app.get('/qr', async (_req, res) => {
 });
 
 app.post('/send', async (req, res) => {
-  const { to, text } = req.body || {};
-  if (!to || !text) {
-    res.status(400).json({ error: 'to and text are required' });
+  const { to, text, image, caption, location } = req.body || {};
+  if (!to) {
+    res.status(400).json({ error: 'to is required' });
+    return;
+  }
+  // D3's outbound half: this accepted only {to, text}, so the platform could
+  // never answer with a listing photo or with the lodging's position — which
+  // is the thing the 1 000 FCFA unlock pays for.
+  const content = outboundContent({ text, image, caption, location });
+  if (!content) {
+    res.status(400).json({ error: 'one of text, image or location is required' });
     return;
   }
   if (!gateway.connected || !gateway.sock) {
@@ -546,7 +591,7 @@ app.post('/send', async (req, res) => {
     ? String(to)
     : lidByPhone.get(digits) || `${digits}@s.whatsapp.net`;
   try {
-    const sent = await gateway.sock.sendMessage(jid, { text: String(text) });
+    const sent = await gateway.sock.sendMessage(jid, content);
     rememberForRetry(sent);
     res.status(200).json({ ok: true, id: sent.key.id });
   } catch (error) {
@@ -556,6 +601,35 @@ app.post('/send', async (req, res) => {
     res.status(502).json({ error: error.message });
   }
 });
+
+/**
+ * What to hand Baileys for one outbound message, or null when nothing was asked.
+ *
+ * An image may be a URL the platform pre-signed or base64 bytes; both are
+ * accepted because the caller knows which it has and this transport should not
+ * make it fetch its own object twice.
+ */
+function outboundContent({ text, image, caption, location }) {
+  if (location && Number.isFinite(Number(location.latitude))) {
+    return {
+      location: {
+        degreesLatitude: Number(location.latitude),
+        degreesLongitude: Number(location.longitude),
+        name: location.label ? String(location.label) : undefined,
+      },
+    };
+  }
+  if (typeof image === 'string' && image.trim()) {
+    const body = /^https?:\/\//i.test(image)
+      ? { url: image }
+      : Buffer.from(image, 'base64');
+    return { image: body, caption: caption ? String(caption) : undefined };
+  }
+  if (typeof text === 'string' && text.trim()) {
+    return { text: String(text) };
+  }
+  return null;
+}
 
 app.post('/logout', async (_req, res) => {
   try {

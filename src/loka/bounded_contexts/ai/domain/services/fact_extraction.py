@@ -27,7 +27,10 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyType,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
+from loka.bounded_contexts.property.domain.value_objects.location import (
+    Coordinates,
+    Location,
+)
 from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.domain.errors import DomainError, ValidationFailed
 
@@ -130,6 +133,7 @@ SUPPORTED_INTENTS = frozenset(
         "NEGATIVE",
         # Flow-level intents a model may propose.
         "COLLECT_LOCATION",
+        "COLLECT_MEDIA",
         "COLLECT_CHARGES",
         "COLLECT_MINIMUM_DURATION",
         "COLLECT_AVAILABILITY",
@@ -240,7 +244,7 @@ class FactExtractor:
             )
         if "standing" in present or "modern" in present:
             keep("standing", lambda: _build_standing(entities))
-        if "city" in present or "neighbourhood" in present:
+        if "city" in present or "neighbourhood" in present or "latitude" in present:
             keep("location", lambda: self._build_location(entities))
         elif "location_hint" in present:
             resolved = _resolve_location_hint(present["location_hint"])
@@ -364,14 +368,21 @@ class FactExtractor:
         return {"bedrooms": rooms.count, "bathrooms": rooms.bathrooms}
 
     @staticmethod
-    def _build_location(entities: dict[str, Any]) -> dict[str, str]:
+    def _build_location(entities: dict[str, Any]) -> dict[str, Any]:
         city = str(entities.get("city") or "").strip()
         neighbourhood = entities.get("neighbourhood")
         neighbourhood_text = str(neighbourhood).strip() if isinstance(neighbourhood, str) else ""
+        coordinates = _build_coordinates(entities)
         if not city and neighbourhood_text:
             # "Bastos" alone is a complete answer here: the district index knows
             # it is in Yaoundé. Without this the location question never closes.
             city = market.resolve_neighbourhood(neighbourhood_text) or ""
+        if not city and coordinates is not None:
+            # A shared pin says the city without naming it, which is the whole
+            # reason asking for one after a pin is a defect.
+            city = market.resolve_city_by_coordinates(
+                coordinates.latitude, coordinates.longitude
+            ) or ""
         if not city:
             raise ValidationFailed(
                 "no city was extracted", context={"entities": sorted(entities)}
@@ -379,8 +390,29 @@ class FactExtractor:
         location = Location(
             city=city,
             neighbourhood=neighbourhood_text or None,
+            coordinates=coordinates,
         )
-        return {"city": location.city, "neighbourhood": location.neighbourhood or ""}
+        built: dict[str, Any] = {
+            "city": location.city,
+            "neighbourhood": location.neighbourhood or "",
+        }
+        if location.coordinates is not None:
+            # Carried through the facts because the pin is what makes the
+            # listing precise: a neighbourhood alone is publishable, a pin is
+            # exact, and dropping it here would throw that away at the last step.
+            built["latitude"] = location.coordinates.latitude
+            built["longitude"] = location.coordinates.longitude
+        return built
+
+
+def _build_coordinates(entities: dict[str, Any]) -> Coordinates | None:
+    """The pin, or nothing. A half-sent pair is nothing, never a guess."""
+    latitude, longitude = entities.get("latitude"), entities.get("longitude")
+    if not isinstance(latitude, int | float) or isinstance(latitude, bool):
+        return None
+    if not isinstance(longitude, int | float) or isinstance(longitude, bool):
+        return None
+    return Coordinates(latitude=float(latitude), longitude=float(longitude))
 
 
 def is_supported_intent(intent: str) -> bool:

@@ -346,11 +346,15 @@ async def test_an_unusable_phone_number_is_refused() -> None:
         await h.use_case.execute(_command(sender_phone=""), now=NOW)
 
 
-async def test_a_message_with_neither_text_nor_media_is_refused() -> None:
-    """Such a message could never be processed downstream."""
+async def test_a_message_with_no_content_at_all_is_refused() -> None:
+    """Such a message could never be processed downstream.
+
+    An IMAGE whose media never reached storage is exactly that: the kind
+    promises content the row does not have.
+    """
     h = _harness(user_id=None)
 
-    with pytest.raises(ValidationFailed, match="text or a media object"):
+    with pytest.raises(ValidationFailed, match="text, a media object or a location"):
         await h.use_case.execute(_command(text=None, message_kind="IMAGE"), now=NOW)
 
 
@@ -411,3 +415,64 @@ async def test_the_event_carries_the_resolved_conversation() -> None:
     assert metadata["sender_user_id"] == str(user_id)
     assert metadata["provider"] == "baileys"
     assert metadata["message_kind"] == "TEXT"
+
+
+async def test_a_shared_position_is_ingested_as_content() -> None:
+    """D3: a pin used to be dropped at the gateway as a message with no text."""
+    h = _harness(user_id=uuid.uuid4())
+
+    receipt = await h.use_case.execute(
+        _command(
+            text=None,
+            message_kind="LOCATION",
+            latitude=3.8905,
+            longitude=11.5139,
+            location_label="Bastos, Yaoundé",
+        ),
+        now=NOW,
+    )
+
+    assert receipt.duplicated is False
+    stored = h.inbound.messages[0]
+    assert stored.kind is MessageKind.LOCATION
+    assert stored.has_location is True
+    assert stored.location is not None
+    assert stored.location.latitude == 3.8905
+    assert stored.location.label == "Bastos, Yaoundé"
+
+
+async def test_a_pin_outside_the_world_is_refused_rather_than_stored() -> None:
+    h = _harness(user_id=None)
+
+    with pytest.raises(ValidationFailed, match="latitude"):
+        await h.use_case.execute(
+            _command(text=None, message_kind="LOCATION", latitude=99.0, longitude=11.0),
+            now=NOW,
+        )
+
+
+async def test_a_half_sent_position_is_not_a_position() -> None:
+    """One coordinate without the other locates nothing."""
+    h = _harness(user_id=None)
+
+    with pytest.raises(ValidationFailed, match="both a latitude and a longitude"):
+        await h.use_case.execute(
+            _command(text=None, message_kind="LOCATION", latitude=3.8905),
+            now=NOW,
+        )
+
+
+async def test_the_published_event_says_a_position_arrived_without_carrying_it() -> None:
+    """Where somebody lives does not belong on the bus."""
+    h = _harness(user_id=uuid.uuid4())
+
+    await h.use_case.execute(
+        _command(text=None, message_kind="LOCATION", latitude=3.8905, longitude=11.5139),
+        now=NOW,
+    )
+
+    event = h.uow.publisher.staged[0]
+    serialised = str(event.to_payload())
+    assert "3.8905" not in serialised
+    assert "11.5139" not in serialised
+    assert event.to_payload()["metadata"]["has_location"] is True

@@ -19,9 +19,11 @@ from loka.shared.domain.errors import (
     ConcurrencyConflict,
     DomainError,
     ExternalServiceUnavailable,
+    PayloadTooLarge,
     RateLimited,
     ResourceNotFound,
     Unauthenticated,
+    UnsupportedMediaType,
 )
 
 _STATUS_BY_ERROR: tuple[tuple[type[DomainError], int], ...] = (
@@ -29,6 +31,8 @@ _STATUS_BY_ERROR: tuple[tuple[type[DomainError], int], ...] = (
     (ResourceNotFound, 404),
     (AuthorizationDenied, 403),
     (ConcurrencyConflict, 409),
+    (PayloadTooLarge, 413),
+    (UnsupportedMediaType, 415),
     (RateLimited, 429),
     (ExternalServiceUnavailable, 503),
 )

@@ -27,6 +27,10 @@ from loka.bounded_contexts.landlord.domain.repositories.verification_repository 
     LANDLORD_PROFILE_REPOSITORY,
 )
 from loka.bounded_contexts.property.domain.entities.property import Amenities, Property
+from loka.bounded_contexts.property.domain.entities.property_media import (
+    MediaKind,
+    PropertyMedia,
+)
 from loka.bounded_contexts.property.domain.repositories.property_repository import (
     PropertyRepository,
 )
@@ -40,7 +44,10 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyType,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
+from loka.bounded_contexts.property.domain.value_objects.location import (
+    Coordinates,
+    Location,
+)
 from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
@@ -114,6 +121,46 @@ class CreatePropertyFromConversationUseCase:
         )
 
 
+    async def attach_media_from_conversation(
+        self,
+        *,
+        property_id: uuid.UUID,
+        object_key: str,
+        kind: str,
+        now: datetime,
+    ) -> bool:
+        """Attach a stored object to the draft, if the draft is still there.
+
+        The bytes are already in object storage and already checksummed by the
+        upload, so the media arrives ``UPLOADED``: there is no later step that
+        would confirm it, and leaving it ``PENDING_UPLOAD`` would make a photo
+        the landlord has sent not count towards publication.
+
+        ``False`` when the draft is gone. A refusal by the aggregate — the same
+        object twice, or the thirtieth photo — propagates, because the landlord
+        should be told why his photo did not count.
+        """
+        properties: PropertyRepository = self._uow.repository("property")
+        prop = await properties.get(property_id)
+        if prop is None:
+            return False
+
+        media = PropertyMedia(
+            media_id=new_id(),
+            object_key=object_key,
+            kind=MediaKind.DOCUMENT if kind.upper() == "DOCUMENT" else MediaKind.PHOTO,
+        )
+        media.mark_uploaded(when=now)
+        prop.add_media(media, now=now)
+        # The quality gate may now be satisfied: a listing that was only
+        # missing its photos becomes publishable the moment one arrives.
+        if not prop.missing_summary() and prop.status is not PropertyStatus.AVAILABLE:
+            prop.publish(now=now)
+        await properties.save(prop)
+        self._uow.collect(prop)
+        return True
+
+
 def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> None:
     """Best-effort hydration: one bad field never aborts the draft.
 
@@ -138,11 +185,16 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
     location = facts.get("location")
     if isinstance(location, Mapping) and location.get("city"):
         neighbourhood = location.get("neighbourhood")
+        # A shared pin makes the location exact rather than merely
+        # neighbourhood-level, and that precision is what the tenant is paying
+        # 1 000 FCFA to receive — so it has to survive into the listing.
+        coordinates = _coordinates_of(location)
         guard(
             lambda: prop.set_location(
                 Location(
                     city=str(location["city"]),
                     neighbourhood=str(neighbourhood) if neighbourhood else None,
+                    coordinates=coordinates,
                 ),
                 now=now,
             )
@@ -247,3 +299,15 @@ def _availability_window(raw: object, now: datetime) -> AvailabilityWindow | Non
         return AvailabilityWindow(datetime.strptime(raw.strip(), "%Y-%m-%d").date())
     except ValueError:
         return None
+
+
+def _coordinates_of(location: Mapping[str, Any]) -> Coordinates | None:
+    """The pin carried in the location facts, or nothing."""
+    latitude, longitude = location.get("latitude"), location.get("longitude")
+    if not isinstance(latitude, int | float) or isinstance(latitude, bool):
+        return None
+    if not isinstance(longitude, int | float) or isinstance(longitude, bool):
+        return None
+    with contextlib.suppress(DomainError):
+        return Coordinates(latitude=float(latitude), longitude=float(longitude))
+    return None

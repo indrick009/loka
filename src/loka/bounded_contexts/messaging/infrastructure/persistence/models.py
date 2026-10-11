@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, Index, Integer, String, Text
 from sqlalchemy import text as sql_text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -64,6 +64,12 @@ class InboundMessageRow(Base):
     message_kind: Mapped[str] = mapped_column(String(24), nullable=False)
     text: Mapped[str | None] = mapped_column(Text, nullable=True)
     media_object_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # A shared WhatsApp position. Both halves or neither: one coordinate alone
+    # locates nothing, which is why the pair is validated in the domain before
+    # it ever reaches these columns.
+    location_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_label: Mapped[str | None] = mapped_column(String(160), nullable=True)
     processed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider_timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

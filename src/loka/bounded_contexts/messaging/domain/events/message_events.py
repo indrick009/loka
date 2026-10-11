@@ -36,6 +36,7 @@ class WhatsAppMessageIngested(DomainEvent):
     message_kind: str | None = None
     has_text: bool = False
     has_media: bool = False
+    has_location: bool = False
     text_length: int = 0
 
     def to_payload(self) -> dict[str, Any]:
@@ -61,6 +62,9 @@ class WhatsAppMessageIngested(DomainEvent):
             "message_kind": self.message_kind,
             "has_text": self.has_text,
             "has_media": self.has_media,
+            # Whether a position arrived, never the position: where somebody
+            # lives is not something the bus needs to carry.
+            "has_location": self.has_location,
             "text_length": self.text_length,
         }
         return payload

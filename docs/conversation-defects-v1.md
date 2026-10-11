@@ -18,11 +18,12 @@ appels réels ; **observé** sur au moins une occurrence en conversation ;
 
 ## État au 11 octobre 2026
 
-**Corrigés et vérifiés** : D1, D2, D4, D5, D7, D8, D9, D13, D18 — 9 sur 20.
+**Corrigés et vérifiés** : D1, D2, D3, D4, D5, D7, D8, D9, D13, D18 — 10 sur 20.
 
 | Défaut | Correction | Preuve |
 | --- | --- | --- |
 | D1 | `_entities_of` / `_confidence_of` extraits dans `ai_provider.py` : nul ou absent → `{}`, type faux → erreur typée. Au passage, `confidence: None` levait un `TypeError` nu — désormais typé. | La conversation qui perdait **4 tours sur 6** en perd **0 sur 6**. L'injection obtient un refus fiable au lieu du silence. |
+| D3 | `skipReason` ne jette plus un message sans texte : `carriesContent` accepte du texte, des octets **ou** une position. `deploy/baileys/src/media.js` lit le pin et téléverse les octets vers `POST /integrations/whatsapp/media` (clé passerelle, allowlist de types, 16 Mio) **avant** de relayer la livraison, donc une clé sur le bus désigne toujours un objet qui existe. `SharedLocation` entre dans le domaine, `market.resolve_city_by_coordinates` nomme la ville, et les coordonnées voyagent jusqu'à `Location.coordinates`. Une photo au pas `COLLECT_MEDIA` est attachée à l'annonce. Aucun des deux chemins n'appelle de modèle. | **E3 vérifié** : une position partagée produit `location={city: Yaoundé, neighbourhood: Bastos, latitude, longitude}` et la question de ville n'est pas posée ; une image produit un média attaché. 12 tests `node --test` sur la passerelle, 36 tests Python (10 analyse, 10 ingestion, 14 coordonnées), 9 d'intégration sur le téléversement, 1 aller-retour en base. |
 | D2 | Le consumer déclare son port `ConversationLock` ; `redis_lock_factory` l'implémente via le `RedisLock` existant. Verrou pris **avant** toute transaction ; `NotAcquired` → `RetryableHandlerError`. | 3 tests unitaires ; les end-to-end d'intégration traversent le vrai verrou Redis. |
 | D4 | `question_to_ask` : à défaut d'étape suivante, la question encore ouverte est reposée. | « merci beaucoup » → `qkey=ask.standing` au lieu de `None`, et la question est relancée. |
 | D5 | `ConversationSession.record_pending_question` écrit **ou efface**. La décision n'est plus calculée à deux endroits : `_advance_session` la rend, `_apply` la consomme. | 4 tests unitaires sur l'entité ; `next_question` suit l'étape en conversation réelle. |
@@ -38,7 +39,7 @@ sur 384 fichiers, **38 tests d'intégration** sur la zone touchée.
 Quatre assertions d'intégration périmées ont aussi été corrigées : elles
 attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 
-**Reste ouvert** : D3, D6, D10, D11, D12, D14, D15, D16, D17, D19, D20.
+**Reste ouvert** : D6, D10, D11, D12, D14, D15, D16, D17, D19, D20.
 
 ---
 
@@ -48,7 +49,7 @@ attendaient l'ordre d'avant l'insertion de l'étape `standing`.
 | --- | --- | --- | --- |
 | D1 | `entities: null` fait perdre le tour — aucune réponse | Bloquant | **corrigé** |
 | D2 | Pas de sérialisation par conversation | Bloquant | **corrigé** |
-| D3 | Média et localisation n'atteignent jamais le backend | Bloquant | lu dans le code |
+| D3 | Média et localisation n'atteignent jamais le backend | Bloquant | **corrigé** |
 | D4 | Impasse ACK — actes de dialogue non actionnables | Grave | **corrigé** |
 | D5 | Question en attente périmée | Grave | **corrigé** |
 | D6 | Dérive de rôle, flow verrouillé | Grave | **observé** |

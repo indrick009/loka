@@ -79,6 +79,10 @@ from loka.bounded_contexts.messaging.domain.repositories.conversation_session_re
 from loka.bounded_contexts.messaging.domain.repositories.inbound_message_repository import (
     InboundMessageRepository,
 )
+from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
+    MessageKind,
+    SharedLocation,
+)
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
@@ -265,6 +269,23 @@ def _target_flow(session: ConversationSession, intent: str) -> FlowName:
     if opening_flow is not None and _opens_new_flow(session, intent):
         return opening_flow
     return session.flow
+
+
+def _neighbourhood_from_label(label: str | None) -> str | None:
+    """A quartier the district index recognises inside a WhatsApp place name.
+
+    The label is whatever the network attached — "Bastos", "Yaoundé, Cameroun",
+    or a shop's own name — so it is searched for a *known* district and
+    otherwise discarded. Passing it through unchecked would turn a boutique's
+    signboard into a neighbourhood the catalogue cannot be searched by.
+    """
+    if not label:
+        return None
+    for part in label.split(","):
+        canonical = market.canonical_neighbourhood(part)
+        if canonical is not None:
+            return canonical
+    return None
 
 
 def _known_facts(session: ConversationSession, intent: str) -> dict[str, Any]:
@@ -475,6 +496,25 @@ class AnalyseConversationMessageUseCase:
         pending = session.context.get("next_question")
         pending_key = pending if isinstance(pending, str) else None
 
+        # A pin and a photo are things the user *sent*, not sentences needing
+        # interpretation. They are read here, before any model: paying one to
+        # look at two floats would be slower, dearer and less reliable than
+        # reading the fields, and it is why D3's media never had to involve a
+        # model at all.
+        if message.location is not None:
+            return await self._from_shared_location(
+                session, message_id=command.message_id, point=message.location, now=moment
+            )
+        if message.media_object_key is not None:
+            return await self._from_media(
+                session,
+                message_id=command.message_id,
+                object_key=message.media_object_key,
+                kind=message.kind,
+                text=text,
+                now=moment,
+            )
+
         if self._model is None:
             return await self._without_a_model(
                 session,
@@ -613,6 +653,112 @@ class AnalyseConversationMessageUseCase:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             reply_text=reply_text,
+        )
+
+    async def _from_shared_location(
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        point: SharedLocation,
+        now: datetime,
+    ) -> AnalysisReport:
+        """Read a shared position as the answer to the location question.
+
+        ``confidence`` is 1.0 because nothing was inferred: the user pressed
+        "send location" and these are the coordinates WhatsApp attached. The
+        place name travels as a neighbourhood *candidate* — the extractor only
+        keeps it if the district index recognises it, so a shop's name on a map
+        never becomes a quartier.
+
+        A point outside every known market yields no city, the extractor rejects
+        the location, and the question stays open. That is the honest outcome:
+        there is no geocoder here, and naming a city we cannot justify would
+        file the listing in a town the landlord never mentioned.
+        """
+        ai_bypass_total.labels(stage="location").inc()
+        entities: dict[str, Any] = {
+            "latitude": point.latitude,
+            "longitude": point.longitude,
+        }
+        neighbourhood = _neighbourhood_from_label(point.label)
+        if neighbourhood is not None:
+            entities["neighbourhood"] = neighbourhood
+        return await self._finish(
+            session=session,
+            message_id=message_id,
+            intent="COLLECT_LOCATION",
+            confidence=1.0,
+            entities=entities,
+            used_llm=False,
+            latency_ms=0,
+            cost_usd=Decimal("0"),
+            now=now,
+        )
+
+    async def _from_media(
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        object_key: str,
+        kind: MessageKind,
+        text: str,
+        now: datetime,
+    ) -> AnalysisReport:
+        """Attach what the user sent to the listing the conversation is building.
+
+        Housing step 9 makes photos mandatory, so this is the step the whole
+        media pipeline exists to serve. There is nothing to classify: the bytes
+        are already stored and the kind is already known.
+
+        With no listing to attach to, the turn is still recorded and reported
+        with a reason — a photo that vanishes with no trace is the defect, not
+        the missing draft.
+        """
+        ai_bypass_total.labels(stage="media").inc()
+        media_kind = "DOCUMENT" if kind is MessageKind.DOCUMENT else "PHOTO"
+        property_id = session.assigned_property_id
+        reason: str | None = None
+        if self._listing is None or property_id is None:
+            reason = "media_without_a_listing"
+            _logger.warning(
+                "media_without_a_listing",
+                session_id=str(session.id),
+                object_key=object_key,
+                kind=media_kind,
+            )
+        else:
+            try:
+                await self._listing.attach_media_from_conversation(
+                    property_id=property_id,
+                    object_key=object_key,
+                    kind=media_kind,
+                    now=now,
+                )
+            except DomainError as exc:
+                # The listing refused it — already attached, or past 30 photos.
+                # The turn still happened, and the reason is what tells the
+                # landlord why his photo did not count.
+                reason = "media_refused"
+                _logger.warning(
+                    "media_refused",
+                    session_id=str(session.id),
+                    object_key=object_key,
+                    error=exc.message,
+                )
+
+        return await self._finish(
+            session=session,
+            message_id=message_id,
+            intent="COLLECT_MEDIA" if reason is None else "UNKNOWN",
+            confidence=1.0,
+            entities={},
+            used_llm=False,
+            latency_ms=0,
+            cost_usd=Decimal("0"),
+            now=now,
+            reason=reason,
         )
 
     async def _without_a_model(

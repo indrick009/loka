@@ -61,6 +61,22 @@ class RateLimited(DomainError):
     code = "rate_limited"
 
 
+class PayloadTooLarge(DomainError):
+    """A body the platform refuses to buffer, whatever it contains."""
+
+    code = "payload_too_large"
+
+
+class UnsupportedMediaType(DomainError):
+    """A content type this endpoint will not store.
+
+    Distinct from a validation failure: nothing about the *bytes* is wrong, the
+    platform simply does not accept this kind of object here.
+    """
+
+    code = "unsupported_media_type"
+
+
 class ProcessingDeferred(DomainError):
     """Raised when a use case cannot complete synchronously and must be retried later."""
 

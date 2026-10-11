@@ -32,6 +32,7 @@ from loka.shared.infrastructure.broker.topology import Broker
 from loka.shared.infrastructure.config.settings import Settings, get_settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import configure_logging, get_logger
+from loka.shared.infrastructure.object_storage.media import S3MediaStorage
 from loka.shared.infrastructure.redis_client import build_redis, redis_healthcheck
 
 SERVICE_VERSION = "0.1.0"
@@ -64,6 +65,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # transport can retry, not take the whole API down with it.
         broker = Broker(resolved.broker)
         container.broker = broker
+        container.media_storage = S3MediaStorage(resolved.object_storage)
         try:
             await broker.connect()
             await broker.declare_topology()
