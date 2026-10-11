@@ -1,3 +1,22 @@
+> **Portée.** Ce document est la spécification Loka d'origine. Il décrit la
+> mission et l'architecture de fond, qui tiennent toujours. Il n'est pas la
+> source de vérité du périmètre : celle-ci est dans `conception_metier/` et
+> dans `.claude/skills/kora-*`, et elle le contredit sur plusieurs points.
+>
+> Écarts connus au 11 octobre 2026 :
+>
+> - **Rental Application et Visit sont hors périmètre.** Kora présente un
+>   locataire à un bailleur pour 1 000 FCFA et s'arrête là ; une candidature à
+>   arbitrer ou une visite à planifier remettraient Kora au milieu d'une
+>   relation qu'elle a été payée pour quitter. Les deux contextes bornés ont été
+>   supprimés, pas seulement désactivés.
+> - **Le déblocage est clé sur (locataire, annonce)**, pas sur une candidature :
+>   les 1 000 FCFA achètent le numéro du bailleur *et* la localisation du
+>   logement, et une localisation appartient à une seule annonce.
+> - Les sections ci-dessous qui nomment `rental`, `visit`,
+>   `RentalApplication`, `Visit` ou `application_id` décrivent donc un état
+>   antérieur du code.
+
 # MISSION
 
 Construire une plateforme immobilière conversationnelle permettant aux **bailleurs** et **locataires** de gérer la location de logements principalement via WhatsApp.
@@ -230,9 +249,9 @@ Prévoir les bons indexes et éventuellement une solution de search dédiée si 
 
 ---
 
-## Rental Application
+## Rental Application — hors périmètre V1 (supprimé)
 
-Responsable de :
+Conservé comme trace de la conception d'origine. Responsable de :
 
 - intérêt du locataire ;
 - demande de location ;
@@ -243,9 +262,9 @@ Responsable de :
 
 ---
 
-## Visit
+## Visit — hors périmètre V1 (supprimé)
 
-Responsable de :
+Conservé comme trace de la conception d'origine. Responsable de :
 
 - demande de visite ;
 - proposition de date ;
@@ -1115,9 +1134,6 @@ PropertyPublished
 PropertyUpdated
 PropertyMarkedUnavailable
 PropertyRented
-RentalApplicationCreated
-VisitScheduled
-VisitCompleted
 PaymentCompleted
 ContactInformationUnlocked
 FraudRiskDetected
@@ -1149,18 +1165,6 @@ src/
       interfaces/
 
     property/
-      domain/
-      application/
-      infrastructure/
-      interfaces/
-
-    rental/
-      domain/
-      application/
-      infrastructure/
-      interfaces/
-
-    visit/
       domain/
       application/
       infrastructure/
@@ -1215,8 +1219,6 @@ Même chose pour :
 
 Landlord
 Payment
-RentalApplication
-Visit
 Verification.
 
 Les Value Objects doivent être utilisés lorsqu'ils apportent une vraie valeur.
@@ -1290,7 +1292,6 @@ Tenant onboarding
 Landlord onboarding
 Property creation
 Property search
-Visit
 Payment
 Unlock contact
 Fraud report
