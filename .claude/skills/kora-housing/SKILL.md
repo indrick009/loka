@@ -57,7 +57,9 @@ minimum_duration_months → availability → conditions → CONFIRM`.
 | Deposit expressed in **months** | **Change.** Stored as an XAF amount today. Months is what landlords say; derive the amount from the rent. |
 | Security (guard, parking) as a collection step | **Change.** `amenities` already has `parking` and `security` booleans; no step collects them. |
 | Photos as the explicit last step | **Partially present.** The quality gate reports `MISSING_PHOTOS`, but there is no media pipeline. |
-| `minimum_duration`, `availability`, `conditions` | **Open question — do not silently drop.** The spec's nine steps omit them, but `Property.blocking_issues()` requires them and the market knowledge calls entry conditions "half the price". See Open questions. |
+| `minimum_duration` and `conditions` | **Dropped** — decided 11 Oct. Kora connects people, it does not negotiate leases. The quality gate has to stop requiring them. |
+| `advance` in months | **New.** Not in the nine steps, but §8 negotiates on it and the tenant is asked for theirs, so the landlord's requirement has to exist. |
+| `availability` | **Still open** — the owner and §9.1 disagree. See Still open. |
 
 ### Several lodgings
 
@@ -148,21 +150,88 @@ who charges for a flat already rented.
 Payment itself: see `kora-unlock-payment`. The tenant pays 1 000 FCFA and
 receives the landlord's **number** and the lodging's **location**.
 
-## Open questions to settle with the product owner
+## Settled business decisions (11 October 2026)
 
-Do not resolve these by writing code:
+**Money is counted in months of rent, not in francs**, and the caution is
+**added on top of** the advance — it is not an alternative to it:
 
-1. **Minimum duration, availability date and entry conditions.** The spec's nine
-   steps omit them; the property quality gate requires them; the market knowledge
-   says entry conditions are half the real cost. Either the gate relaxes, or the
-   spec gains a step. Both are defensible — this is a business call.
-2. **The landlord's advance requirement.** The tenant is asked how many months
-   they can pay, and §8 negotiates on it, so the landlord's expectation must be
-   captured somewhere. It is not in the nine steps.
-3. **Deposit in months or in francs**, and whether the stored value is the months
-   or the derived amount.
-4. **Quantity and matching.** Does a confirmed match decrement quantity, and at
-   which point — on match, on availability confirmation, or on payment?
+> "tu donnes une avance en plus du nombre de mois que tu payes, et le jour que
+> tu veux partir on peut te rembourser cela"
+> "je paye 6 mois de loyer et j'ajoute deux mois comme caution remboursable"
+
+| Field | Meaning | Refundable |
+| --- | --- | --- |
+| `advance` | months of rent paid up front | no |
+| `deposit` (caution) | **extra** months on top of the advance | yes, on departure |
+
+So the entry cost is `(advance + deposit) × rent`. In the example: six months
+advance plus two months caution, eight months of rent handed over, two of them
+coming back. Modelling the caution as a parallel or alternative amount gets the
+tenant's real cost wrong, which is the number the matching has to compare.
+
+Store the months. The franc figure is derived from the rent, so correcting a
+rent cannot leave a stale total behind, and the tenant's "how many months can
+you pay" compares directly against the landlord's requirement with no
+conversion. A deposit held as an XAF amount silently decouples from the rent it
+guarantees.
+
+**The caution is the landlord's requirement, not Kora's.** Kora records what the
+landlord asks for and shows it to the tenant. It never sets it, never holds the
+money, and never arbitrates the refund — that happens between the two parties
+long after Kora is out of the picture (see below), so Kora must promise nothing
+about it.
+
+**Kora's involvement ends when the contact is released.**
+
+> "une fois les informations décaissées Kora a fini son travail, plus aucun
+> argent ne vient à Kora"
+
+One payment of 1 000 FCFA, then out. No rent collection, no commission on the
+lease, no tenancy management, no deposit escrow, no follow-up. This is the
+hardest boundary in the domain and the easiest to erode feature by feature: any
+proposal that keeps Kora in the relationship after disclosure is outside V1.
+
+**No entry-conditions step.** Kora puts a landlord and a tenant in touch; it is
+not a lease negotiator. Drop the free-text `conditions` collection (agency fees,
+accepted tenant type) and the `minimum_duration` step with it. `Property.
+blocking_issues()` must be relaxed accordingly, or a listing that followed the
+spec still cannot publish.
+
+Keep the advance and the deposit: they are not "conditions", they are the price
+of entry, and §8 negotiates on exactly those two axes.
+
+**Availability is the landlord's call, always.** Confirmed 11 Oct. Kora never
+infers it — not from a match, not from a payment, not from elapsed time. A
+listing stays available **by default** until the landlord says otherwise.
+
+Note what the message asks, because it is not a payment request:
+
+> « Le logement est encore disponible ? Un locataire aimerait visiter. »
+
+| Landlord's answer | Effect |
+| --- | --- |
+| yes | the tenant may pay the 1 000 FCFA |
+| "un studio a été pris" | quantity drops by one; the listing stays if any remain |
+| "tout a été pris" | the listing leaves the catalogue |
+| no answer | **not confirmed** — no payment; offer other matches instead |
+
+What is *not* wanted is availability **management**: no state machine tracking a
+listing over time, no periodic re-checks, no expiry sweep. One question, at the
+moment it matters, because the state may have changed since publication.
+
+**Quantity decrements only on the landlord's declaration** — never on a match, a
+confirmation or a payment. That follows from the boundary above: once the contact
+is released Kora is out of the relationship and cannot know whether a lease
+happened. Only the landlord knows. With `quantity = 2`, "is it still available?"
+means "are any left?", which is exactly why the two declarations above are
+different events.
+
+## Still open — do not resolve by writing code
+
+**The landlord's required advance.** §8 negotiates on it — "le bailleur demande
+un an d'avance et le locataire a 5 mois" — but none of the nine collection steps
+asks for it. Either it becomes a step, or negotiation covers the price only.
+Settle it before implementing §8.
 
 ## Scope
 

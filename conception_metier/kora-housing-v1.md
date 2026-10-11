@@ -1,5 +1,9 @@
 ## KORA HOUSING — VISION ET FLUX MÉTIER (V1)
 
+> Mis à jour le 11 octobre 2026 : définition de la caution (§4.7), autorité du
+> bailleur sur la disponibilité et décompte des quantités (§9), frontière de fin
+> d'intervention (§10).
+
 ### 1. Le problème
 
 Au Cameroun, louer une chambre, un studio ou un appartement est très pénible :
@@ -33,11 +37,16 @@ Le bailleur peut avoir un ou plusieurs logements à louer. Il commence la conver
 | 4 | Localisation | **Très important.** Kora suggère d'abord de partager la localisation WhatsApp, pour localiser le logement de façon fiable et mieux orienter les locataires. Si le bailleur ne veut pas ou ne sait pas le faire, Kora demande la ville et le quartier. Kora dispose de la liste des villes et quartiers pour corriger les fautes de saisie, et demande confirmation si nécessaire. **Cette étape doit être validée avant de passer à la suite.** |
 | 5 | Prix du loyer | Le bailleur peut écrire « 60mil », « 50mil », « 60k » ou « 50000 ». Kora interprète selon le contexte immobilier camerounais : « 50mil » signifie 50 000 FCFA, pas 50 millions (il n'existe pratiquement pas de studio à 50 millions). |
 | 6 | Électricité et eau | Incluses dans le loyer ou non. Certains logements n'ont pas d'eau : la question et la réponse doivent être **très claires** pour bien comprendre la situation. |
-| 7 | Caution | Y a-t-il une caution ? Si oui, combien de mois. |
+| 7 | Caution | Y a-t-il une caution ? Si oui, **combien de mois**. La caution est une avance **en plus** du nombre de mois payés, remboursable le jour où le locataire part. Coût d'entrée = (mois d'avance + mois de caution) × loyer : 6 mois d'avance plus 2 de caution, c'est 8 mois versés dont 2 reviennent. C'est **le bailleur** qui la fixe ; Kora l'enregistre et l'affiche, ne détient pas l'argent et n'arbitre pas le remboursement. |
 | 8 | Sécurité | Gardien, parking. Point subtil : ces équipements concernent généralement les loyers à partir de 70 000 FCFA. |
 | 9 | Photos | **Très important.** Dernière étape. |
 
 Une fois les informations collectées, Kora publie le ou les logements.
+
+> **À confirmer.** La §8 négocie sur l'avance exigée par le bailleur
+> (« le bailleur demande un an d'avance et le locataire a 5 mois »), mais les 9
+> étapes ci-dessus ne la collectent pas. Soit elle devient une étape, soit la
+> négociation ne porte que sur le prix. À trancher avant d'implémenter la §8.
 
 ### 5. Bailleur avec plusieurs logements
 
@@ -92,6 +101,28 @@ Déroulement de la négociation :
 Une fois le logement confirmé :
 
 1. **Avant tout paiement, Kora demande toujours au bailleur si le logement est encore disponible.** Le locataire ne paie que si le bailleur confirme la disponibilité.
+
+**C'est le bailleur qui décide de la disponibilité, toujours.** Kora ne la déduit
+jamais : ni d'un match, ni d'un paiement, ni du temps écoulé. Un logement reste
+disponible **par défaut** tant que le bailleur n'a pas écrit le contraire.
+
+Message envoyé au bailleur :
+
+> « Le logement est encore disponible ? Un locataire aimerait visiter. »
+
+Réponses possibles et effets :
+
+| Réponse du bailleur | Effet |
+| --- | --- |
+| Oui, c'est disponible | Le locataire peut payer les 1 000 FCFA |
+| **Un studio a été pris** | La quantité diminue de 1 ; l'annonce reste publiée s'il en reste |
+| **Tout a été pris** | L'annonce sort des recherches |
+| Pas de réponse | **Non confirmé** : le locataire ne paie pas, Kora lui propose d'autres logements |
+
+Kora ne gère donc **aucun état de disponibilité dans le temps** : pas de
+re-vérification périodique, pas d'expiration automatique, pas de décompte
+automatique sur un match ou un paiement. Une seule question, au moment où elle
+compte — parce que l'état a pu changer entre la publication et la demande.
 2. Le locataire paie **1 000 FCFA** pour débloquer les informations du bailleur (son **numéro**) et la **localisation** du logement.
 3. Kora demande : « Voulez-vous procéder au paiement ? »
 4. Si oui, Kora propose de payer avec un numéro donné ; le locataire peut le changer.
@@ -100,4 +131,15 @@ Une fois le logement confirmé :
 
 ### 10. Périmètre
 
-Ce flux constitue la **V1** de Kora Housing. Rien d'autre n'est à ajouter côté métier à ce stade.
+Ce flux constitue la **V1** de Kora Housing. Rien d'autre n'est à ajouter côté
+métier à ce stade.
+
+**Le travail de Kora s'arrête à la mise en relation.** Une fois les informations
+du bailleur transmises, Kora a fini : plus aucun argent ne vient à Kora. Pas
+d'encaissement de loyer, pas de commission sur le bail, pas de séquestre de
+caution, pas de suivi de location. Les 1 000 FCFA sont les seuls frais, une
+seule fois.
+
+C'est la frontière la plus facile à éroder fonctionnalité par fonctionnalité, et
+chaque érosion transforme une mise en relation à 1 000 FCFA en agence
+immobilière.

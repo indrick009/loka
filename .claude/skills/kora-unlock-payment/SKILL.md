@@ -34,6 +34,19 @@ Shared today by Housing (`conception_metier/kora-housing-v1.md` §9) and Found
 Nothing else is sold. No viewing fee, no commission, no subscription, and no
 charge to the landlord, the restaurant or the finder.
 
+**And the relationship ends there.** Confirmed by the owner, 11 Oct:
+
+> "une fois les informations décaissées Kora a fini son travail, plus aucun
+> argent ne vient à Kora"
+
+No rent collection, no commission on the lease, no deposit escrow, no
+follow-up. This is the easiest boundary in the product to erode one feature at
+a time, and every erosion turns a 1 000 FCFA introduction into an agency. Any
+proposal that keeps Kora in the relationship after disclosure is outside V1.
+
+It also raises the stakes on the two invariants below: with no ongoing
+relationship, there is no later opportunity to make a bad unlock good.
+
 ## State today
 
 - `initiate_service_fee.py` already defaults to `service_fee_xaf: int = 1000`,
