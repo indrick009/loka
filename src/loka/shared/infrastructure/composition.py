@@ -99,6 +99,28 @@ from loka.bounded_contexts.property.application.use_cases.publish_property impor
 from loka.bounded_contexts.property.infrastructure.composition import (
     PROPERTY_REPOSITORY_FACTORIES,
 )
+from loka.bounded_contexts.reviews_complaints.application.use_cases.decide_complaint import (
+    DecideComplaintUseCase,
+    ReinstateProviderUseCase,
+)
+from loka.bounded_contexts.reviews_complaints.application.use_cases.file_complaint import (
+    FileComplaintUseCase,
+)
+from loka.bounded_contexts.reviews_complaints.application.use_cases.get_complaint_queue import (
+    GetComplaintQueueUseCase,
+)
+from loka.bounded_contexts.reviews_complaints.application.use_cases.read_provider_ranking import (
+    ProviderRankingReader,
+)
+from loka.bounded_contexts.reviews_complaints.application.use_cases.submit_review import (
+    SubmitReviewUseCase,
+)
+from loka.bounded_contexts.reviews_complaints.domain.value_objects.provider import (
+    ProviderKind,
+)
+from loka.bounded_contexts.reviews_complaints.infrastructure.composition import (
+    introduction_directory,
+)
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -301,3 +323,53 @@ def adjudicate_landlord_verification_use_case(
         adjudicator=verification_adjudicator(settings),
         urls=evidence_url_provider(settings),
     )
+
+
+def submit_review_use_case(uow: SqlAlchemyUnitOfWork) -> SubmitReviewUseCase:
+    """An avis, gated on the introduction Kora actually made."""
+    return SubmitReviewUseCase(uow, introductions=introduction_directory())
+
+
+def file_complaint_use_case(
+    uow: SqlAlchemyUnitOfWork, settings: Settings
+) -> FileComplaintUseCase:
+    return FileComplaintUseCase(
+        uow,
+        introductions=introduction_directory(),
+        hide_threshold=settings.reviews.complaint_hide_threshold,
+    )
+
+
+def decide_complaint_use_case(
+    uow: SqlAlchemyUnitOfWork, settings: Settings
+) -> DecideComplaintUseCase:
+    """The human decision.
+
+    The threshold is passed in so a dismissal can release a provider the
+    automatic hide had taken out of search.
+    """
+    return DecideComplaintUseCase(
+        uow, hide_threshold=settings.reviews.complaint_hide_threshold
+    )
+
+
+def reinstate_provider_use_case(uow: SqlAlchemyUnitOfWork) -> ReinstateProviderUseCase:
+    return ReinstateProviderUseCase(uow)
+
+
+def get_complaint_queue_use_case(
+    uow: SqlAlchemyUnitOfWork, settings: Settings
+) -> GetComplaintQueueUseCase:
+    return GetComplaintQueueUseCase(
+        uow, response_time_hours=settings.reviews.complaint_response_time_hours
+    )
+
+
+def landlord_ranking_reader(uow: SqlAlchemyUnitOfWork) -> ProviderRankingReader:
+    """The ranking signal for Housing, bound to the one provider kind it offers.
+
+    Housing ranks landlords, so the kind is fixed here rather than taken as an
+    argument: a catalogue that could pass a kind could pass the wrong one, and
+    then a restaurateur's marks would order lodgings.
+    """
+    return ProviderRankingReader(uow, provider_kind=ProviderKind.LANDLORD)

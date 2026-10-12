@@ -164,6 +164,28 @@ class FraudSettings(BaseModel):
     max_active_properties_per_landlord: int = 25
 
 
+class ReviewsSettings(BaseModel):
+    """The two numbers the Avis et plaintes spec leaves to be set, not designed.
+
+    ``complaint_hide_threshold`` is the N of §6: past this many complaints still
+    owed an answer, Kora stops putting the provider forward until a human
+    decides. It hides, it never bans. Set it too low and three bad-faith
+    complaints take an honest landlord out of search; too high and a scammer
+    keeps trading while the queue fills.
+
+    ``complaint_response_time_hours`` is the delay the team promises itself. It
+    is reported with the queue as a count of overdue complaints, because a human
+    queue with no announced delay is a queue that grows in silence.
+
+    Both defaults below are placeholders chosen to be safe rather than right:
+    three complaints is more than one angry person can file alone, and 48 hours
+    is two working days. The product owner still owes the real values.
+    """
+
+    complaint_hide_threshold: int = Field(default=3, ge=1)
+    complaint_response_time_hours: int = Field(default=48, ge=1)
+
+
 class ObservabilitySettings(BaseModel):
     log_level: str = "INFO"
     log_json: bool = True
@@ -194,6 +216,7 @@ class Settings(BaseSettings):
     whatsapp: WhatsAppSettings = Field(default_factory=WhatsAppSettings)
     payment: PaymentSettings = Field(default_factory=PaymentSettings)
     fraud: FraudSettings = Field(default_factory=FraudSettings)
+    reviews: ReviewsSettings = Field(default_factory=ReviewsSettings)
     observability: ObservabilitySettings = Field(default_factory=ObservabilitySettings)
 
     encryption_key: SecretStr = Field(
