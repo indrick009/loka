@@ -29,6 +29,7 @@ from typing import Any
 from loka.bounded_contexts.ai.application.ports import (
     AiUsageLedger,
     AvailabilityAnswers,
+    AvailabilityRequests,
     BudgetDecision,
     BudgetPolicy,
     ConversationTurn,
@@ -43,6 +44,8 @@ from loka.bounded_contexts.ai.application.ports import (
 from loka.bounded_contexts.ai.application.services.conversation_copy import (
     SEARCH_RESULT_LIMIT,
     availability_answer_text,
+    availability_pending_text,
+    choice_out_of_range_text,
     listing_unsaved_text,
     missing_listing_reply,
     no_results_text,
@@ -164,6 +167,28 @@ def _neighbourhood_from_label(label: str | None) -> str | None:
     return None
 
 
+# The listing ids last printed to this tenant, in the order he saw them. The
+# leading underscore keeps it out of every prompt: ``_public_known_facts``
+# strips it, so it costs no tokens and cannot be read back as something the
+# tenant said.
+_SHOWN_LISTINGS = "_shown_listings"
+
+
+def _nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
+    """The listing behind a one-based line number, or ``None``.
+
+    Defensive about the stored value because it comes back out of a JSON
+    column: a malformed context must leave the tenant with a question, never a
+    crash and never the wrong lodging.
+    """
+    if not isinstance(shown, list) or not 1 <= choice <= len(shown):
+        return None
+    try:
+        return uuid.UUID(str(shown[choice - 1]))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def _known_facts(session: ConversationSession, intent: str) -> dict[str, Any]:
     """What this turn may build on: nothing from an abandoned attempt."""
     return {} if _opens_new_flow(session, intent) else dict(session.context)
@@ -242,6 +267,7 @@ class AnalyseConversationMessageUseCase:
         provider_name: str = "openrouter",
         listing: PropertyListing | None = None,
         availability: AvailabilityAnswers | None = None,
+        availability_requests: AvailabilityRequests | None = None,
         search: PropertySearchGateway | None = None,
     ) -> None:
         self._uow = uow
@@ -257,6 +283,7 @@ class AnalyseConversationMessageUseCase:
         self._provider = provider_name
         self._listing = listing
         self._availability = availability
+        self._availability_requests = availability_requests
         self._search = search
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
@@ -811,16 +838,31 @@ class AnalyseConversationMessageUseCase:
             listing_text, next_step, listing_id = await self._confirm_listing(
                 session, intent=intent, next_step=next_step, now=now
             )
-            search_text, next_step = await self._present_results(
+            search_text, next_step, shown = await self._present_results(
                 session, intent=intent, facts=facts, next_step=next_step
             )
+            choice_text, next_step = await self._choose_listing(
+                session, facts=facts, next_step=next_step, now=now
+            )
             question = await self._advance_session(
-                session, intent, facts, next_step, now=now, attach_property_id=listing_id
+                session,
+                intent,
+                facts,
+                next_step,
+                now=now,
+                attach_property_id=listing_id,
+                extra_context={_SHOWN_LISTINGS: list(shown)} if shown else None,
             )
             # The catalogue's numbers are data, not prose: they win over both
             # the model's sentence and the listing summary, which cannot apply
             # to the same turn.
-            reply_text = availability_text or search_text or listing_text or reply_text
+            reply_text = (
+                availability_text
+                or search_text
+                or choice_text
+                or listing_text
+                or reply_text
+            )
 
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
@@ -960,6 +1002,57 @@ class AnalyseConversationMessageUseCase:
             result.property_id,
         )
 
+    async def _choose_listing(
+        self,
+        session: ConversationSession,
+        *,
+        facts: ExtractedFacts,
+        next_step: FlowStep | None,
+        now: datetime,
+    ) -> tuple[str | None, FlowStep | None]:
+        """Turn the tenant's line number into a question for the landlord.
+
+        This is the step the thread used to die on: the list was printed, the
+        number was asked for, the answer was understood — and nothing consumed
+        it. Kora says nothing about a reservation and promises no visit, only
+        that the landlord is being asked, because that is the only thing that
+        actually happens (housing spec §9).
+
+        A number naming nothing is re-asked rather than resolved to the nearest
+        listing: charging 1 000 FCFA for a lodging the tenant never saw is
+        worse than one more question.
+        """
+        # Keyed on where the session *is*, not on where the form recompute
+        # would go: ``next_step`` walks the tenant's criteria again and would
+        # send him back to the type question, which is not what answering a
+        # choice means. Same rule as ``_confirm_listing``.
+        if session.step is not FlowStep.COLLECT_PROPERTY_CHOICE:
+            return None, next_step
+        choice = facts.get("property_choice")
+        if not isinstance(choice, int) or isinstance(choice, bool):
+            return None, FlowStep.COLLECT_PROPERTY_CHOICE
+        if self._availability_requests is None:
+            return None, FlowStep.COLLECT_PROPERTY_CHOICE
+
+        listing_id = _nth_listing(session.context.get(_SHOWN_LISTINGS), choice)
+        if listing_id is None:
+            # Either he answered a list he was never shown, or the number is
+            # past its end. Both leave him on the same step, asked again.
+            return (
+                choice_out_of_range_text(session.language),
+                FlowStep.COLLECT_PROPERTY_CHOICE,
+            )
+
+        asked = await self._availability_requests.request(
+            property_id=listing_id, tenant_id=session.user_id, now=now
+        )
+        if not asked:
+            return (
+                choice_out_of_range_text(session.language),
+                FlowStep.COLLECT_PROPERTY_CHOICE,
+            )
+        return availability_pending_text(session.language), FlowStep.AWAITING_AVAILABILITY
+
     async def _present_results(
         self,
         session: ConversationSession,
@@ -967,7 +1060,7 @@ class AnalyseConversationMessageUseCase:
         intent: str,
         facts: ExtractedFacts,
         next_step: FlowStep | None,
-    ) -> tuple[str | None, FlowStep | None]:
+    ) -> tuple[str | None, FlowStep | None, tuple[str, ...]]:
         """Run the tenant's search once its criteria are complete.
 
         Only ``PRESENT_RESULTS`` reaches this, and the extractor hands that step
@@ -983,19 +1076,27 @@ class AnalyseConversationMessageUseCase:
         the platform has no watcher to send.
         """
         if next_step is not FlowStep.PRESENT_RESULTS:
-            return None, next_step
+            return None, next_step, ()
         if self._search is None:
-            return search_unavailable_text(session.language), next_step
+            return search_unavailable_text(session.language), next_step, ()
         query = search_query({**_known_facts(session, intent), **facts.as_context()})
         if query is None:
             # The form reported complete but the facts describe no place to
             # search: calling that "no match" would be a lie the tenant cannot
             # act on, so it is reported as a failure instead.
-            return search_unavailable_text(session.language), next_step
+            return search_unavailable_text(session.language), next_step, ()
         hits = await self._search.search_for_conversation(query, limit=SEARCH_RESULT_LIMIT)
         if not hits:
-            return no_results_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA
-        return results_text(hits, session.language), FlowStep.COLLECT_PROPERTY_CHOICE
+            return no_results_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA, ()
+        # The listing ids in the order they were printed. Without them the
+        # tenant's "2" names nothing, which is why his answer used to be read,
+        # understood and dropped.
+        shown = tuple(hit.property_id for hit in hits)
+        return (
+            results_text(hits, session.language),
+            FlowStep.COLLECT_PROPERTY_CHOICE,
+            shown,
+        )
 
     async def _advance_session(
         self,
@@ -1006,6 +1107,7 @@ class AnalyseConversationMessageUseCase:
         *,
         now: datetime,
         attach_property_id: uuid.UUID | None = None,
+        extra_context: dict[str, Any] | None = None,
     ) -> str | None:
         """Open the flow if needed, merge the facts, move to the chosen step.
 
@@ -1034,7 +1136,7 @@ class AnalyseConversationMessageUseCase:
         # every save look like a conflict.
         if next_step is not None:
             session.transition(next_step, now=now, expected_revision=session.revision)
-        session.merge_context(facts.as_context(), now=now)
+        session.merge_context({**facts.as_context(), **(extra_context or {})}, now=now)
         # Attaching after the baseline is captured keeps the save's
         # expected_revision equal to the value read from the row.
         if attach_property_id is not None:

@@ -45,6 +45,16 @@ class SqlAlchemyConversationSessionRepository:
             return None
         return _to_domain(row)
 
+    async def latest_by_user(self, user_id: uuid.UUID) -> ConversationSession | None:
+        result = await self._session.execute(
+            select(ConversationSessionRow)
+            .where(ConversationSessionRow.user_id == user_id)
+            .order_by(ConversationSessionRow.started_at.desc(), ConversationSessionRow.id.desc())
+            .limit(1)
+        )
+        row = result.scalars().first()
+        return _to_domain(row) if row is not None else None
+
     async def add(self, session: ConversationSession) -> None:
         self._session.add(_to_row(session))
 

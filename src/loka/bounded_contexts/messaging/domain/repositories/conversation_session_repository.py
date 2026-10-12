@@ -22,6 +22,14 @@ class ConversationSessionRepository(Protocol):
         reports the durable state.
         """
 
+    async def latest_by_user(self, user_id: uuid.UUID) -> ConversationSession | None:
+        """Most recent session of this account.
+
+        Needed to write to somebody outside their own turn: a landlord asked
+        whether his lodging is still free is not answering a message, so the
+        only way to reach him is the thread he last used.
+        """
+
     async def add(self, session: ConversationSession) -> None: ...
 
     async def save(

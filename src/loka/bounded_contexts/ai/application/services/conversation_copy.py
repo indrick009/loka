@@ -23,6 +23,7 @@ from loka.bounded_contexts.ai.application.ports import (
     ConversationPropertyHit,
     ConversationSearchQuery,
 )
+from loka.bounded_contexts.ai.domain.services.fact_extraction import MAX_RESULT_CHOICES
 
 
 def reply_kind(*, reason: str | None, question_key: str | None) -> str:
@@ -119,7 +120,9 @@ def _join(items: list[str], language: str) -> str:
 
 # A WhatsApp thread is not a results page: five properties is already a long
 # message, and the catalogue is read again on the next criteria anyway.
-SEARCH_RESULT_LIMIT = 5
+# One list, one bound: the number of lines printed is the number a tenant may
+# pick, and the domain owns the bound because it is what validates the answer.
+SEARCH_RESULT_LIMIT = MAX_RESULT_CHOICES
 
 _SEARCH_UNAVAILABLE_TEXT: dict[str, str] = {
     "fr": (
@@ -325,3 +328,41 @@ def availability_answer_text(
     if lodgings_left > 1:
         return table["some_left"].format(lodgings=lodgings_left)
     return table["available"]
+
+
+# What the tenant reads once he has picked a lodging. Kora does not say
+# "réservé" and does not promise a visit: it says the landlord is being asked,
+# which is the only thing that is actually happening (housing spec §9).
+_AVAILABILITY_PENDING_TEXT: dict[str, str] = {
+    "fr": (
+        "Je demande au bailleur si le logement est encore disponible.\n"
+        "Je reviens vers vous dès qu'il répond. Si rien ne vient, dites-le moi "
+        "et je vous propose d'autres logements."
+    ),
+    "en": (
+        "I am asking the landlord whether the property is still available.\n"
+        "I will come back to you as soon as he answers. If nothing comes, tell "
+        "me and I will suggest other properties."
+    ),
+}
+
+_CHOICE_OUT_OF_RANGE_TEXT: dict[str, str] = {
+    "fr": (
+        "Ce numéro ne correspond à aucun logement de la liste.\n"
+        "Indiquez le numéro affiché à côté du logement qui vous intéresse."
+    ),
+    "en": (
+        "That number does not match any property in the list.\n"
+        "Give the number shown next to the property you are interested in."
+    ),
+}
+
+
+def availability_pending_text(language: str) -> str:
+    """The tenant has chosen; the landlord has not answered yet."""
+    return _copy(_AVAILABILITY_PENDING_TEXT, language)
+
+
+def choice_out_of_range_text(language: str) -> str:
+    """His number names nothing. Re-asked rather than resolved to the nearest."""
+    return _copy(_CHOICE_OUT_OF_RANGE_TEXT, language)

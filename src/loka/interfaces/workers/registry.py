@@ -11,6 +11,10 @@ binding a broker queue to a use case is a composition decision, and
 
 from __future__ import annotations
 
+from loka.interfaces.worker.availability_question_consumer import (
+    AVAILABILITY_QUESTION_QUEUE,
+    AvailabilityQuestionConsumer,
+)
 from loka.interfaces.worker.conversation_analysis_consumer import (
     AI_REQUEST_QUEUE,
     ConversationAnalysisConsumer,
@@ -57,6 +61,7 @@ def handler_registry() -> dict[str, ConsumerFactory]:
         FRAUD_ANALYSIS_QUEUE: FraudAnalysisConsumer,
         SEARCH_PROJECTION_QUEUE: SearchProjectionConsumer,
         LANDLORD_VERIFICATION_QUEUE: LandlordVerificationConsumer,
+        AVAILABILITY_QUESTION_QUEUE: AvailabilityQuestionConsumer,
     }
     declared = {spec.name for spec in QUEUES}
     unknown = set(registry) - declared

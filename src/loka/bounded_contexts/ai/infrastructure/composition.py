@@ -20,6 +20,7 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability import (
     ConversationAvailabilityAnswers,
+    ConversationAvailabilityRequests,
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
@@ -28,6 +29,9 @@ from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentM
 from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
     SqlAlchemyConversationTurnRepository,
+)
+from loka.bounded_contexts.landlord.infrastructure.composition import (
+    LANDLORD_DIRECTORY,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
@@ -109,5 +113,10 @@ def analyse_conversation_message_use_case(
         # The landlord's half of the availability check. Without it his
         # "c'est déjà loué" is understood and then dropped, and the lodging
         # stays in every tenant's results.
-        availability=ConversationAvailabilityAnswers(uow),
+        availability=ConversationAvailabilityAnswers(
+            uow, landlords=uow.repository(LANDLORD_DIRECTORY)
+        ),
+        # The tenant's half: his line number becomes a question to the owner of
+        # the lodging he picked.
+        availability_requests=ConversationAvailabilityRequests(uow),
     )

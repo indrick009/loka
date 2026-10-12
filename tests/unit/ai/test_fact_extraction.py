@@ -723,6 +723,37 @@ class TestTrustBoundary:
         assert emitted, "the samples must produce at least one intent"
         assert emitted <= SUPPORTED_INTENTS
 
+    def test_every_answer_to_an_open_question_is_a_supported_intent(self) -> None:
+        """The half of the trust boundary the sample list could not reach.
+
+        The classifier emits different intents depending on which question is
+        open, and the samples above are all classified with none. Three intents
+        reachable only through a pending question were therefore missing from
+        ``SUPPORTED_INTENTS``, which means a landlord answering "6" to the
+        advance question had his answer refused as an invented state — the
+        thread stalled on a question he had just answered.
+        """
+        answers = {
+            "ask.rent": "250 000",
+            "ask.search_budget": "150 000",
+            "ask.charges": "15 000",
+            "ask.deposit": "2",
+            "ask.advance": "6",
+            "ask.quantity": "2",
+            "ask.search_choice": "1",
+            "ask.minimum_duration": "12",
+            "ask.availability": "immédiatement",
+        }
+        classifier = DeterministicClassifier()
+        emitted = {
+            match.intent
+            for pending, text in answers.items()
+            if (match := classifier.classify(text, pending=pending)) is not None
+        }
+
+        assert len(emitted) >= 6, emitted
+        assert emitted <= SUPPORTED_INTENTS, emitted - SUPPORTED_INTENTS
+
     def test_an_invented_intent_is_refused(self) -> None:
         assert not is_supported_intent("TRANSFER_MONEY_TO_LANDLORD")
 

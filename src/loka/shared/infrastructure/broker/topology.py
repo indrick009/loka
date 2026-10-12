@@ -55,6 +55,9 @@ QUEUES: tuple[QueueSpec, ...] = (
         "search.projections",
         routing_keys=("PropertyPublished", "PropertyRented", "PropertyMarkedUnavailable"),
     ),
+    QueueSpec(
+        "availability.questions", routing_keys=("AvailabilityCheckRequested",)
+    ),
     QueueSpec("trust.projections", routing_keys=("TenantFeedbackSubmitted",)),
     QueueSpec("outbox.dispatch"),
 )

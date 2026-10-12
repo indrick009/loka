@@ -25,6 +25,12 @@ class SqlAlchemyLandlordDirectory:
         )
         return result.scalar_one_or_none()
 
+    async def user_id_for_profile(self, landlord_id: uuid.UUID) -> uuid.UUID | None:
+        result = await self._session.execute(
+            select(LandlordProfileRow.user_id).where(LandlordProfileRow.id == landlord_id)
+        )
+        return result.scalar_one_or_none()
+
     async def is_verified(self, landlord_id: uuid.UUID) -> bool:
         result = await self._session.execute(
             select(LandlordProfileRow.verification_status).where(

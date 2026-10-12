@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import IntentResult
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
+    MAX_RESULT_CHOICES,
     MIN_PLAUSIBLE_RENT_XAF,
 )
 
@@ -262,6 +263,7 @@ _UNIT_BOUND_QUESTIONS = frozenset(
         "ask.quantity",
         "ask.minimum_duration",
         "ask.availability",
+        "ask.search_choice",
     }
 )
 
@@ -513,6 +515,18 @@ class DeterministicClassifier:
             return DeterministicMatch(
                 intent=intent, confidence=0.95, entities={field: months}
             )
+
+        if pending == "ask.search_choice":
+            match = _MONTH_COUNT_PATTERN.match(normalized)
+            if match is not None:
+                choice = int(match.group("count"))
+                if 1 <= choice <= MAX_RESULT_CHOICES:
+                    return DeterministicMatch(
+                        intent="COLLECT_PROPERTY_CHOICE",
+                        confidence=0.95,
+                        entities={"property_choice": choice},
+                    )
+            return None
 
         if pending == "ask.quantity":
             match = _MONTH_COUNT_PATTERN.match(normalized)

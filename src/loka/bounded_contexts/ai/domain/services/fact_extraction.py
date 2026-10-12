@@ -107,6 +107,7 @@ LISTING_INTENTS = frozenset(
         "COLLECT_ADVANCE",
         "COLLECT_QUANTITY",
         "COLLECT_SECURITY",
+        "COLLECT_PROPERTY_CHOICE",
         "COLLECT_MINIMUM_DURATION",
         "COLLECT_AVAILABILITY",
         "COLLECT_CONDITIONS",
@@ -140,6 +141,10 @@ SUPPORTED_INTENTS = frozenset(
         "COLLECT_STANDING",
         "COLLECT_ACQUISITION_SOURCE",
         "COLLECT_DEPOSIT",
+        "COLLECT_ADVANCE",
+        "COLLECT_QUANTITY",
+        "COLLECT_SECURITY",
+        "COLLECT_PROPERTY_CHOICE",
         "AVAILABILITY_STILL_AVAILABLE",
         "AVAILABILITY_ONE_TAKEN",
         "AVAILABILITY_RENTED",
@@ -167,6 +172,12 @@ SUPPORTED_INTENTS = frozenset(
 # recorded, so "the model was unsure" is measurable instead of being silently
 # converted into a wrong listing.
 MIN_ACCEPTED_CONFIDENCE = 0.75
+
+# How many listings a result list may offer, and therefore the largest number a
+# tenant's choice can name. Lives here rather than with the copy because it is
+# a validation bound: a choice outside it is not a choice, whatever the reply
+# layer happens to print.
+MAX_RESULT_CHOICES = 5
 
 # A stable key, never a sentence: copy and translations belong to the outbound
 # layer. This stage decides *what* is missing, not how to phrase it.
@@ -303,6 +314,8 @@ class FactExtractor:
             keep("amenities", lambda: _build_amenities(entities))
         if "amenities_hints" in present:
             keep("amenities_hints", lambda: _build_amenities(entities, hints=True))
+        if "property_choice" in present:
+            keep("property_choice", lambda: _build_choice(present["property_choice"]))
         if "quantity" in present:
             keep("quantity", lambda: _build_quantity(present["quantity"]))
         if "deposit_months" in present:
@@ -613,6 +626,22 @@ def _build_security(entities: dict[str, Any]) -> dict[str, object]:
         if isinstance(value, bool):
             stated[axis] = value
     return stated
+
+
+def _build_choice(raw: Any) -> int:
+    """Which line of the result list the tenant picked, one-based.
+
+    Bounded by what was actually shown: a tenant answering "7" to a list of
+    three has not chosen anything, and resolving it to the nearest listing
+    would charge him 1 000 FCFA for a lodging he never saw.
+    """
+    choice = _as_int(raw)
+    if not 1 <= choice <= MAX_RESULT_CHOICES:
+        raise ValidationFailed(
+            "a choice must name one of the listings shown",
+            context={"entity": "property_choice", "value": repr(raw)},
+        )
+    return choice
 
 
 def _build_quantity(raw: Any) -> int:

@@ -94,6 +94,20 @@ class PropertyListing(Protocol):
         ...
 
 
+class AvailabilityRequests(Protocol):
+    """Puts the question to the landlord of a listing a tenant picked.
+
+    The pipeline knows which listing the tenant chose and nothing about who
+    owns it. Asking its landlord is the catalogue's business, and delivering
+    the message is the outbound layer's: this port only starts it, and returns
+    whether a question is now outstanding.
+    """
+
+    async def request(
+        self, *, property_id: uuid.UUID, tenant_id: uuid.UUID | None, now: datetime
+    ) -> bool: ...
+
+
 class AvailabilityAnswers(Protocol):
     """Carries a landlord's "le logement est encore disponible ?" answer home.
 

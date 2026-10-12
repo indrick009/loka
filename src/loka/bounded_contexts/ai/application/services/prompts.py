@@ -130,7 +130,10 @@ QUESTION_TOPICS: dict[str, str] = {
     "ask.search_budget": "the maximum monthly rent the tenant is willing to pay, in XAF",
     "ask.search_criteria": "which search criterion the tenant wants to change",
     "ask.search_results": "the list of properties matching the tenant's criteria",
-    "ask.search_choice": "which property from the list the tenant picks",
+    "ask.search_choice": (
+        "which property from the list the tenant picks, as the line number "
+        "shown next to it"
+    ),
 }
 
 # What a month of rent costs here, by property type, in XAF. A model with no
@@ -229,6 +232,7 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.search_type": "property_type",
     "ask.search_location": "city and neighbourhood",
     "ask.search_budget": "price",
+    "ask.search_choice": "property_choice",
 }
 
 RESPONSE_SCHEMA: dict[str, Any] = {
@@ -264,6 +268,8 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "advance_months": {"type": "integer"},
                 "deposit": {"type": "integer"},
                 "quantity": {"type": "integer"},
+                # Which line of the result list the tenant picked, one-based.
+                "property_choice": {"type": "integer"},
                 "minimum_duration_months": {"type": "integer"},
                 "availability": {"type": "string"},
                 "conditions": {"type": "string"},

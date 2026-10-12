@@ -38,6 +38,14 @@ class LandlordDirectory(Protocol):
         id, so ownership can only be decided through this lookup.
         """
 
+    async def user_id_for_profile(self, landlord_id: uuid.UUID) -> uuid.UUID | None:
+        """The account behind a listing's landlord.
+
+        The other direction, and needed for the same reason: a listing names a
+        profile, while writing to its owner on WhatsApp needs the account that
+        holds the phone number.
+        """
+
 
 @dataclass(frozen=True, slots=True)
 class VerificationEvidence:

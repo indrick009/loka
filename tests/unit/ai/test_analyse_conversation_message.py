@@ -301,6 +301,7 @@ def build(
     sessions: FakeSessionRepository | None = None,
     search: Any | None = None,
     availability: Any | None = None,
+    availability_requests: Any | None = None,
 ) -> tuple[
     AnalyseConversationMessageUseCase,
     FakeTurnRepository,
@@ -332,6 +333,7 @@ def build(
         budget=budget,
         search=search,
         availability=availability,
+        availability_requests=availability_requests,
     )
     return use_case, turns, usage, session_repo
 
@@ -2154,3 +2156,171 @@ class TestTheLandlordsAvailabilityAnswerIsActedOn:
         staged = uow.events.staged[-1]
         assert staged.text is None
         assert staged.reply_kind == "ACK"
+
+
+class FakeAvailabilityRequests:
+    """Starts the landlord's question, and remembers what it was asked about."""
+
+    def __init__(self, *, accepted: bool = True) -> None:
+        self._accepted = accepted
+        self.calls: list[tuple[uuid.UUID, uuid.UUID | None]] = []
+
+    async def request(
+        self, *, property_id: uuid.UUID, tenant_id: uuid.UUID | None, now: datetime
+    ) -> bool:
+        self.calls.append((property_id, tenant_id))
+        return self._accepted
+
+
+class TestTheTenantsChoiceReachesTheLandlord:
+    """Where the funnel used to end.
+
+    The list was printed, the number was asked for, the answer was understood —
+    and nothing consumed it. The tenant reached the last step of the product
+    and the conversation stopped.
+    """
+
+    def waiting_for_a_choice(
+        self, session: ConversationSession, *, shown: list[str]
+    ) -> None:
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH,
+            now=NOW,
+            first_step=FlowStep.COLLECT_PROPERTY_CHOICE,
+        )
+        session.context["_shown_listings"] = shown
+        session.context["next_question"] = "ask.search_choice"
+
+    async def test_the_number_becomes_a_question_to_the_right_landlord(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        first, second = str(uuid.uuid4()), str(uuid.uuid4())
+        self.waiting_for_a_choice(session, shown=[first, second])
+        requests = FakeAvailabilityRequests()
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="2", availability_requests=requests
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert requests.calls == [(uuid.UUID(second), session.user_id)]
+
+    async def test_the_tenant_is_told_the_landlord_is_being_asked(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Not "réservé", and no promise of a visit: only what is happening."""
+        self.waiting_for_a_choice(session, shown=[str(uuid.uuid4())])
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="1",
+            availability_requests=FakeAvailabilityRequests(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        text = uow.events.staged[-1].text or ""
+        assert "demande au bailleur" in text
+        assert "réserv" not in text
+        assert session.step is FlowStep.AWAITING_AVAILABILITY
+
+    async def test_a_number_naming_nothing_is_asked_again(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Past the end of the list. Resolving it to the nearest listing would
+        charge him for a lodging he never saw."""
+        self.waiting_for_a_choice(session, shown=[str(uuid.uuid4())])
+        requests = FakeAvailabilityRequests()
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="4", availability_requests=requests
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert requests.calls == []
+        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
+
+    async def test_a_choice_against_a_list_he_never_saw_is_asked_again(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        self.waiting_for_a_choice(session, shown=[])
+        requests = FakeAvailabilityRequests()
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="1", availability_requests=requests
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert requests.calls == []
+        assert "ne correspond à aucun logement" in (uow.events.staged[-1].text or "")
+
+    async def test_a_listing_gone_since_the_search_is_asked_again(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Deleted between the results and the choice: he is told his number
+        names nothing, which is true, rather than shown a failure."""
+        self.waiting_for_a_choice(session, shown=[str(uuid.uuid4())])
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="1",
+            availability_requests=FakeAvailabilityRequests(accepted=False),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
+        assert "ne correspond à aucun logement" in (uow.events.staged[-1].text or "")
+
+    async def test_the_shown_listings_never_reach_a_prompt(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Bookkeeping, not a fact the tenant stated: it would cost tokens and
+        read back as something he said."""
+        listing_id = str(uuid.uuid4())
+        self.waiting_for_a_choice(session, shown=[listing_id])
+        model = StubModel(result=_model_result())
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="une phrase indeterminate",
+            model=model,
+            availability_requests=FakeAvailabilityRequests(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert listing_id not in model.prompts[0].user
