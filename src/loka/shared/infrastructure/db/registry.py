@@ -6,7 +6,10 @@ what Alembic autogeneration and ``create_all`` rely on.
 
 from __future__ import annotations
 
-from loka.bounded_contexts.ai.infrastructure.persistence.models import AiUsageLedgerRow
+from loka.bounded_contexts.ai.infrastructure.persistence.models import (
+    AiUsageLedgerRow,
+    DecisionShadowRow,
+)
 from loka.bounded_contexts.fraud.infrastructure.persistence.models import (
     FraudSignalRow,
     MediaHashRow,
@@ -61,6 +64,7 @@ __all__ = [
     "ConversationMetricsRow",
     "ConversationSessionRow",
     "ConversationTurnRow",
+    "DecisionShadowRow",
     "FraudSignalRow",
     "IdempotencyKey",
     "InboundMessageRow",

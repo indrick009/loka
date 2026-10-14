@@ -15,6 +15,7 @@ from decimal import Decimal
 from typing import Any
 
 from loka.bounded_contexts.ai.application.ports import BudgetPolicy
+from loka.bounded_contexts.ai.application.services.decision_shadow import DecisionShadow
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
@@ -28,10 +29,12 @@ from loka.bounded_contexts.ai.infrastructure.adapters.conversation_demand import
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
 )
+from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
     SqlAlchemyConversationTurnRepository,
+    SqlAlchemyDecisionShadowLog,
 )
 from loka.bounded_contexts.landlord.infrastructure.composition import (
     LANDLORD_DIRECTORY,
@@ -125,4 +128,21 @@ def analyse_conversation_message_use_case(
         # A tenant's search is recorded, not answered in the thread: Kora
         # acknowledges and comes back once it has something worth sending.
         demands=ConversationTenantDemands(uow),
+        # The decision-model pilot: asked on every turn, stored, never shown.
+        shadow=decision_shadow(uow, settings=settings),
+    )
+
+
+def decision_shadow(uow: SqlAlchemyUnitOfWork, *, settings: Settings) -> DecisionShadow | None:
+    """The pilot, or ``None`` when it is off or has no key to call with."""
+    ai = settings.ai
+    if not ai.decision_shadow_enabled or not ai.api_key.get_secret_value():
+        return None
+    return DecisionShadow(
+        uow,
+        model=JevDecisionModel(ai),
+        log=SqlAlchemyDecisionShadowLog(uow.session),
+        usage=SqlAlchemyAiUsageLedger(uow.session),
+        provider=ai.provider,
+        timeout_seconds=ai.decision_timeout_seconds,
     )

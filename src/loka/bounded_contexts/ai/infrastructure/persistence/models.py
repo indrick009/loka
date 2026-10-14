@@ -9,8 +9,10 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import Boolean, Date, DateTime, Index, Integer, Numeric, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -46,3 +48,30 @@ class AiUsageLedgerRow(Base):
         Index("ix_ai_usage_use_case_day", "use_case", "occurred_on"),
         Index("ix_ai_usage_model_day", "model", "occurred_on"),
     )
+
+
+class DecisionShadowRow(Base):
+    """A decision model's reading of one turn, next to what the pipeline did."""
+
+    __tablename__ = "decision_shadows"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    flow_before: Mapped[str] = mapped_column(String(32), nullable=False)
+    step_before: Mapped[str] = mapped_column(String(48), nullable=False)
+    pending_question: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 8), nullable=True)
+    error: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    pipeline_intent: Mapped[str] = mapped_column(String(48), nullable=False)
+    pipeline_accepted: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    pipeline_used_llm: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    pipeline_next_step: Mapped[str | None] = mapped_column(String(48), nullable=True)
+
+    __table_args__ = (Index("ix_decision_shadows_occurred_at", "occurred_at"),)

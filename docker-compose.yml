@@ -144,6 +144,13 @@ services:
       target: migrate
     command: ["alembic", "upgrade", "head"]
     restart: "no"
+    # Migrations mounted like the source: baked into the image, a new revision
+    # was invisible until a rebuild, and the stale image then refused to start
+    # against a database already upgraded ("Can't locate revision"), taking the
+    # api and the worker down with it.
+    volumes:
+      - ./src:/app/src
+      - ./alembic:/app/alembic
 
   api:
     <<: *app

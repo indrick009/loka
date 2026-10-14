@@ -18,10 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from loka.bounded_contexts.ai.application.ports import (
     ConversationTurn,
+    ShadowDecision,
     TurnSummary,
     UsageEntry,
 )
-from loka.bounded_contexts.ai.infrastructure.persistence.models import AiUsageLedgerRow
+from loka.bounded_contexts.ai.infrastructure.persistence.models import (
+    AiUsageLedgerRow,
+    DecisionShadowRow,
+)
 from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
     ConversationTurnRow,
 )
@@ -71,6 +75,46 @@ class SqlAlchemyConversationTurnRepository:
             )
             for row in result.all()
         ][::-1]
+
+
+class SqlAlchemyDecisionShadowLog:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def record(self, entry: ShadowDecision) -> None:
+        decisions = entry.decisions
+        self._session.add(
+            DecisionShadowRow(
+                id=uuid.uuid4(),
+                message_id=entry.message_id,
+                session_id=entry.session_id,
+                occurred_at=ensure_utc(entry.occurred_at),
+                flow_before=entry.flow_before,
+                step_before=entry.step_before,
+                pending_question=entry.pending_question,
+                model=decisions.model if decisions else None,
+                answers=(
+                    {
+                        name: {
+                            "choice": answer.choice,
+                            "confidence": answer.confidence,
+                            "probabilities": dict(answer.probabilities),
+                        }
+                        for name, answer in decisions.answers.items()
+                    }
+                    if decisions
+                    else None
+                ),
+                latency_ms=decisions.latency_ms if decisions else None,
+                cost_usd=decisions.cost_usd if decisions else None,
+                error=entry.error,
+                pipeline_intent=entry.pipeline_intent,
+                pipeline_accepted=entry.pipeline_accepted,
+                pipeline_used_llm=entry.pipeline_used_llm,
+                pipeline_next_step=entry.pipeline_next_step,
+            )
+        )
+        await self._session.flush()
 
 
 class SqlAlchemyAiUsageLedger:

@@ -269,6 +269,74 @@ class AiUsageLedger(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class ChoiceQuestion:
+    """One decision put to a decision model: pick one of these options."""
+
+    instructions: str
+    options: Mapping[str, str]
+
+
+@dataclass(frozen=True, slots=True)
+class ChoiceAnswer:
+    choice: str
+    confidence: float
+    probabilities: Mapping[str, float]
+
+
+@dataclass(frozen=True, slots=True)
+class Decisions:
+    """What a decision model answered, and what the call cost."""
+
+    answers: Mapping[str, ChoiceAnswer]
+    model: str
+    input_tokens: int
+    latency_ms: int
+    cost_usd: Decimal
+
+
+class DecisionModel(Protocol):
+    """Takes small typed decisions over a state; writes no text.
+
+    A separate port from :class:`IntentModel` because it does a different job:
+    it picks among options Kora defines and says how sure it is, in well under
+    a second. Raises ``ExternalServiceUnavailable`` when it cannot answer.
+    """
+
+    @property
+    def model(self) -> str: ...
+
+    async def decide(
+        self, *, state: Mapping[str, Any], questions: Mapping[str, ChoiceQuestion]
+    ) -> Decisions: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ShadowDecision:
+    """A decision model's reading of a turn, next to what the pipeline did.
+
+    ``decisions`` is ``None`` and ``error`` says why when the model failed: a
+    pilot that only kept its successes would overstate how dependable it is.
+    """
+
+    message_id: uuid.UUID
+    session_id: uuid.UUID
+    flow_before: str
+    step_before: str
+    pending_question: str | None
+    decisions: Decisions | None
+    error: str | None
+    pipeline_intent: str
+    pipeline_accepted: bool
+    pipeline_used_llm: bool
+    pipeline_next_step: str | None
+    occurred_at: datetime
+
+
+class DecisionShadowLog(Protocol):
+    async def record(self, entry: ShadowDecision) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
 class BudgetDecision:
     allowed: bool
     reason: str | None = None

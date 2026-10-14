@@ -84,6 +84,11 @@ class AISettings(BaseModel):
     per_user_daily_budget_usd: float = 0.25
     pipeline_enabled: bool = False
     model_pricing_usd_per_million: dict[str, ModelPricing] = Field(default_factory=dict)
+    # The decision-model pilot: asked on every turn, in shadow, never shown to
+    # the user. Off by default; its cost comes back with each answer.
+    decision_shadow_enabled: bool = False
+    decision_model: str = "~typesafe/jev-latest"
+    decision_timeout_seconds: float = 5.0
 
     def pricing_for(self, model: str) -> ModelPricing | None:
         return self.model_pricing_usd_per_million.get(model)

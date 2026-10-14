@@ -54,6 +54,7 @@ from loka.bounded_contexts.ai.application.services.conversation_copy import (
     search_query,
     search_unavailable_text,
 )
+from loka.bounded_contexts.ai.application.services.decision_shadow import DecisionShadow
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     ADDS_NEIGHBOURHOODS,
     DeterministicClassifier,
@@ -95,6 +96,7 @@ from loka.bounded_contexts.messaging.domain.repositories.conversation_session_re
 )
 from loka.bounded_contexts.messaging.domain.repositories.inbound_message_repository import (
     InboundMessageRepository,
+    StoredInboundMessage,
 )
 from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
     MessageKind,
@@ -375,6 +377,7 @@ class AnalyseConversationMessageUseCase:
         availability_requests: AvailabilityRequests | None = None,
         demands: TenantDemands | None = None,
         search: PropertySearchGateway | None = None,
+        shadow: DecisionShadow | None = None,
     ) -> None:
         self._uow = uow
         self._inbound = inbound
@@ -392,6 +395,7 @@ class AnalyseConversationMessageUseCase:
         self._availability_requests = availability_requests
         self._demands = demands
         self._search = search
+        self._shadow = shadow
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
         moment = ensure_utc(now)
@@ -419,6 +423,42 @@ class AnalyseConversationMessageUseCase:
         # nothing and the model call never holds a database connection.
         await self._uow.commit()
 
+        # Asked before the turn and read after it: the decision model works
+        # while the pipeline does, and the user waits for neither. A pin or a
+        # photo carries no sentence to decide on.
+        shadow = (
+            self._shadow.start(session, message_id=command.message_id, text=message.text or "")
+            if self._shadow is not None
+            and message.location is None
+            and message.media_object_key is None
+            else None
+        )
+        try:
+            report = await self._analyse(command, message, session, history, moment)
+        except BaseException:
+            if shadow is not None:
+                DecisionShadow.cancel(shadow)
+            raise
+        if shadow is not None and self._shadow is not None:
+            await self._shadow.finish(
+                shadow,
+                intent=report.intent,
+                accepted=report.accepted,
+                used_llm=report.used_llm,
+                next_step=report.next_step,
+                now=moment,
+            )
+        return report
+
+    async def _analyse(
+        self,
+        command: AnalysisCommand,
+        message: StoredInboundMessage,
+        session: ConversationSession,
+        history: list[TurnSummary],
+        moment: datetime,
+    ) -> AnalysisReport:
+        """Read one loaded message and answer it."""
         text = message.text or ""
         pending = session.context.get("next_question")
         pending_key = pending if isinstance(pending, str) else None
