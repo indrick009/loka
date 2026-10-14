@@ -74,6 +74,13 @@ QUESTION_TEXT: dict[str, str] = {
         "Précisez par exemple l'avance (nombre de mois à payer d'avance), "
         "les frais d'agence, et le type de locataire souhaité."
     ),
+    # The one question that unsticks a conversation that never opened. Two
+    # words are offered because the answer is read without a model call, and
+    # because a user already misread once must not be misread twice.
+    "ask.publish_or_search": (
+        "Vous voulez publier un logement, ou en chercher un ?\n"
+        "Répondez : publier, ou chercher."
+    ),
     "ask.confirm_property": (
         "Voici ce que je retiens. Confirmez-vous pour publier l'annonce ?\n"
         "Répondez oui pour publier, ou indiquez ce qu'il faut corriger."
@@ -170,6 +177,10 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "What are the move-in conditions?\n"
         "State for example the advance (number of months to pay upfront), the "
         "agency fees, and the type of tenant you want."
+    ),
+    "ask.publish_or_search": (
+        "Would you like to list a property, or to look for one?\n"
+        "Answer: list, or search."
     ),
     "ask.confirm_property": (
         "Here is what I understood. Do you confirm publishing the listing?\n"

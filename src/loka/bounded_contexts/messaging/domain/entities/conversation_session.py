@@ -56,9 +56,17 @@ class FlowStep(StrEnum):
     COLLECT_MINIMUM_DURATION = "COLLECT_MINIMUM_DURATION"
     COLLECT_AVAILABILITY = "COLLECT_AVAILABILITY"
     COLLECT_CONDITIONS = "COLLECT_CONDITIONS"
+    # Reached when the user plainly said something about a lodging but not
+    # whether he is offering one or looking for one. Kora asks rather than
+    # guesses: reading a landlord as a tenant puts him through the wrong form.
+    CLARIFY_ROLE = "CLARIFY_ROLE"
     COLLECT_SEARCH_CRITERIA = "COLLECT_SEARCH_CRITERIA"
     PRESENT_RESULTS = "PRESENT_RESULTS"
     COLLECT_PROPERTY_CHOICE = "COLLECT_PROPERTY_CHOICE"
+    # His criteria are complete and his demand is recorded. Kora answers in a
+    # later message, once it has something worth sending: a direct match, a
+    # neighbouring area, or a price a little above.
+    AWAITING_MATCH = "AWAITING_MATCH"
     AWAITING_AVAILABILITY = "AWAITING_AVAILABILITY"
     COLLECT_ACQUISITION_SOURCE = "COLLECT_ACQUISITION_SOURCE"
     COLLECT_REPORT_REASON = "COLLECT_REPORT_REASON"

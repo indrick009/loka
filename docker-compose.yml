@@ -96,7 +96,12 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      # ``ping`` only proves the Erlang node answers, and it goes green about
+      # twenty seconds before the AMQP listener binds to 5672 — observed live:
+      # the healthcheck passed at 03:41:30 and "started TCP listener" was
+      # logged at 03:41:51, so the worker crash-looped three times on a
+      # connection refused. ``check_port_connectivity`` waits for the port.
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
       timeout: 5s
       retries: 20

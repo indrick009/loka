@@ -9,6 +9,7 @@ from loka.bounded_contexts.property.domain.entities.availability_check import (
     AvailabilityCheck,
 )
 from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
 
 
 class PropertyRepository(Protocol):
@@ -63,3 +64,25 @@ class AvailabilityCheckRepository(Protocol):
     async def add(self, check: AvailabilityCheck) -> None: ...
 
     async def save(self, check: AvailabilityCheck) -> None: ...
+
+
+class TenantDemandRepository(Protocol):
+    """A tenant's open request, and the ones still owed an answer.
+
+    ``get_open_for_tenant`` is what makes a refined search the same request
+    rather than a new one: he changes the neighbourhood as he talks, and the
+    demand keeps its identity and the time it has been waiting.
+
+    ``open_demands`` is how whoever prepares the answers finds the work. Oldest
+    first, because the person who has waited longest is the one to serve.
+    """
+
+    async def get(self, demand_id: Any) -> TenantDemand | None: ...
+
+    async def get_open_for_tenant(self, tenant_id: Any) -> TenantDemand | None: ...
+
+    async def open_demands(self, *, limit: int) -> list[TenantDemand]: ...
+
+    async def add(self, demand: TenantDemand) -> None: ...
+
+    async def save(self, demand: TenantDemand) -> None: ...

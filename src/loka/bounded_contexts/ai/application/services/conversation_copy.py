@@ -135,18 +135,44 @@ _SEARCH_UNAVAILABLE_TEXT: dict[str, str] = {
     ),
 }
 
+# Deliberately names no single criterion. It used to blame the budget, and the
+# budget is rarely the reason: the city may have nothing of that type, or — as
+# on a fresh catalogue — nothing has been published at all. A tenant told his
+# budget is the problem lowers it and still finds nothing.
 _NO_RESULTS_TEXT: dict[str, str] = {
     "fr": (
-        "Je n'ai pas encore de logement qui corresponde à votre budget. "
-        "Pour trouver plus vite, vous pouvez élargir la recherche : changez le "
-        "quartier, la ville ou le budget, et je relance tout de suite."
+        "Je n'ai pas encore de logement qui corresponde à votre recherche. "
+        "Pour trouver plus vite, vous pouvez l'élargir : changez le quartier, "
+        "la ville, le type de logement ou le budget, et je relance tout de suite."
     ),
     "en": (
-        "I don't have a property matching your budget yet. To find one faster, "
-        "you can widen the search: change the neighbourhood, the city or the "
-        "budget, and I'll run it again right away."
+        "I don't have a property matching your search yet. To find one faster, "
+        "you can widen it: change the neighbourhood, the city, the property "
+        "type or the budget, and I'll run it again right away."
     ),
 }
+
+# What a tenant reads the moment his criteria are complete, whether a lodging
+# matches or not. Platform text, never the model's: it is a promise, and no
+# word of a promise may drift.
+#
+# The conditional is what makes it bind to nothing. No delay is given on
+# purpose — "dès que possible" is still a commitment, and a tenant who has
+# heard nothing after three days would be right to feel misled; the condition
+# already explains a silence. First person, like the rest of the thread. And
+# "qui correspond à ce que vous cherchez" rather than "adapté", because
+# whether a lodging suits him is his judgement, not Kora's.
+_DEMAND_RECORDED_TEXT: dict[str, str] = {
+    "fr": (
+        "Votre demande est enregistrée. Si un logement correspond à ce que "
+        "vous cherchez, je reviens vers vous avec les informations."
+    ),
+    "en": (
+        "Your request is recorded. If a property matches what you are looking "
+        "for, I will come back to you with the details."
+    ),
+}
+
 
 _SEARCH_OUTRO: dict[str, str] = {
     "fr": "Répondez avec le numéro du logement qui vous intéresse.",
@@ -366,3 +392,13 @@ def availability_pending_text(language: str) -> str:
 def choice_out_of_range_text(language: str) -> str:
     """His number names nothing. Re-asked rather than resolved to the nearest."""
     return _copy(_CHOICE_OUT_OF_RANGE_TEXT, language)
+
+
+def demand_recorded_text(language: str) -> str:
+    """Acknowledge a tenant's search, promising nothing.
+
+    Sent on every completed search, match or no match. Kora takes the time to
+    prepare an answer — a direct match, a neighbouring area, a price a little
+    above — and this is what stands in the thread meanwhile.
+    """
+    return _copy(_DEMAND_RECORDED_TEXT, language)

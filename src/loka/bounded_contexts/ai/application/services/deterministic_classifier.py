@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import IntentResult
@@ -248,6 +249,70 @@ _BILLABLE_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
 # under either is two months — not two francs, and not a number too small to be
 # a rent. Separate from the duration binder because zero is a real answer here:
 # "aucune caution" is ordinary, while a lease of zero months is nonsense.
+# Which side of the market the user is on, answered in his own words. Kept
+# generous: this is the question that unsticks a conversation, and a user who
+# has already been misread once must not be misread again.
+_PUBLISH_ANSWER = re.compile(
+    r"\b(publier|publie|poster|mettre\s+en\s+(?:ligne|location)|louer\s+mon|"
+    r"j\s*'?\s*ai\s+un\s+(?:logement|studio|appartement|appart|chambre|maison)|"
+    r"je\s+suis\s+(?:le\s+)?(?:bailleur|propri[ée]taire)|bailleur|propri[ée]taire|"
+    r"proposer|offrir|list|publish|landlord|owner)\b",
+    re.I,
+)
+_SEARCH_ANSWER = re.compile(
+    r"\b(chercher|cherche|recherche|trouver|je\s+veux\s+louer|louer\s+un|"
+    r"je\s+suis\s+(?:le\s+)?locataire|locataire|visiter|"
+    r"search|look|find|tenant|rent\s+a)\b",
+    re.I,
+)
+
+# "Non" said to a form question, in the shapes a landlord actually types. The
+# bare NEGATIVE words are reused so a refusal and a zero stay one vocabulary.
+_DENIALS = NEGATIVE | frozenset(
+    {
+        "aucun",
+        "aucune",
+        "rien",
+        "nope",
+        "pas du tout",
+        "pas de caution",
+        "pas de garantie",
+        "pas d avance",
+        "pas de gardien",
+        "pas de parking",
+        "il n y a pas",
+        "non rien",
+    }
+)
+
+# "Combien de logements identiques ?" answered without a digit.
+_ONE_ONLY = frozenset(
+    {
+        "un",
+        "une",
+        "un seul",
+        "une seule",
+        "juste un",
+        "juste une",
+        "un seulement",
+        "un seul logement",
+        "one",
+        "just one",
+        "only one",
+    }
+)
+
+# What a denial means for each question, where it means exactly one thing.
+_NO_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
+    "ask.deposit": ("COLLECT_DEPOSIT", {"deposit_months": 0}),
+    "ask.advance": ("COLLECT_ADVANCE", {"advance_months": 0}),
+    "ask.security": (
+        "COLLECT_SECURITY",
+        {"amenities": {"security": False, "parking": False}},
+    ),
+    "ask.quantity": ("COLLECT_QUANTITY", {"quantity": 1}),
+}
+
 _MONTH_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
     "ask.deposit": ("COLLECT_DEPOSIT", "deposit_months"),
     "ask.advance": ("COLLECT_ADVANCE", "advance_months"),
@@ -381,6 +446,9 @@ class DeterministicClassifier:
         standing = self._standing_reply(normalized, pending)
         if standing is not None:
             return standing
+        denial = self._no_to_a_form_question(normalized, pending)
+        if denial is not None:
+            return denial
         if "standing" in entities:
             return DeterministicMatch(
                 intent="COLLECT_STANDING", confidence=0.9, entities=entities
@@ -396,6 +464,10 @@ class DeterministicClassifier:
             )
 
         if normalized in AFFIRMATIVE:
+            if pending in _NO_MEANS:
+                # Same reason as in the fast lane: a bare "oui" to a question
+                # that wants a number or names two things says neither.
+                return None
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
             return DeterministicMatch(intent="NEGATIVE", confidence=0.98)
@@ -425,10 +497,21 @@ class DeterministicClassifier:
         standing = self._standing_reply(normalized, pending)
         if standing is not None:
             return standing
+        denial = self._no_to_a_form_question(normalized, pending)
+        if denial is not None:
+            return denial
         answer = self.pending_answer(normalized, pending)
         if answer is not None:
             return answer
         if normalized in AFFIRMATIVE:
+            if pending in _NO_MEANS:
+                # "Oui" to "y a-t-il une caution ?" or to "gardien ? parking ?"
+                # says there is one without saying how many months or which of
+                # the two. Returned as a bare dialogue act it carries no value,
+                # produces no step, and the landlord gets the same question
+                # back — so it goes to the model, which reads it alongside the
+                # question and can ask for the missing half.
+                return None
             return DeterministicMatch(intent="AFFIRMATIVE", confidence=0.98)
         if normalized in NEGATIVE:
             return DeterministicMatch(intent="NEGATIVE", confidence=0.98)
@@ -444,6 +527,33 @@ class DeterministicClassifier:
         if pending is None and normalized in GREETINGS:
             return DeterministicMatch(intent="SUPPORT", confidence=0.9)
         return None
+
+    @staticmethod
+    def _no_to_a_form_question(
+        normalized: str, pending: str | None
+    ) -> DeterministicMatch | None:
+        """Read "non" as the value of the open question, not as a refusal.
+
+        Observed live: a landlord answered the caution question with "non", the
+        model read it as the dialogue act NEGATIVE, that is not a listing
+        intent, so the turn produced no step and the same question came back.
+        A landlord with no caution could never finish the form.
+
+        Bound here rather than left to the model because the meaning is not a
+        matter of interpretation: no caution is zero months, no guard and no
+        parking is both absent, and "not several lodgings" is one. Only the
+        unambiguous side is bound — a bare "oui" to "gardien ? parking ?" does
+        not say which of the two, so that still goes to the model.
+        """
+        meaning = _NO_MEANS.get(pending or "")
+        if meaning is None:
+            return None
+        if normalized not in _DENIALS and not (
+            pending == "ask.quantity" and normalized in _ONE_ONLY
+        ):
+            return None
+        intent, entities = meaning
+        return DeterministicMatch(intent=intent, confidence=0.95, entities=dict(entities))
 
     @staticmethod
     def _standing_reply(
@@ -480,6 +590,22 @@ class DeterministicClassifier:
         """
         if not pending or not normalized:
             return None
+
+        if pending == "ask.publish_or_search":
+            # Read before the word cap, and before anything else: this is the
+            # one question that gets a user out of a conversation that never
+            # opened, and "je veux publier mon studio" is longer than a short
+            # answer while being as unambiguous as they come.
+            if _PUBLISH_ANSWER.search(normalized):
+                return DeterministicMatch(
+                    intent="CREATE_PROPERTY", confidence=0.95, entities={}
+                )
+            if _SEARCH_ANSWER.search(normalized):
+                return DeterministicMatch(
+                    intent="PROPERTY_SEARCH", confidence=0.95, entities={}
+                )
+            return None
+
         if len(normalized.split()) > _MAX_ANSWER_WORDS:
             return None
 

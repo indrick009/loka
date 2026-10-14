@@ -195,6 +195,7 @@ QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_MINIMUM_DURATION: "ask.minimum_duration",
     FlowStep.COLLECT_AVAILABILITY: "ask.availability",
     FlowStep.COLLECT_CONDITIONS: "ask.conditions",
+    FlowStep.CLARIFY_ROLE: "ask.publish_or_search",
     FlowStep.CONFIRM_PROPERTY: "ask.confirm_property",
     # Reached once the listing is saved but the quality gate still wants photos.
     # With no key here the landlord was told "c'est bien noté" and never asked
@@ -381,6 +382,30 @@ class FactExtractor:
         if intent not in LISTING_INTENTS:
             return None
         if intent not in FLOW_BY_OPENING_INTENT and flow not in LISTING_FLOWS:
+            # Only CREATE_PROPERTY and PROPERTY_SEARCH open a flow, and this
+            # guard exists so an amount dropped into a support conversation
+            # cannot drag the user into a form. But discarding the turn
+            # outright was a dead end with no way out: a model that labelled
+            # "je veux un studio" COLLECT_PROPERTY_TYPE — a perfectly fair
+            # reading — had its verdict thrown away, and every later message
+            # was thrown away too, because escaping required one of exactly
+            # two intents the model never produced again. Observed live: seven
+            # consecutive turns answered "c'est bien noté" while the model
+            # understood each one.
+            #
+            # A turn that states something only a lodging conversation
+            # produces is therefore answered with the one question that
+            # resolves it. Kora does not guess the side: "je veux un studio"
+            # is a landlord or a tenant, and reading it wrong puts someone
+            # through the opposite form.
+            if _states_a_lodging(facts) and not _already_asked_the_role(known):
+                return FlowStep.CLARIFY_ROLE
+            # The question is already open and this turn still did not answer
+            # it. Asking a third time is the repetition defect; so the turn is
+            # acknowledged and the question re-arms on his next sentence about
+            # a lodging. Every realistic answer — "publier", "je cherche",
+            # "je suis bailleur" — is read without a model call, so reaching
+            # here means the user answered something else entirely.
             return None
         target_flow = FLOW_BY_OPENING_INTENT.get(intent, flow)
         if target_flow is FlowName.PROPERTY_SEARCH:
@@ -626,6 +651,37 @@ def _build_security(entities: dict[str, Any]) -> dict[str, object]:
         if isinstance(value, bool):
             stated[axis] = value
     return stated
+
+
+# Facts that only someone talking about a lodging produces. A rent is
+# deliberately absent: a bare amount is exactly the stray value the guard above
+# exists to ignore, and "50 000" alone says nothing about a lodging at all.
+_LODGING_FACTS = frozenset(
+    {
+        "property_type",
+        "location",
+        "location_hint",
+        "standing",
+        "quantity",
+        "charges",
+        "charging_policy",
+        "deposit_months",
+        "advance_months",
+        "security",
+        "amenities",
+        "rooms",
+        "surface",
+    }
+)
+
+
+def _already_asked_the_role(known: dict[str, Any] | None) -> bool:
+    return (known or {}).get("next_question") == "ask.publish_or_search"
+
+
+def _states_a_lodging(facts: ExtractedFacts) -> bool:
+    """Whether this turn said something only a lodging conversation says."""
+    return any(facts.has(name) for name in _LODGING_FACTS)
 
 
 def _build_choice(raw: Any) -> int:

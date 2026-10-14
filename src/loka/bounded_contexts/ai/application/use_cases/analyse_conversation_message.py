@@ -38,19 +38,18 @@ from loka.bounded_contexts.ai.application.ports import (
     PropertyListing,
     PropertySearchGateway,
     ResponseModel,
+    TenantDemands,
     TurnSummary,
     UsageEntry,
 )
 from loka.bounded_contexts.ai.application.services.conversation_copy import (
-    SEARCH_RESULT_LIMIT,
     availability_answer_text,
     availability_pending_text,
     choice_out_of_range_text,
+    demand_recorded_text,
     listing_unsaved_text,
     missing_listing_reply,
-    no_results_text,
     reply_kind,
-    results_text,
     search_query,
     search_unavailable_text,
 )
@@ -102,7 +101,7 @@ from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
-from loka.shared.domain.errors import DomainError
+from loka.shared.domain.errors import DomainError, ExternalServiceUnavailable
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import (
     ai_bypass_total,
@@ -142,7 +141,12 @@ def _target_flow(session: ConversationSession, intent: str) -> FlowName:
 
     Needed wherever the answer must be phrased *before* the session moves: the
     first search message still reads as SUPPORT in the session, but its next
-    question is a tenant's.
+    question is a tenant's. Phrasing a reply from ``session.flow`` on that turn
+    hands a tenant the landlord's form — "standing", "charges", "deposit" — and
+    the model then asks one of those instead of the question it was given.
+
+    One function for the rule, deliberately: it used to exist twice, the two
+    copies drifted, and the reply prompt ended up using neither.
     """
     opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
     if opening_flow is not None and _opens_new_flow(session, intent):
@@ -174,6 +178,31 @@ def _neighbourhood_from_label(label: str | None) -> str | None:
 _SHOWN_LISTINGS = "_shown_listings"
 
 
+def _carried_question(session: ConversationSession) -> str | None:
+    """The question still open from an earlier turn, if any.
+
+    One reader for two callers on purpose: the sentence the user receives and
+    the question the session records are decided from the same value, so they
+    cannot end up describing different questions.
+    """
+    carried = session.context.get("next_question")
+    return carried if isinstance(carried, str) else None
+
+
+def _facts_worth_carrying(context: dict[str, Any]) -> dict[str, Any]:
+    """The real facts in a context, without the platform's bookkeeping.
+
+    ``next_question`` is a question key and ``_``-prefixed keys are internal —
+    carried into a fresh flow they would make the new form believe a question
+    was asked, or offer a result list from a search that is over.
+    """
+    return {
+        name: value
+        for name, value in context.items()
+        if name != "next_question" and not str(name).startswith("_")
+    }
+
+
 def _nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
     """The listing behind a one-based line number, or ``None``.
 
@@ -190,25 +219,15 @@ def _nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
 
 
 def _known_facts(session: ConversationSession, intent: str) -> dict[str, Any]:
-    """What this turn may build on: nothing from an abandoned attempt."""
-    return {} if _opens_new_flow(session, intent) else dict(session.context)
+    """What this turn may build on: nothing from an abandoned attempt.
 
-
-def _prompt_flow(session: ConversationSession, hint_intent: str | None) -> FlowName:
-    """The flow whose form the next question must be phrased against.
-
-    On the message that *opens* a flow the session is still on SUPPORT, so
-    phrasing the reply from ``session.flow`` hands a tenant the landlord's form
-    ("standing", "charges", "deposit") and the model asks the wrong questions.
-    The cheap rule set reads the opening intent, and its flow is the one the
-    reply has to speak for.
+    One exception, and it is not an abandoned attempt at all: a user answering
+    "publier ou chercher ?" is finishing the sentence he started. Dropping what
+    he said a moment earlier would ask him for the studio he has just named.
     """
-    if hint_intent is None:
-        return session.flow
-    opening_flow = FLOW_BY_OPENING_INTENT.get(hint_intent)
-    if opening_flow is not None and _opens_new_flow(session, hint_intent):
-        return opening_flow
-    return session.flow
+    if session.step is FlowStep.CLARIFY_ROLE:
+        return dict(session.context)
+    return {} if _opens_new_flow(session, intent) else dict(session.context)
 
 
 
@@ -268,6 +287,7 @@ class AnalyseConversationMessageUseCase:
         listing: PropertyListing | None = None,
         availability: AvailabilityAnswers | None = None,
         availability_requests: AvailabilityRequests | None = None,
+        demands: TenantDemands | None = None,
         search: PropertySearchGateway | None = None,
     ) -> None:
         self._uow = uow
@@ -284,6 +304,7 @@ class AnalyseConversationMessageUseCase:
         self._listing = listing
         self._availability = availability
         self._availability_requests = availability_requests
+        self._demands = demands
         self._search = search
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
@@ -388,12 +409,46 @@ class AnalyseConversationMessageUseCase:
             text=message.text,
             default_language=session.language,
             history=history,
-            flow=_prompt_flow(session, hint.intent if hint is not None else None),
+            flow=(
+                _target_flow(session, hint.intent)
+                if hint is not None
+                else session.flow
+            ),
             step=session.step,
             pending_question=pending_key,
             known_facts=dict(session.context),
         )
-        result = await self._model.understand_intent(prompt)
+        try:
+            result = await self._model.understand_intent(prompt)
+        except ExternalServiceUnavailable as exc:
+            # The provider is down, timing out, or answering with something
+            # unusable. Letting this escape meant the broker retried the
+            # message a few times and then parked it in the DLQ, and the user's
+            # message was never answered at all — the exact silence this
+            # pipeline exists to prevent.
+            #
+            # Observed live: the primary model failed on transport, the
+            # fallback returned an empty completion, then invalid JSON, and the
+            # turn was retried twice on its way to being dropped.
+            #
+            # The rule set and the templates are already the answer when no key
+            # is configured or the budget is spent; a provider outage is the
+            # same situation. A worse reply beats no reply, and the turn is
+            # recorded so the outage stays measurable.
+            _logger.warning(
+                "analysis_degraded_to_rules",
+                session_id=str(session.id),
+                message_id=str(command.message_id),
+                error=exc.message,
+            )
+            ai_bypass_total.labels(stage="provider_down").inc()
+            return await self._without_a_model(
+                session,
+                message_id=command.message_id,
+                text=text,
+                pending=pending_key,
+                now=moment,
+            )
         # The model read the message, so it is the one that knows which language
         # the user is writing in. Adopting its answer keeps a bare "150000" in
         # tomorrow's fallback in the right language instead of snapping to French.
@@ -718,11 +773,27 @@ class AnalyseConversationMessageUseCase:
         if self._response_model is None or not text.strip():
             return None, None
 
-        next_key = (
-            question_key_for(verdict.next_step, _target_flow(session, verdict.intent))
-            if verdict.accepted
-            else None
-        )
+        next_key: str | None = None
+        if verdict.accepted:
+            decided = question_key_for(
+                verdict.next_step, _target_flow(session, verdict.intent)
+            )
+            # A turn that advanced nothing leaves the previous question open,
+            # and the writer has to be told *that* one. Handed no question at
+            # all it invents one, and then the sentence and the session
+            # disagree about what was asked.
+            #
+            # Observed live: a landlord answered "aucun" to the caution, the
+            # extractor recorded no value, so no step was decided and the
+            # writer was given nothing to ask. It wrote "D'accord, pas de
+            # caution. Combien de mois d'avance ?" — so he was asked the
+            # advance while the session still waited for the caution, and his
+            # "6" would have been filed as six months of caution. Silently.
+            #
+            # The same ``or pending`` rule as ``_advance_session``, through one
+            # helper, so the question asked and the question recorded cannot
+            # drift apart again.
+            next_key = decided or _carried_question(session)
         prompt = build_reply_prompt(
             text=text,
             language=session.language,
@@ -731,7 +802,15 @@ class AnalyseConversationMessageUseCase:
             accepted_facts=verdict.facts.as_context(),
             next_key=next_key,
             history=history,
-            flow=session.flow,
+            # The same flow ``next_key`` was computed from, and not
+            # ``session.flow``: on the message that *opens* a flow the session
+            # still reads SUPPORT, so the writer was handed the wrong role and
+            # the wrong form. Observed live: a tenant said he was looking for a
+            # studio, the backend decided "where are you looking?", and the
+            # writer asked "moderne ou non ?" — a landlord field. He answered
+            # it, the answer was filed as a bare "oui" against a question
+            # nobody had asked him, and his "moderne" was lost.
+            flow=_target_flow(session, verdict.intent),
             known_facts=dict(session.context),
         )
         model_name = str(getattr(self._response_model, "model", "unknown"))
@@ -838,8 +917,8 @@ class AnalyseConversationMessageUseCase:
             listing_text, next_step, listing_id = await self._confirm_listing(
                 session, intent=intent, next_step=next_step, now=now
             )
-            search_text, next_step, shown = await self._present_results(
-                session, intent=intent, facts=facts, next_step=next_step
+            search_text, next_step = await self._record_demand(
+                session, intent=intent, facts=facts, next_step=next_step, now=now
             )
             choice_text, next_step = await self._choose_listing(
                 session, facts=facts, next_step=next_step, now=now
@@ -851,7 +930,6 @@ class AnalyseConversationMessageUseCase:
                 next_step,
                 now=now,
                 attach_property_id=listing_id,
-                extra_context={_SHOWN_LISTINGS: list(shown)} if shown else None,
             )
             # The catalogue's numbers are data, not prose: they win over both
             # the model's sentence and the listing summary, which cannot apply
@@ -1021,6 +1099,14 @@ class AnalyseConversationMessageUseCase:
         A number naming nothing is re-asked rather than resolved to the nearest
         listing: charging 1 000 FCFA for a lodging the tenant never saw is
         worse than one more question.
+
+        **Dormant for now, and deliberately kept.** Nothing writes
+        ``_shown_listings`` any more: the thread no longer prints a result list,
+        it records the demand and acknowledges it. The list will be printed by
+        the message Kora sends back once it has prepared an answer, and that
+        message is the thing still to build — it is what will fill
+        ``_shown_listings`` and bring this step back to life. ``self._search``
+        is injected and unused for the same reason.
         """
         # Keyed on where the session *is*, not on where the form recompute
         # would go: ``next_step`` walks the tenant's criteria again and would
@@ -1053,50 +1139,52 @@ class AnalyseConversationMessageUseCase:
             )
         return availability_pending_text(session.language), FlowStep.AWAITING_AVAILABILITY
 
-    async def _present_results(
+    async def _record_demand(
         self,
         session: ConversationSession,
         *,
         intent: str,
         facts: ExtractedFacts,
         next_step: FlowStep | None,
-    ) -> tuple[str | None, FlowStep | None, tuple[str, ...]]:
-        """Run the tenant's search once its criteria are complete.
+        now: datetime,
+    ) -> tuple[str | None, FlowStep | None]:
+        """Take the tenant's search and promise nothing.
 
-        Only ``PRESENT_RESULTS`` reaches this, and the extractor hands that step
-        over exactly when the tenant's form is filled — the same "when" rule
-        ``_confirm_listing`` uses for a landlord's publication. The reply is
-        written here rather than by the model because it is the catalogue
-        speaking: a price or a neighbourhood a model rephrased would be a
-        listing that does not exist.
+        Kora does not answer a search in the thread. It records the demand and
+        says so — whether a lodging matches or not — because a direct match, a
+        neighbouring area or a price a little above all need preparing, and
+        §8's negotiation with a landlord cannot happen in the time a reply
+        takes.
 
-        An empty result moves back to the criteria step, not to a choice: there
-        is nothing to choose yet, so the reply offers the one move that can
-        change the outcome — widening the search — without promising a follow-up
-        the platform has no watcher to send.
+        This used to print five listings and ask for a number. That made Kora
+        answer instantly at the cost of answering badly: with nothing in the
+        catalogue it told the tenant to change his own criteria, and when he
+        asked which neighbourhoods had studios it repeated the instruction.
+
+        Only ``PRESENT_RESULTS`` reaches this, which is the step the extractor
+        hands over exactly when the tenant's form is filled.
         """
         if next_step is not FlowStep.PRESENT_RESULTS:
-            return None, next_step, ()
-        if self._search is None:
-            return search_unavailable_text(session.language), next_step, ()
+            return None, next_step
+        if self._demands is None or session.user_id is None:
+            # Nowhere to keep the demand, so nothing to come back to: a
+            # deployment that never wired the port fails as a sentence, not as
+            # a model reply promising a follow-up.
+            return search_unavailable_text(session.language), next_step
+
         query = search_query({**_known_facts(session, intent), **facts.as_context()})
         if query is None:
-            # The form reported complete but the facts describe no place to
-            # search: calling that "no match" would be a lie the tenant cannot
-            # act on, so it is reported as a failure instead.
-            return search_unavailable_text(session.language), next_step, ()
-        hits = await self._search.search_for_conversation(query, limit=SEARCH_RESULT_LIMIT)
-        if not hits:
-            return no_results_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA, ()
-        # The listing ids in the order they were printed. Without them the
-        # tenant's "2" names nothing, which is why his answer used to be read,
-        # understood and dropped.
-        shown = tuple(hit.property_id for hit in hits)
-        return (
-            results_text(hits, session.language),
-            FlowStep.COLLECT_PROPERTY_CHOICE,
-            shown,
+            # The form reported complete but the facts name no place to search.
+            # Acknowledging would promise a follow-up on a request nobody can
+            # act on, so he is asked which criterion to give instead.
+            return search_unavailable_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA
+
+        recorded = await self._demands.record(
+            tenant_id=session.user_id, query=query, now=now
         )
+        if not recorded:
+            return search_unavailable_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA
+        return demand_recorded_text(session.language), FlowStep.AWAITING_MATCH
 
     async def _advance_session(
         self,
@@ -1121,8 +1209,16 @@ class AnalyseConversationMessageUseCase:
         observed = session.revision
         # Read before ``start_flow`` can clear the context: a question left open
         # by an attempt the user has walked away from must not be asked again.
-        carried = session.context.get("next_question")
-        pending = carried if isinstance(carried, str) else None
+        pending = _carried_question(session)
+
+        # Read before the flow opens, because opening it clears the context:
+        # the facts stated in the same breath as "publier ou chercher ?"
+        # belong to the flow about to start.
+        carried = (
+            _facts_worth_carrying(session.context)
+            if session.step is FlowStep.CLARIFY_ROLE
+            else {}
+        )
 
         opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
         if opening_flow is not None and _opens_new_flow(session, intent):
@@ -1136,7 +1232,9 @@ class AnalyseConversationMessageUseCase:
         # every save look like a conflict.
         if next_step is not None:
             session.transition(next_step, now=now, expected_revision=session.revision)
-        session.merge_context({**facts.as_context(), **(extra_context or {})}, now=now)
+        session.merge_context(
+            {**carried, **facts.as_context(), **(extra_context or {})}, now=now
+        )
         # Attaching after the baseline is captured keeps the save's
         # expected_revision equal to the value read from the row.
         if attach_property_id is not None:

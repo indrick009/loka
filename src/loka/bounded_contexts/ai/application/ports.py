@@ -94,6 +94,20 @@ class PropertyListing(Protocol):
         ...
 
 
+class TenantDemands(Protocol):
+    """Records what a tenant is looking for, so Kora can come back to him.
+
+    Narrow like the other write ports: the pipeline depends on the *act* of
+    recording a demand, not on the catalogue's use cases. Kora answers no
+    search in the thread, so without this the acknowledgement it sends would
+    promise a follow-up to a request nothing kept.
+    """
+
+    async def record(
+        self, *, tenant_id: uuid.UUID, query: ConversationSearchQuery, now: datetime
+    ) -> bool: ...
+
+
 class AvailabilityRequests(Protocol):
     """Puts the question to the landlord of a listing a tenant picked.
 

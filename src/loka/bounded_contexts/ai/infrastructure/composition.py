@@ -22,6 +22,9 @@ from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability 
     ConversationAvailabilityAnswers,
     ConversationAvailabilityRequests,
 )
+from loka.bounded_contexts.ai.infrastructure.adapters.conversation_demand import (
+    ConversationTenantDemands,
+)
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
 )
@@ -119,4 +122,7 @@ def analyse_conversation_message_use_case(
         # The tenant's half: his line number becomes a question to the owner of
         # the lodging he picked.
         availability_requests=ConversationAvailabilityRequests(uow),
+        # A tenant's search is recorded, not answered in the thread: Kora
+        # acknowledges and comes back once it has something worth sending.
+        demands=ConversationTenantDemands(uow),
     )

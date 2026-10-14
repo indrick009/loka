@@ -93,6 +93,10 @@ REPLY_SYSTEM_PROMPT = (
     "words; never substitute a different one, and never ask for something already "
     "present in known_facts. Do not answer that question on the user's behalf — "
     "only the user can say what their answer is. "
+    "Write *to* the user, never about them: say \"your property\" and \"what rent "
+    "are you asking\", never \"the landlord's property\" or \"what rent does the "
+    "owner ask\". A landlord addressed in the third person reads it as being "
+    "taken for a tenant enquiring about somebody else's lodging. "
     "Never invent a listing, a price or a fact that is not in the context, and "
     f"never promise anything the platform did not confirm. {PRICE_REFERENCE_RULE}"
 )
@@ -119,19 +123,27 @@ QUESTION_TOPICS: dict[str, str] = {
     "ask.availability": "when the property becomes available (a date, or immediately)",
     "ask.conditions": (
         "the entry conditions: the advance in months, the agency or lease fee, "
-        "and the tenant type accepted"
+        "and the type of tenant accepted"
+    ),
+    "ask.publish_or_search": (
+        "whether the user is offering a lodging or looking for one. Answer with "
+        "the intent CREATE_PROPERTY if he is offering one, PROPERTY_SEARCH if "
+        "he is looking for one, and never with a COLLECT_ intent"
     ),
     "ask.confirm_property": "confirmation of the summary before publishing",
     "confirm.published": "confirmation that the property has been published",
     # The tenant's side: a search asks its own questions, and these glosses are
-    # what the reply model reads instead of the outbound copy.
-    "ask.search_type": "the type of property the tenant is looking for",
-    "ask.search_location": "the city and neighbourhood the tenant wants",
-    "ask.search_budget": "the maximum monthly rent the tenant is willing to pay, in XAF",
-    "ask.search_criteria": "which search criterion the tenant wants to change",
-    "ask.search_results": "the list of properties matching the tenant's criteria",
+    # what the reply model reads instead of the outbound copy. Second person,
+    # like every other gloss: the model copies the framing it is given, and a
+    # user described in the third person reads it as being mistaken for
+    # somebody else.
+    "ask.search_type": "the type of property you are looking for",
+    "ask.search_location": "the city and neighbourhood you want",
+    "ask.search_budget": "the maximum monthly rent you are willing to pay, in XAF",
+    "ask.search_criteria": "which of your search criteria you want to change",
+    "ask.search_results": "the list of properties matching your criteria",
     "ask.search_choice": (
-        "which property from the list the tenant picks, as the line number "
+        "which property from the list you pick, as the line number "
         "shown next to it"
     ),
 }
@@ -150,46 +162,46 @@ PRICE_REFERENCES_XAF: dict[str, tuple[int, int]] = {
 # reading ("le loyer que vous recherchez") even in a listing, which reads as if
 # the platform had mixed the two roles up. These overlays fix the wording.
 _LANDLORD_TOPICS: dict[str, str] = {
-    "ask.property_type": "the type of property the landlord is listing",
-    "ask.standing": "whether the property the landlord is listing is modern or not",
-    "ask.location": "the city and neighbourhood where the property is",
-    "ask.rent": "the monthly rent the landlord is asking, in XAF",
-    "ask.charges": (
-        "whether the charges on the landlord's property are included in the "
-        "rent and, if not, their monthly amount"
-    ),
+    "ask.property_type": "the type of property you are listing",
+    "ask.standing": "whether the property you are listing is modern or not",
     "ask.quantity": (
-        "how many lodgings of this exact type, characteristics and price the "
-        "landlord is listing at once"
+        "how many lodgings of this exact type, characteristics and price you "
+        "are listing at once"
+    ),
+    "ask.location": "the city and neighbourhood where your property is",
+    "ask.rent": "the monthly rent you are asking for it, in XAF",
+    "ask.charges": (
+        "whether water and electricity are included in your rent and, if not, "
+        "their monthly amount — and whether the property actually has running "
+        "water and electricity"
     ),
     "ask.deposit": (
-        "the refundable caution the landlord asks, in MONTHS of rent. In this "
-        "market the caution is counted in months and is paid on top of the "
-        "advance: six months of advance plus two of caution means eight months "
-        "handed over, two of which come back when the tenant leaves. Zero is a "
-        "valid answer. If the landlord replies with an amount in francs, ask "
+        "the refundable caution you ask of your tenant, in MONTHS of rent. In "
+        "this market the caution is counted in months and is paid on top of "
+        "the advance: six months of advance plus two of caution means eight "
+        "months handed over, two of which come back when the tenant leaves. "
+        "Zero is a valid answer. If the reply is an amount in francs, ask "
         "again for the number of months."
     ),
     "ask.advance": (
-        "how many months of rent the landlord wants up front, on top of the "
-        "caution. Three to six months is the usual range here."
+        "how many months of rent you want up front, on top of the caution. "
+        "Three to six months is the usual range here."
     ),
-    "ask.security": (
-        "whether the landlord's property has a guard and whether it has "
-        "parking"
+    "ask.security": "whether your property has a guard and whether it has parking",
+    "ask.minimum_duration": "the minimum duration you want for the rental",
+    "ask.availability": (
+        "when your property becomes available (a date, or immediately)"
     ),
-    "ask.minimum_duration": "the minimum duration the landlord wants for the rental",
-    "ask.availability": "when the landlord's property becomes available (a date, or immediately)",
     "ask.conditions": (
-        "the landlord's entry conditions: the advance in months, the agency or "
-        "lease fee, and the tenant type the landlord accepts"
+        "your entry conditions: the advance in months, the agency or lease fee, "
+        "and the type of tenant you accept"
     ),
 }
 _TENANT_TOPICS: dict[str, str] = {
-    "ask.property_type": "the type of property the tenant is looking for",
-    "ask.standing": "whether the tenant wants a modern property or not",
-    "ask.location": "the city and neighbourhood the tenant wants",
-    "ask.rent": "the maximum monthly rent the tenant is willing to pay, in XAF",
+    "ask.property_type": "the type of property you are looking for",
+    "ask.standing": "whether you want a modern property or not",
+    "ask.location": "the city and neighbourhood you want",
+    "ask.rent": "the maximum monthly rent you are willing to pay, in XAF",
 }
 _FLOW_TOPICS: dict[FlowName, dict[str, str]] = {
     FlowName.PROPERTY_CREATION: _LANDLORD_TOPICS,
@@ -233,6 +245,9 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.search_location": "city and neighbourhood",
     "ask.search_budget": "price",
     "ask.search_choice": "property_choice",
+    # No entity: the answer *is* the intent, which is why the gloss names the
+    # two allowed ones. A COLLECT_ intent here would re-ask the same question.
+    "ask.publish_or_search": "the intent itself (CREATE_PROPERTY or PROPERTY_SEARCH)",
 }
 
 RESPONSE_SCHEMA: dict[str, Any] = {

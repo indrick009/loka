@@ -302,6 +302,7 @@ def build(
     search: Any | None = None,
     availability: Any | None = None,
     availability_requests: Any | None = None,
+    demands: Any | None = None,
 ) -> tuple[
     AnalyseConversationMessageUseCase,
     FakeTurnRepository,
@@ -334,6 +335,7 @@ def build(
         search=search,
         availability=availability,
         availability_requests=availability_requests,
+        demands=demands,
     )
     return use_case, turns, usage, session_repo
 
@@ -1645,43 +1647,33 @@ class StubSearch:
         return self.hits
 
 
-def _hit(**overrides: Any) -> ConversationPropertyHit:
-    fields: dict[str, Any] = {
-        "property_id": "11111111-1111-1111-1111-111111111111",
-        "property_type": "APARTMENT",
-        "city": "Yaoundé",
-        "neighbourhood": "Bastos",
-        "price_xaf": 150_000,
-        "bedrooms": 3,
-        "surface_m2": 90,
-    }
-    fields.update(overrides)
-    return ConversationPropertyHit(**fields)
+class StubDemands:
+    """The demand store behind the port: what it was asked to keep."""
+
+    def __init__(self, *, stored: bool = True) -> None:
+        self.stored = stored
+        self.recorded: list[tuple[uuid.UUID, ConversationSearchQuery]] = []
+
+    async def record(
+        self, *, tenant_id: uuid.UUID, query: ConversationSearchQuery, now: datetime
+    ) -> bool:
+        self.recorded.append((tenant_id, query))
+        return self.stored
 
 
 class TestConversationSearch:
-    """The tenant's criteria become a catalogue read, and the catalogue answers.
+    """The tenant's criteria become a recorded demand, and the thread says so.
 
-    The reply is the one turn where the platform speaks as itself: the numbers
-    come from the read model, so they are printed deterministically and the
-    model's sentence — however natural — is not allowed to replace them.
+    Kora answers no search in the thread: a direct match, a neighbouring area or
+    a price a little above all need preparing. The acknowledgement is platform
+    text — it is a promise, and the model's sentence may not replace it.
     """
 
-    async def test_complete_criteria_run_the_search_and_present_the_catalogue(
+    async def test_complete_criteria_record_the_demand_and_acknowledge_it(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
-        search = StubSearch(
-            hits=[
-                _hit(),
-                _hit(
-                    property_id="22222222-2222-2222-2222-222222222222",
-                    neighbourhood="Bonapriso",
-                    price_xaf=120_000,
-                    bedrooms=2,
-                    surface_m2=60,
-                ),
-            ]
-        )
+        search = StubSearch()
+        demands = StubDemands()
         use_case, _, _, _ = build(
             uow,
             session,
@@ -1699,37 +1691,40 @@ class TestConversationSearch:
                 )
             ),
             search=search,
+            demands=demands,
         )
 
         report = await use_case.execute(
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert search.queries == [
-            ConversationSearchQuery(
-                city="Yaoundé",
-                neighbourhoods=("Bastos",),
-                property_types=("APARTMENT",),
-                budget_xaf=180_000,
+        assert demands.recorded == [
+            (
+                session.user_id,
+                ConversationSearchQuery(
+                    city="Yaoundé",
+                    neighbourhoods=("Bastos",),
+                    property_types=("APARTMENT",),
+                    budget_xaf=180_000,
+                ),
             )
         ]
-        assert report.next_step == "COLLECT_PROPERTY_CHOICE"
-        assert report.question_key == "ask.search_choice"
+        # Nothing is printed from the catalogue in the thread any more.
+        assert search.queries == []
+        assert report.next_step == "AWAITING_MATCH"
+        assert report.question_key is None
         assert session.flow is FlowName.PROPERTY_SEARCH
-        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
+        assert session.step is FlowStep.AWAITING_MATCH
 
         staged = uow.events.staged
         assert len(staged) == 1
-        # The catalogue's text wins over the sentence the model wrote: a price
-        # rephrased by a model would be a listing that does not exist.
+        # The promise wins over the sentence the model wrote, which here even
+        # claims results that were never looked up.
         assert staged[0].text == (
-            "J'ai trouvé 2 logements :\n"
-            "1. Appartement 3 chambres 90 m2 - Bastos, Yaoundé - 150 000 FCFA/mois\n"
-            "2. Appartement 2 chambres 60 m2 - Bonapriso, Yaoundé - 120 000 FCFA/mois\n"
-            "Répondez avec le numéro du logement qui vous intéresse."
+            "Votre demande est enregistrée. Si un logement correspond à ce que "
+            "vous cherchez, je reviens vers vous avec les informations."
         )
-        assert staged[0].reply_kind == "QUESTION"
-        assert staged[0].question_key == "ask.search_choice"
+        assert staged[0].reply_kind == "ACK"
 
     async def test_the_next_search_question_is_worded_for_a_tenant(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -1762,12 +1757,9 @@ class TestConversationSearch:
         assert staged[0].reply_kind == "QUESTION"
         assert staged[0].question_key == "ask.search_budget"
 
-    async def test_the_catalogue_speaks_the_language_of_the_conversation(
+    async def test_the_acknowledgement_speaks_the_language_of_the_conversation(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
-        """An English thread must not get the French catalogue: the numbers stay
-        the platform's, but the words around them follow the conversation."""
-        search = StubSearch(hits=[_hit()])
         use_case, _, _, _ = build(
             uow,
             session,
@@ -1784,7 +1776,7 @@ class TestConversationSearch:
                     },
                 )
             ),
-            search=search,
+            demands=StubDemands(),
         )
 
         await use_case.execute(
@@ -1793,12 +1785,11 @@ class TestConversationSearch:
 
         assert session.language == "en"
         assert uow.events.staged[0].text == (
-            "I found 1 property:\n"
-            "1. Apartment 3 bedrooms 90 m2 - Bastos, Yaoundé - 150 000 FCFA/month\n"
-            "Reply with the number of the property you are interested in."
+            "Your request is recorded. If a property matches what you are looking "
+            "for, I will come back to you with the details."
         )
 
-    async def test_an_empty_catalogue_answers_in_the_conversation_language(
+    async def test_a_bare_amount_is_acknowledged_in_the_remembered_language(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
         """A bare "50 000" cannot tell its own language: the session's remembered
@@ -1810,6 +1801,7 @@ class TestConversationSearch:
         session.context["property_type"] = "STUDIO"
         session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
         session.context["next_question"] = "ask.search_budget"
+        demands = StubDemands()
 
         use_case, _, _, _ = build(
             uow,
@@ -1819,14 +1811,15 @@ class TestConversationSearch:
             model=StubModel(
                 result=_model_result(intent="COLLECT_PRICE", entities={"price": 50_000})
             ),
-            search=StubSearch(hits=[]),
+            demands=demands,
         )
 
         await use_case.execute(
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert "widen the search" in uow.events.staged[0].text
+        assert demands.recorded[0][1].budget_xaf == 50_000
+        assert uow.events.staged[0].text.startswith("Your request is recorded.")
 
     async def test_the_tenant_form_is_what_the_model_is_given(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -1859,19 +1852,17 @@ class TestConversationSearch:
         ]
         assert "tenant" in payload["you_are_helping"]
 
-    async def test_an_empty_catalogue_sends_the_tenant_back_to_the_criteria(
+    async def test_a_demand_that_cannot_be_stored_promises_nothing(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
-        """There is nothing to choose, so the turn offers the one move that can
-        change the outcome: widening the search, without promising a follow-up
-        the platform cannot send."""
+        """Nothing was kept, so nobody can come back to him: the thread says the
+        search failed and goes back to the criteria instead of acknowledging."""
         session.start_flow(
             FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
         )
         session.context["property_type"] = "STUDIO"
         session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
         session.context["next_question"] = "ask.search_budget"
-        search = StubSearch(hits=[])
 
         use_case, _, _, _ = build(
             uow,
@@ -1881,25 +1872,24 @@ class TestConversationSearch:
             model=StubModel(
                 result=_model_result(intent="COLLECT_PRICE", entities={"price": 50_000})
             ),
-            search=search,
+            demands=StubDemands(stored=False),
         )
 
         report = await use_case.execute(
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert search.queries[0].budget_xaf == 50_000
         assert report.next_step == "COLLECT_SEARCH_CRITERIA"
-        assert report.question_key == "ask.search_criteria"
         assert session.step is FlowStep.COLLECT_SEARCH_CRITERIA
-        staged = uow.events.staged
-        assert "élargir la recherche" in staged[0].text
+        text = uow.events.staged[0].text
+        assert "Je n'ai pas pu lancer la recherche" in text
+        assert "enregistrée" not in text
 
     async def test_a_search_without_a_port_still_answers_the_thread(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
-        """A deployment that never wired the catalogue must fail as a sentence,
-        not as a silence the tenant waits on."""
+        """A deployment that never wired the demand store must fail as a
+        sentence, not as a silence or a promise nobody can keep."""
         use_case, _, _, _ = build(
             uow,
             session,
@@ -1924,21 +1914,22 @@ class TestConversationSearch:
         staged = uow.events.staged
         assert len(staged) == 1
         assert "recherche" in staged[0].text
+        assert "enregistrée" not in staged[0].text
         assert staged[0].question_key == "ask.search_results"
 
-    async def test_without_a_model_the_rules_still_reach_the_catalogue(
+    async def test_without_a_model_the_rules_still_record_the_demand(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
         """The deployment with no AI key must still answer a tenant: the rules
-        read the sentence, the domain validates it, the catalogue replies."""
-        search = StubSearch(hits=[_hit()])
+        read the sentence, the domain validates it, the demand is kept."""
+        demands = StubDemands()
 
         use_case, _, _, _ = build(
             uow,
             session,
             message_id,
             text="je cherche un appartement à Bastos pour 150 000 fcfa",
-            search=search,
+            demands=demands,
         )
 
         report = await use_case.execute(
@@ -1947,7 +1938,7 @@ class TestConversationSearch:
 
         assert report.accepted is True
         assert report.used_llm is False
-        assert search.queries == [
+        assert [query for _, query in demands.recorded] == [
             ConversationSearchQuery(
                 city="Yaoundé",
                 neighbourhoods=("Bastos",),
@@ -1955,8 +1946,8 @@ class TestConversationSearch:
                 budget_xaf=150_000,
             )
         ]
-        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
-        assert "J'ai trouvé 1 logement :" in uow.events.staged[0].text
+        assert session.step is FlowStep.AWAITING_MATCH
+        assert uow.events.staged[0].text.startswith("Votre demande est enregistrée.")
 
 
 class TestConversationLanguage:

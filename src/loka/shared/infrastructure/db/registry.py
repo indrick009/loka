@@ -41,6 +41,7 @@ from loka.bounded_contexts.property.infrastructure.persistence.models import (
     PropertyDataQualityIssueRow,
     PropertyMediaRow,
     PropertyRow,
+    TenantDemandRow,
 )
 from loka.bounded_contexts.reviews_complaints.infrastructure.persistence.models import (
     ProviderComplaintRow,
@@ -80,6 +81,7 @@ __all__ = [
     "RiskProfileRow",
     "ServiceAccessGrantRow",
     "ServiceFeePaymentRow",
+    "TenantDemandRow",
     "TrustProfileRow",
     "UserRow",
     "VerificationDocumentRow",

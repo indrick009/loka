@@ -23,6 +23,9 @@ from loka.bounded_contexts.property.infrastructure.persistence.property_search_r
 from loka.bounded_contexts.property.infrastructure.persistence.search_projector import (
     SqlAlchemySearchProjector,
 )
+from loka.bounded_contexts.property.infrastructure.persistence.tenant_demand_repository import (
+    SqlAlchemyTenantDemandRepository,
+)
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 
 PROPERTY_REPOSITORY = "property"
@@ -30,6 +33,7 @@ PROPERTY_QUOTA_REPOSITORY = "property_quota"
 PROPERTY_SEARCH_PROJECTOR = "property_search_projector"
 PROPERTY_SEARCH_REPOSITORY = "property_search"
 AVAILABILITY_CHECK_REPOSITORY = "availability_check"
+TENANT_DEMAND_REPOSITORY = "tenant_demand"
 
 
 def _property(uow: SqlAlchemyUnitOfWork) -> Any:
@@ -52,10 +56,15 @@ def _availability_check(uow: SqlAlchemyUnitOfWork) -> Any:
     return SqlAlchemyAvailabilityCheckRepository(uow.session)
 
 
+def _tenant_demand(uow: SqlAlchemyUnitOfWork) -> Any:
+    return SqlAlchemyTenantDemandRepository(uow.session)
+
+
 PROPERTY_REPOSITORY_FACTORIES: dict[str, Any] = {
     PROPERTY_REPOSITORY: _property,
     PROPERTY_QUOTA_REPOSITORY: _property_quota,
     PROPERTY_SEARCH_PROJECTOR: _property_search_projector,
     PROPERTY_SEARCH_REPOSITORY: _property_search,
     AVAILABILITY_CHECK_REPOSITORY: _availability_check,
+    TENANT_DEMAND_REPOSITORY: _tenant_demand,
 }

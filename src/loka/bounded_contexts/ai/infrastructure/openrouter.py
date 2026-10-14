@@ -133,7 +133,16 @@ class OpenRouterIntentModel:
                 headers=self._headers(api_key),
             )
         except httpx.HTTPError as exc:
-            log.warning("openrouter_transport_error", error=str(exc))
+            # The type, not only the message: several httpx errors stringify to
+            # "" and the log then said a call failed without saying anything
+            # about how. Observed live — a transport error with an empty error
+            # field, so there was no telling a timeout from a reset connection.
+            log.warning(
+                "openrouter_transport_error",
+                error=str(exc) or "no message",
+                error_type=type(exc).__name__,
+                model=model,
+            )
             return None
 
         latency_ms = int((time.monotonic() - started) * 1000)

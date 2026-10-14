@@ -258,3 +258,40 @@ class PropertyDataQualityIssueRow(Base):
             postgresql_where=resolved_at.is_(None),
         ),
     )
+
+
+class TenantDemandRow(Base):
+    """What a tenant asked for, kept so Kora can come back to him.
+
+    The partial unique index is the rule, not an optimisation: one open demand
+    per tenant. He refines his search as he talks, and five rows for one
+    request would mean five answers owed for one person.
+    """
+
+    __tablename__ = "tenant_demands"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    tenant_id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="OPEN")
+    property_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    neighbourhood: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    max_rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index(
+            "uq_tenant_demand_open",
+            "tenant_id",
+            unique=True,
+            postgresql_where=text("status = 'OPEN'"),
+        ),
+        # The queue of answers still owed, oldest first.
+        Index("ix_tenant_demand_open_age", "status", "received_at"),
+    )
