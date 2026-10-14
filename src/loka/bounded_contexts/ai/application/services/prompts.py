@@ -64,6 +64,11 @@ SYSTEM_PROMPT = (
     "short bare answer (a number, 'immédiat', a date) belongs to exactly that "
     "entity and to no other."
     " A bare number given as a rent is in FCFA: '50' means 50000, not 50."
+    " A tenant may accept several neighbourhoods ('Bonamoussadi ou bien "
+    "Makepe'): put every one in 'neighbourhoods', the first also in "
+    "'neighbourhood'. When he adds one to those already known ('Logbessou "
+    "aussi', 'also Logbessou'), 'neighbourhoods' lists the known ones too; when "
+    "he replaces them ('plutôt Logbessou'), only the new one."
     " Set 'intent' to exactly one value from the 'intent' enum in 'schema' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
     "applies at all."
@@ -73,8 +78,10 @@ SYSTEM_PROMPT = (
     "no signature). A message too short to tell the language (a bare number or a "
     "single word) keeps 'default_language'. Acknowledge the message briefly, then "
     "ask for the first field "
-    "in 'required_fields' that is not already in known_facts; if none is missing, "
-    "confirm the summary. If the message was not understood, ask the user to "
+    "in 'required_fields' that is neither in known_facts nor given in this very "
+    "message — never ask back for what the user just told you; if none is "
+    "missing, confirm the summary. Return the greeting the user used ('bonsoir' "
+    "gets 'bonsoir', not 'bonjour'). If the message was not understood, ask the user to "
     "rephrase instead of posing a question."
     f" {PRICE_REFERENCE_RULE}"
 )
@@ -265,6 +272,10 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "standing": {"type": "string", "enum": ["MODERN", "NON_MODERN"]},
                 "city": {"type": "string"},
                 "neighbourhood": {"type": "string"},
+                # A tenant may accept several: "Bonamoussadi ou bien Makepe".
+                # Every one he accepts, including those already known when he
+                # adds one ("Logbessou aussi"); ``neighbourhood`` is the first.
+                "neighbourhoods": {"type": "array", "items": {"type": "string"}},
                 "price": {"type": "integer"},
                 "bedrooms": {"type": "integer"},
                 "bathrooms": {"type": "integer"},

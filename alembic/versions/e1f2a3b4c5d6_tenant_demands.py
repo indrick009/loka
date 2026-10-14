@@ -38,7 +38,12 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=16), nullable=False, server_default="OPEN"),
         sa.Column("property_type", sa.String(length=24), nullable=True),
         sa.Column("city", sa.String(length=64), nullable=True),
-        sa.Column("neighbourhood", sa.String(length=96), nullable=True),
+        sa.Column(
+            "neighbourhoods",
+            postgresql.ARRAY(sa.String(length=96)),
+            nullable=False,
+            server_default="{}",
+        ),
         sa.Column("max_rent_xaf", sa.BigInteger(), nullable=True),
         sa.Column("currency", sa.String(length=3), nullable=False, server_default="XAF"),
         sa.Column("version", sa.Integer(), nullable=False, server_default="0"),

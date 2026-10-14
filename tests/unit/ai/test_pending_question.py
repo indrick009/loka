@@ -82,6 +82,17 @@ class TestTheQuestionThisTurnAsks:
 
         assert asked == "ask.standing"
 
+    def test_a_decided_step_that_asks_nothing_closes_the_open_question(self) -> None:
+        """Once the demand waits, the budget is no longer being asked: a later
+        "70 mille" must not be filed against it."""
+        asked = question_to_ask(
+            next_step=FlowStep.AWAITING_MATCH,
+            flow=FlowName.PROPERTY_SEARCH,
+            pending="ask.search_budget",
+        )
+
+        assert asked is None
+
     def test_nothing_is_asked_when_nothing_is_open(self) -> None:
         """A greeting on a fresh session has no question to repeat."""
         asked = question_to_ask(next_step=None, flow=FlowName.SUPPORT, pending=None)

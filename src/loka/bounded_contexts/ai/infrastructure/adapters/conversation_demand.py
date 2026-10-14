@@ -33,7 +33,7 @@ class ConversationTenantDemands:
                     tenant_id=tenant_id,
                     property_type=query.property_types[0] if query.property_types else None,
                     city=query.city,
-                    neighbourhood=query.neighbourhoods[0] if query.neighbourhoods else None,
+                    neighbourhoods=query.neighbourhoods,
                     max_rent_xaf=query.budget_xaf,
                 ),
                 now=now,

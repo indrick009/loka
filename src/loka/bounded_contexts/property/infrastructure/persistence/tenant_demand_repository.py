@@ -97,7 +97,7 @@ def _to_row(demand: TenantDemand) -> dict[str, Any]:
         "status": demand.status.value,
         "property_type": demand.property_type,
         "city": demand.city,
-        "neighbourhood": demand.neighbourhood,
+        "neighbourhoods": list(demand.neighbourhoods),
         "max_rent_xaf": demand.max_rent.amount if demand.max_rent else None,
         "currency": demand.max_rent.currency if demand.max_rent else "XAF",
         "received_at": demand.received_at,
@@ -112,7 +112,7 @@ def _from_row(row: TenantDemandRow) -> TenantDemand:
         tenant_id=row.tenant_id,
         property_type=row.property_type,
         city=row.city,
-        neighbourhood=row.neighbourhood,
+        neighbourhoods=tuple(row.neighbourhoods or ()),
         max_rent=(
             Money(row.max_rent_xaf, row.currency) if row.max_rent_xaf is not None else None
         ),

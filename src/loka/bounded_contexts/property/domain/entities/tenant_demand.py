@@ -42,7 +42,7 @@ class TenantDemand(AggregateRoot):
         "city",
         "demand_id",
         "max_rent",
-        "neighbourhood",
+        "neighbourhoods",
         "property_type",
         "received_at",
         "status",
@@ -57,7 +57,7 @@ class TenantDemand(AggregateRoot):
         tenant_id: uuid.UUID,
         property_type: str | None,
         city: str | None,
-        neighbourhood: str | None,
+        neighbourhoods: tuple[str, ...],
         max_rent: Money | None,
         now: datetime,
     ) -> None:
@@ -67,7 +67,7 @@ class TenantDemand(AggregateRoot):
         self.tenant_id = tenant_id
         self.property_type = property_type
         self.city = city
-        self.neighbourhood = neighbourhood
+        self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
         self.status = DemandStatus.OPEN
         self.received_at = ensure_utc(now)
@@ -89,7 +89,7 @@ class TenantDemand(AggregateRoot):
         *,
         property_type: str | None,
         city: str | None,
-        neighbourhood: str | None,
+        neighbourhoods: tuple[str, ...],
         max_rent: Money | None,
         now: datetime,
     ) -> None:
@@ -106,7 +106,7 @@ class TenantDemand(AggregateRoot):
             )
         self.property_type = property_type
         self.city = city
-        self.neighbourhood = neighbourhood
+        self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
         self.updated_at = ensure_utc(now)
         self.record(

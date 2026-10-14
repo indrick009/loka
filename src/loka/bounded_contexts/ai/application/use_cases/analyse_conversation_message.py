@@ -47,6 +47,7 @@ from loka.bounded_contexts.ai.application.services.conversation_copy import (
     availability_pending_text,
     choice_out_of_range_text,
     demand_recorded_text,
+    demand_waiting_text,
     listing_unsaved_text,
     missing_listing_reply,
     reply_kind,
@@ -54,6 +55,7 @@ from loka.bounded_contexts.ai.application.services.conversation_copy import (
     search_unavailable_text,
 )
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
+    ADDS_NEIGHBOURHOODS,
     DeterministicClassifier,
 )
 from loka.bounded_contexts.ai.application.services.prompts import (
@@ -71,10 +73,10 @@ from loka.bounded_contexts.ai.domain.services.fact_extraction import (
     LISTING_FLOWS,
     MIN_ACCEPTED_CONFIDENCE,
     PROPERTY_REQUIREMENTS,
+    SEARCH_REQUIREMENTS,
     ExtractedFacts,
     FactExtractor,
     is_supported_intent,
-    question_key_for,
     question_to_ask,
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability import (
@@ -201,6 +203,90 @@ def _facts_worth_carrying(context: dict[str, Any]) -> dict[str, Any]:
         for name, value in context.items()
         if name != "next_question" and not str(name).startswith("_")
     }
+
+
+def _with_known_neighbourhoods(
+    entities: dict[str, Any], session: ConversationSession
+) -> dict[str, Any]:
+    """Add the places already accepted when the user says this one comes on top.
+
+    Only the rules set the marker; the model is asked to list them all itself.
+    A place in another city starts over rather than being mixed with these.
+    """
+    if not entities.get(ADDS_NEIGHBOURHOODS):
+        return entities
+    merged = {name: value for name, value in entities.items() if name != ADDS_NEIGHBOURHOODS}
+    known = session.context.get("location")
+    if not isinstance(known, dict) or known.get("city") != merged.get("city"):
+        return merged
+    earlier = known.get("neighbourhoods") or [known.get("neighbourhood")]
+    added = merged.get("neighbourhoods") or [merged.get("neighbourhood")]
+    names = [str(name) for name in [*earlier, *added] if name]
+    merged["neighbourhood"] = names[0] if names else merged.get("neighbourhood")
+    merged["neighbourhoods"] = names
+    return merged
+
+
+def _is_search(flow: FlowName) -> bool:
+    """Which form a prompt shows: the tenant's search, or the landlord's.
+
+    Every other flow, SUPPORT included, is shown the landlord's fields.
+    """
+    return flow is FlowName.PROPERTY_SEARCH
+
+
+# Steps whose words the inline writer is never in a position to choose well,
+# but whose sentence the platform replaces anyway, or that the analysis prompt
+# tells it how to handle ("if none is missing, confirm the summary").
+_STEPS_THE_WRITER_MAY_REACH = frozenset({FlowStep.CONFIRM_PROPERTY, FlowStep.PRESENT_RESULTS})
+
+
+def _inline_reply_fits(
+    prompt_flow: FlowName, *, session: ConversationSession, verdict: _Verdict
+) -> bool:
+    """Whether the sentence written with the analysis asks what was decided.
+
+    The inline writer only ever sees one form and picks its next missing field;
+    the backend decides afterwards and may land elsewhere. Two ways it did:
+
+    * the other side's form. "I'm looking for a modern studio in Bastos"
+      missed the rules, the model was shown the landlord's fields, and the
+      tenant was asked how many identical lodgings his listing offers;
+    * a step outside any form. The backend asked "publier ou chercher ?" and
+      the sentence asked for the property type, so the user answered a
+      question the session was not waiting for.
+
+    Either way the sentence is dropped and written again against the decision.
+    """
+    target = _target_flow(session, verdict.intent)
+    if _is_search(prompt_flow) is not _is_search(target):
+        return False
+    step = verdict.next_step
+    if step is None or step in _STEPS_THE_WRITER_MAY_REACH:
+        return True
+    form = SEARCH_REQUIREMENTS if _is_search(target) else PROPERTY_REQUIREMENTS
+    return any(step is form_step for _, form_step in form)
+
+
+def _while_waiting(
+    session: ConversationSession, *, intent: str, next_step: FlowStep | None
+) -> str | None:
+    """The platform's answer to a tenant writing again while his demand waits.
+
+    Only when the turn changed nothing: a new criterion re-records the demand
+    and is acknowledged as such, and opening another flow is its own answer.
+    Everything else — "tu me reviens quand ?", "merci", "do you have something
+    now?" — gets his criteria back and the truth that nothing is ready yet,
+    never a model's sentence promising a delay or a visit.
+    """
+    if session.step is not FlowStep.AWAITING_MATCH or next_step is not None:
+        return None
+    if _opens_new_flow(session, intent):
+        return None
+    query = search_query(session.context)
+    if query is None:
+        return None
+    return demand_waiting_text(query, session.language)
 
 
 def _nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
@@ -405,15 +491,14 @@ class AnalyseConversationMessageUseCase:
         # still chooses the intent. On an opening turn it is what tells a tenant
         # the search fields instead of the landlord's.
         hint = self._classifier.classify(text, pending=pending_key)
+        prompt_flow = (
+            _target_flow(session, hint.intent) if hint is not None else session.flow
+        )
         prompt = build_analysis_prompt(
             text=message.text,
             default_language=session.language,
             history=history,
-            flow=(
-                _target_flow(session, hint.intent)
-                if hint is not None
-                else session.flow
-            ),
+            flow=prompt_flow,
             step=session.step,
             pending_question=pending_key,
             known_facts=dict(session.context),
@@ -478,6 +563,8 @@ class AnalyseConversationMessageUseCase:
         # ``reply`` empty pays for a second call; a deployment that never asks
         # for an inline reply degrades to the same behaviour as before.
         reply_text: str | None = result.reply
+        if not _inline_reply_fits(prompt_flow, session=session, verdict=verdict):
+            reply_text = None
         reply_usage: LlmUsage | None = None
         if reply_text is None:
             reply_text, reply_usage = await self._compose_reply(
@@ -732,7 +819,7 @@ class AnalyseConversationMessageUseCase:
         if reason is None and confidence < MIN_ACCEPTED_CONFIDENCE:
             reason = "low_confidence"
 
-        facts = self._extractor.validate(entities)
+        facts = self._extractor.validate(_with_known_neighbourhoods(entities, session))
         # The next step must consider the whole form, not just this message: a
         # landlord who gives their city after naming the property type is one
         # step further, not back at the type question. When this message opens a
@@ -775,8 +862,10 @@ class AnalyseConversationMessageUseCase:
 
         next_key: str | None = None
         if verdict.accepted:
-            decided = question_key_for(
-                verdict.next_step, _target_flow(session, verdict.intent)
+            next_key = question_to_ask(
+                next_step=verdict.next_step,
+                flow=_target_flow(session, verdict.intent),
+                pending=_carried_question(session),
             )
             # A turn that advanced nothing leaves the previous question open,
             # and the writer has to be told *that* one. Handed no question at
@@ -790,10 +879,8 @@ class AnalyseConversationMessageUseCase:
             # advance while the session still waited for the caution, and his
             # "6" would have been filed as six months of caution. Silently.
             #
-            # The same ``or pending`` rule as ``_advance_session``, through one
-            # helper, so the question asked and the question recorded cannot
-            # drift apart again.
-            next_key = decided or _carried_question(session)
+            # The same rule as ``_advance_session``, through one helper, so the
+            # question asked and the question recorded cannot drift apart again.
         prompt = build_reply_prompt(
             text=text,
             language=session.language,
@@ -923,6 +1010,9 @@ class AnalyseConversationMessageUseCase:
             choice_text, next_step = await self._choose_listing(
                 session, facts=facts, next_step=next_step, now=now
             )
+            # Read before the session moves: it is where he *was* that says his
+            # message is a follow-up on a demand already waiting.
+            waiting_text = _while_waiting(session, intent=intent, next_step=next_step)
             question = await self._advance_session(
                 session,
                 intent,
@@ -937,9 +1027,18 @@ class AnalyseConversationMessageUseCase:
             reply_text = (
                 availability_text
                 or search_text
+                or waiting_text
                 or choice_text
                 or listing_text
                 or reply_text
+            )
+        else:
+            # Not understood, but nothing he says now can be misfiled: the
+            # demand is kept and no question is open. Observed live with the
+            # model timing out: "tu me reviens quand ?" reached the rules alone
+            # and was told to rephrase. His criteria and the truth beat that.
+            reply_text = (
+                _while_waiting(session, intent=intent, next_step=None) or reply_text
             )
 
         # Committed with the turn: an analysis the platform understood but never

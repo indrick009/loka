@@ -33,7 +33,7 @@ class RecordTenantDemandCommand:
     tenant_id: uuid.UUID
     property_type: str | None = None
     city: str | None = None
-    neighbourhood: str | None = None
+    neighbourhoods: tuple[str, ...] = ()
     max_rent_xaf: int | None = None
 
 
@@ -68,7 +68,7 @@ class RecordTenantDemandUseCase:
             existing.restate(
                 property_type=command.property_type,
                 city=command.city,
-                neighbourhood=command.neighbourhood,
+                neighbourhoods=command.neighbourhoods,
                 max_rent=max_rent,
                 now=now,
             )
@@ -82,7 +82,7 @@ class RecordTenantDemandUseCase:
             tenant_id=command.tenant_id,
             property_type=command.property_type,
             city=command.city,
-            neighbourhood=command.neighbourhood,
+            neighbourhoods=command.neighbourhoods,
             max_rent=max_rent,
             now=now,
         )

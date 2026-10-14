@@ -66,6 +66,52 @@ class TestBindingTheTenantsNumber:
         assert self.classify("150000") is None
 
 
+class TestReadingSeveralNeighbourhoods:
+    """The rules answer a location without a model, so they must keep them all."""
+
+    def test_every_district_named_is_kept_in_order(self) -> None:
+        match = DeterministicClassifier().classify(
+            "Vers Bonamoussadi ou bien Makepe ça me va", pending="ask.search_location"
+        )
+
+        assert match is not None
+        assert match.entities["city"] == "Douala"
+        assert match.entities["neighbourhood"] == "Bonamoussadi"
+        assert match.entities["neighbourhoods"] == ["Bonamoussadi", "Makepe"]
+
+    def test_mon_frere_is_a_way_of_speaking_not_a_source(self) -> None:
+        """Read as "heard of Kora through family", it swallowed the studio."""
+        match = DeterministicClassifier().classify(
+            "Bonsoir mon frère, je cherche un studio moderne à Douala, c'est comment ?",
+            pending=None,
+        )
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+        assert match.entities["property_type"] == "STUDIO"
+        assert match.entities["standing"] == "MODERN"
+        assert match.entities["city"] == "Douala"
+
+    def test_a_place_said_to_come_on_top_is_marked_as_added(self) -> None:
+        match = DeterministicClassifier().classify(
+            "Ah attends, si c'est à Logbessou aussi ça va", pending=None
+        )
+
+        assert match is not None
+        assert match.entities["neighbourhood"] == "Logbessou"
+        assert match.entities["adds_neighbourhoods"] is True
+
+    def test_a_named_city_no_longer_hides_its_district(self) -> None:
+        match = DeterministicClassifier().classify(
+            "studio à Yaoundé Bastos", pending="ask.search_location"
+        )
+
+        assert match is not None
+        assert match.entities["city"] == "Yaoundé"
+        assert match.entities["neighbourhood"] == "Bastos"
+        assert "neighbourhoods" not in match.entities
+
+
 class TestValidatingTheChoice:
     @pytest.fixture
     def extractor(self) -> FactExtractor:

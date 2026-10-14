@@ -274,7 +274,7 @@ class FactExtractor:
             )
         if "standing" in present or "modern" in present:
             keep("standing", lambda: _build_standing(entities))
-        if "city" in present or "neighbourhood" in present or "latitude" in present:
+        if present.keys() & {"city", "neighbourhood", "neighbourhoods", "latitude"}:
             keep("location", lambda: self._build_location(entities))
         elif "location_hint" in present:
             resolved = _resolve_location_hint(present["location_hint"])
@@ -448,6 +448,8 @@ class FactExtractor:
         city = str(entities.get("city") or "").strip()
         neighbourhood = entities.get("neighbourhood")
         neighbourhood_text = str(neighbourhood).strip() if isinstance(neighbourhood, str) else ""
+        accepted = _accepted_neighbourhoods(neighbourhood_text, entities.get("neighbourhoods"))
+        neighbourhood_text = accepted[0] if accepted else ""
         coordinates = _build_coordinates(entities)
         if not city and neighbourhood_text:
             # "Bastos" alone is a complete answer here: the district index knows
@@ -472,6 +474,10 @@ class FactExtractor:
             "city": location.city,
             "neighbourhood": location.neighbourhood or "",
         }
+        if len(accepted) > 1:
+            # Only a tenant names several; a listing stands in one place, and
+            # the landlord's form reads ``neighbourhood`` alone.
+            built["neighbourhoods"] = accepted
         if location.coordinates is not None:
             # Carried through the facts because the pin is what makes the
             # listing precise: a neighbourhood alone is publishable, a pin is
@@ -479,6 +485,17 @@ class FactExtractor:
             built["latitude"] = location.coordinates.latitude
             built["longitude"] = location.coordinates.longitude
         return built
+
+
+def _accepted_neighbourhoods(main: str, listed: Any) -> list[str]:
+    """Every neighbourhood named, the main one first, each once."""
+    names: list[str] = []
+    candidates = [main, *(listed if isinstance(listed, list) else [])]
+    for candidate in candidates:
+        name = str(candidate).strip() if isinstance(candidate, str) else ""
+        if name and name.casefold() not in {known.casefold() for known in names}:
+            names.append(name)
+    return names
 
 
 def _build_coordinates(entities: dict[str, Any]) -> Coordinates | None:
@@ -529,8 +546,16 @@ def question_to_ask(
 
     Callers record exactly what this returns, which is what keeps the stored
     pending question and the question actually asked from drifting apart.
+
+    A step that *was* decided but asks nothing — the demand is recorded and Kora
+    now waits — closes the old question instead of inheriting it. Observed
+    live: after "votre demande est enregistrée" the session still awaited the
+    budget, every later reply went out as that question, and a tenant's next
+    "70 mille" would have silently rewritten his budget.
     """
-    return question_key_for(next_step, flow) or pending
+    if next_step is not None:
+        return question_key_for(next_step, flow)
+    return pending
 
 
 def _as_int(raw: Any) -> int:

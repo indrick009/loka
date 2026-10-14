@@ -170,6 +170,16 @@ AVAILABILITY_PATTERNS: dict[str, re.Pattern[str]] = {
     ),
 }
 
+# "Logbessou aussi" adds a place to the ones already accepted; read as a plain
+# location it replaced them. Exported because the classifier cannot see the
+# known facts and the use case, which can, does the union.
+ADDS_NEIGHBOURHOODS = "adds_neighbourhoods"
+_ADDS_A_PLACE = re.compile(r"\b(aussi|egalement|également|en plus|also|as well)\b", re.I)
+
+# No step asks this question yet, so the patterns below lie dormant until one
+# does; they are kept because the answers they read are the ones to expect.
+_ACQUISITION_QUESTION = "ask.acquisition_source"
+
 ACQUISITION_SOURCE_PATTERNS: dict[str, re.Pattern[str]] = {
     "WHATSAPP": re.compile(r"\bwhats\s?app\b", re.I),
     "PLATFORM": re.compile(
@@ -400,7 +410,15 @@ class DeterministicClassifier:
                 entities={"availability": availability},
             )
 
-        source = self._first_match(ACQUISITION_SOURCE_PATTERNS, normalized)
+        # Only an answer to "comment avez-vous connu Kora ?". Read unprompted,
+        # "mon frère" — how half of Douala addresses anyone — became "heard of
+        # us through family", and "Bonsoir mon frère, je cherche un studio
+        # moderne à Douala" lost the studio, the standing and the city.
+        source = (
+            self._first_match(ACQUISITION_SOURCE_PATTERNS, normalized)
+            if pending == _ACQUISITION_QUESTION
+            else None
+        )
         if source:
             return DeterministicMatch(
                 intent="COLLECT_ACQUISITION_SOURCE",
@@ -744,6 +762,10 @@ class DeterministicClassifier:
         location = _location_entity(normalized)
         if location is not None:
             entities.update(location)
+            if location["neighbourhood"] and _ADDS_A_PLACE.search(normalized):
+                # The rules cannot see what is already known; they say that
+                # this place comes on top of it, and the pipeline does the sum.
+                entities[ADDS_NEIGHBOURHOODS] = True
         else:
             hint = LOCATION_HINT_PATTERN.search(normalized)
             if hint:
@@ -795,26 +817,47 @@ def _parse_amount(raw: str) -> int:
     return int(digits) if digits else 0
 
 
-def _location_entity(normalized: str) -> dict[str, str] | None:
-    """The city (and district) a message names, or ``None``.
+def _location_entity(normalized: str) -> dict[str, Any] | None:
+    """The city and the districts a message names, or ``None``.
 
     Scans the words longest-first so a two-word district ("New Bell") beats its
     single word, and resolves both canonical cities and every district in the
     market index — so "yaounde nkoabang" closes the location question on Yaoundé
     even when the district itself is not in the index. Only *known* places
     resolve: promoting an unknown word to a city is how a wrong search is born.
+
+    Every district is kept, in the order written: "vers Bonamoussadi ou bien
+    Makepe" is two places a tenant accepts, and returning the first one alone
+    silently narrowed his demand. A district in another city than the one named
+    is dropped rather than guessed into it.
     """
-    words = normalized.split()
+    # Punctuation is shed so "à Douala, c'est comment" still names Douala.
+    words = [word.strip(".,;:!?()\"") for word in normalized.split()]
+    taken: set[int] = set()
+    city: str | None = None
+    districts: list[tuple[int, str, str]] = []
     for size in (3, 2, 1):
         for start in range(0, len(words) - size + 1):
+            span = set(range(start, start + size))
+            if span & taken:
+                continue
             candidate = " ".join(words[start : start + size])
-            city = market.resolve_city(candidate)
-            if city is not None:
-                return {"city": city, "neighbourhood": ""}
+            named_city = market.resolve_city(candidate)
+            if named_city is not None:
+                city = city or named_city
+                taken |= span
+                continue
             district_city = market.resolve_neighbourhood(candidate)
             if district_city is not None:
-                return {
-                    "city": district_city,
-                    "neighbourhood": market.canonical_neighbourhood(candidate) or "",
-                }
-    return None
+                name = market.canonical_neighbourhood(candidate) or candidate
+                districts.append((start, name, district_city))
+                taken |= span
+    if city is None and not districts:
+        return None
+    districts.sort()
+    city = city or districts[0][2]
+    names = [name for _, name, district_city in districts if district_city == city]
+    location: dict[str, Any] = {"city": city, "neighbourhood": names[0] if names else ""}
+    if len(names) > 1:
+        location["neighbourhoods"] = names
+    return location

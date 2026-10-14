@@ -173,6 +173,30 @@ _DEMAND_RECORDED_TEXT: dict[str, str] = {
     ),
 }
 
+# What a tenant reads when he writes again while his demand waits: "tu me
+# reviens quand ?", "do you have something now?". Platform text for the same
+# reason as above — left to the model, it answered "je vous reviens dès que
+# possible" and "you would like to visit this weekend, is that correct?", a
+# delay and a visit nobody had arranged. It restates his criteria so he can see
+# what was kept, says plainly that nothing is ready yet, and names the one move
+# he does have.
+_DEMAND_WAITING_TEXT: dict[str, str] = {
+    "fr": (
+        "Votre recherche est bien enregistrée : {summary}. Je n'ai pas encore de "
+        "logement à vous proposer. Si un logement correspond, je reviens vers "
+        "vous ici. Vous pouvez aussi changer un critère : quartier, budget ou "
+        "type de logement."
+    ),
+    "en": (
+        "Your search is recorded: {summary}. I have nothing to offer you yet. "
+        "If a property matches, I will come back to you here. You can also "
+        "change a criterion: neighbourhood, budget or property type."
+    ),
+}
+
+_OR: dict[str, str] = {"fr": " ou ", "en": " or "}
+_MAX_RENT: dict[str, str] = {"fr": "FCFA/mois maximum", "en": "FCFA/month maximum"}
+
 
 _SEARCH_OUTRO: dict[str, str] = {
     "fr": "Répondez avec le numéro du logement qui vous intéresse.",
@@ -266,7 +290,7 @@ def search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
     city = str(location.get("city") or "").strip()
     if not city:
         return None
-    neighbourhood = str(location.get("neighbourhood") or "").strip()
+    neighbourhoods = _neighbourhoods(location)
 
     property_type = facts.get("property_type")
     rent = facts.get("rent")
@@ -275,11 +299,41 @@ def search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
 
     return ConversationSearchQuery(
         city=city,
-        neighbourhoods=(neighbourhood,) if neighbourhood else (),
+        neighbourhoods=neighbourhoods,
         property_types=(str(property_type),) if property_type else (),
         budget_xaf=_optional_amount(rent),
         min_bedrooms=_optional_amount(bedrooms, minimum=1),
     )
+
+
+def _neighbourhoods(location: Mapping[str, Any]) -> tuple[str, ...]:
+    """Every neighbourhood the tenant accepts, the main one first.
+
+    "Bonamoussadi ou bien Makepe" is two acceptable places, not one: keeping
+    only the first is a demand narrower than the one he made.
+    """
+    names: list[str] = []
+    listed = location.get("neighbourhoods")
+    candidates = [location.get("neighbourhood"), *(listed if isinstance(listed, list) else [])]
+    for candidate in candidates:
+        name = str(candidate or "").strip()
+        if name and name.casefold() not in {known.casefold() for known in names}:
+            names.append(name)
+    return tuple(names)
+
+
+def demand_waiting_text(query: ConversationSearchQuery, language: str) -> str:
+    """Answer a tenant who writes again while his demand waits."""
+    types = _PROPERTY_TYPE_LABELS.get(language, _PROPERTY_TYPE_LABELS[_LANG_FR])
+    parts: list[str] = []
+    if query.property_types:
+        kind = query.property_types[0]
+        parts.append(types.get(kind, kind.title()))
+    place = _copy(_OR, language).join(query.neighbourhoods)
+    parts.append(f"{place}, {query.city}" if place else query.city)
+    if query.budget_xaf is not None:
+        parts.append(f"{_format_xaf(query.budget_xaf)} {_copy(_MAX_RENT, language)}")
+    return _copy(_DEMAND_WAITING_TEXT, language).format(summary=" - ".join(parts))
 
 
 def _optional_amount(value: Any, *, minimum: int = 0) -> int | None:

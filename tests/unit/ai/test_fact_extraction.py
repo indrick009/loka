@@ -105,6 +105,23 @@ class TestRefusedFacts:
         assert not facts.has("rent")
         assert "rent" in facts.rejected
 
+    def test_every_accepted_neighbourhood_is_kept(self, extractor: FactExtractor) -> None:
+        """"Bonamoussadi ou bien Makepe" is two places; keeping one narrows the
+        tenant's demand behind his back."""
+        facts = extractor.validate(
+            {
+                "city": "Douala",
+                "neighbourhood": "Bonamoussadi",
+                "neighbourhoods": ["Bonamoussadi", "Makepe", " makepe "],
+            }
+        )
+
+        assert facts.get("location") == {
+            "city": "Douala",
+            "neighbourhood": "Bonamoussadi",
+            "neighbourhoods": ["Bonamoussadi", "Makepe"],
+        }
+
     def test_a_vague_neighbourhood_is_refused(self, extractor: FactExtractor) -> None:
         facts = extractor.validate({"city": "Douala", "neighbourhood": "X"})
 

@@ -1949,6 +1949,188 @@ class TestConversationSearch:
         assert session.step is FlowStep.AWAITING_MATCH
         assert uow.events.staged[0].text.startswith("Votre demande est enregistrée.")
 
+    async def test_every_accepted_neighbourhood_reaches_the_demand(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        demands = StubDemands()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            model=StubModel(
+                result=_model_result(
+                    intent="PROPERTY_SEARCH",
+                    entities={
+                        "property_type": "STUDIO",
+                        "city": "Douala",
+                        "neighbourhood": "Bonamoussadi",
+                        "neighbourhoods": ["Bonamoussadi", "Makepe"],
+                        "price": 60_000,
+                    },
+                )
+            ),
+            demands=demands,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert demands.recorded[0][1].neighbourhoods == ("Bonamoussadi", "Makepe")
+
+    async def test_a_follow_up_while_waiting_gets_the_criteria_and_no_promise(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """Left to the model, "tu me reviens quand ?" was answered "dès que
+        possible", and "can I visit this weekend?" with a visit nobody set up."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.AWAITING_MATCH
+        )
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "location": {
+                    "city": "Douala",
+                    "neighbourhood": "Bonamoussadi",
+                    "neighbourhoods": ["Bonamoussadi", "Makepe"],
+                },
+                "rent": 60_000,
+            }
+        )
+        demands = StubDemands()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Mais tu me reviens quand ?",
+            model=StubModel(
+                result=_model_result(
+                    intent="AVAILABILITY_CHECK",
+                    entities={},
+                    reply="Je vous reviens dès que possible.",
+                )
+            ),
+            demands=demands,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert demands.recorded == []
+        assert report.question_key is None
+        assert session.step is FlowStep.AWAITING_MATCH
+        staged = uow.events.staged[0]
+        assert staged.reply_kind == "ACK"
+        assert staged.text == (
+            "Votre recherche est bien enregistrée : Studio - Bonamoussadi ou Makepe, "
+            "Douala - 60 000 FCFA/mois maximum. Je n'ai pas encore de logement à "
+            "vous proposer. Si un logement correspond, je reviens vers vous ici. "
+            "Vous pouvez aussi changer un critère : quartier, budget ou type de "
+            "logement."
+        )
+
+    async def test_a_follow_up_the_rules_cannot_read_still_gets_the_criteria(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """With no model to read it, "tu me reviens quand ?" was answered with a
+        request to rephrase; while the demand waits there is nothing to misfile."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.AWAITING_MATCH
+        )
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+                "rent": 80_000,
+            }
+        )
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="Mais tu me reviens quand ?"
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is False
+        assert uow.events.staged[0].text.startswith(
+            "Votre recherche est bien enregistrée : Studio - Bastos, Yaoundé - "
+            "80 000 FCFA/mois maximum."
+        )
+
+    async def test_an_added_place_joins_the_ones_already_accepted(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """Read by the rules alone, "Logbessou aussi" replaced Bonamoussadi and
+        Makepe instead of joining them."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.AWAITING_MATCH
+        )
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "location": {
+                    "city": "Douala",
+                    "neighbourhood": "Bonamoussadi",
+                    "neighbourhoods": ["Bonamoussadi", "Makepe"],
+                },
+                "rent": 60_000,
+            }
+        )
+        demands = StubDemands()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Ah attends, si c'est à Logbessou aussi ça va",
+            demands=demands,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.context["location"]["neighbourhoods"] == [
+            "Bonamoussadi",
+            "Makepe",
+            "Logbessou",
+        ]
+        assert demands.recorded[0][1].neighbourhoods == (
+            "Bonamoussadi",
+            "Makepe",
+            "Logbessou",
+        )
+
+    async def test_an_inline_reply_written_for_the_landlord_form_is_rewritten(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """The rules missed a tenant's opening, so the model was shown the
+        landlord's fields and asked him how many lodgings his listing offers."""
+        responder = StubResponseModel(text="Which neighbourhood are you looking in?")
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text=AMBIGUOUS_TEXT,
+            model=StubModel(
+                result=_model_result(
+                    language="en",
+                    intent="PROPERTY_SEARCH",
+                    entities={"property_type": "STUDIO", "standing": "MODERN"},
+                    reply="How many identical lodgings are on offer in this listing?",
+                )
+            ),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert responder.calls == 1
+        assert uow.events.staged[0].text == "Which neighbourhood are you looking in?"
+
 
 class TestConversationLanguage:
     """The message decides the language; the session only remembers it.

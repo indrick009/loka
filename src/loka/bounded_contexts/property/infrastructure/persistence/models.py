@@ -20,7 +20,7 @@ from sqlalchemy import (
     Text,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -277,7 +277,9 @@ class TenantDemandRow(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="OPEN")
     property_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
     city: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    neighbourhood: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    neighbourhoods: Mapped[list[str]] = mapped_column(
+        ARRAY(String(96)), nullable=False, default=list
+    )
     max_rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
