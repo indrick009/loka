@@ -19,13 +19,22 @@ its identity and the clock it has been waiting on.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
+
+# How far around the tenant's budget a lodging is worth proposing. Below, a
+# floor: far too cheap reads as an insult — a 90 000 tenant is not looking for a
+# 50 000 room. Above, only a slight overshoot: a wide gap is a negotiation with
+# the landlord (§8), not something to drop on the tenant's screen.
+BUDGET_LOWER_TOLERANCE = 0.20
+BUDGET_UPPER_TOLERANCE = 0.05
 
 
 class DemandStatus(StrEnum):
@@ -119,8 +128,15 @@ class TenantDemand(AggregateRoot):
             },
         )
 
-    def mark_answered(self, *, now: datetime) -> None:
-        """Kora came back to him. Nothing more is owed on this demand."""
+    def mark_answered(
+        self, *, now: datetime, proposals: Sequence[Mapping[str, Any]] = ()
+    ) -> None:
+        """Kora came back to him. Nothing more is owed on this demand.
+
+        ``proposals`` are the lodgings he is being sent, in the order he will
+        read them: the event carries them so whoever writes the message shows
+        exactly what was matched, and his "2" later names the same lodging.
+        """
         if self.status is not DemandStatus.OPEN:
             raise InvalidStateTransition(
                 "only an open demand can be answered",
@@ -132,8 +148,47 @@ class TenantDemand(AggregateRoot):
         self.record(
             "TenantDemandAnswered",
             occurred_at=now,
-            payload={"demand_id": str(self.id), "tenant_id": str(self.tenant_id)},
+            payload={
+                "demand_id": str(self.id),
+                "tenant_id": str(self.tenant_id),
+                "proposals": [dict(proposal) for proposal in proposals],
+            },
         )
+
+    def price_band(self) -> tuple[int, int] | None:
+        """The inclusive rent range his budget is matched against, if he gave one."""
+        if self.max_rent is None:
+            return None
+        budget = self.max_rent.amount
+        return (
+            int(budget * (1 - BUDGET_LOWER_TOLERANCE)),
+            int(budget * (1 + BUDGET_UPPER_TOLERANCE)),
+        )
+
+    def accepts(
+        self,
+        *,
+        property_type: str | None,
+        city: str | None,
+        neighbourhood: str | None,
+        rent_xaf: int | None,
+    ) -> bool:
+        """Whether one published lodging answers this demand.
+
+        The same rule the catalogue search applies to a demand, stated for one
+        listing: a lodging published after the demand never went through that
+        search, and has to be held to the same bar.
+        """
+        if not self.is_answerable or city != self.city:
+            return False
+        if self.property_type and property_type != self.property_type:
+            return False
+        if self.neighbourhoods and neighbourhood not in self.neighbourhoods:
+            return False
+        band = self.price_band()
+        if band is None:
+            return True
+        return rent_xaf is not None and band[0] <= rent_xaf <= band[1]
 
     def withdraw(self, *, reason: str, now: datetime) -> None:
         """He is no longer looking. Not an answer, and not a failure either."""

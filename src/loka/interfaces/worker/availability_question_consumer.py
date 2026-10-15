@@ -70,6 +70,14 @@ class AvailabilityQuestionConsumer(ConsumerBase):
                     f"landlord {account_id} has no conversation to be asked in"
                 )
 
+            # His next message answers this question, whatever form he was in
+            # the middle of: left on his photo question, "oui, toujours
+            # disponible" was read as small talk and the tenant never released.
+            observed = session.revision
+            session.record_pending_question(LANDLORD_QUESTION_KEY)
+            session.merge_context({}, now=datetime.now(UTC))
+            await sessions.save(session, expected_revision=observed)
+
             uow.events.stage(
                 [
                     WhatsAppMessageSendRequested(

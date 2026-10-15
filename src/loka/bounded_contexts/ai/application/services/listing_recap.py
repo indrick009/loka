@@ -119,6 +119,11 @@ def photo_received_text(
     return words["published" if published else "draft"].format(count=count)
 
 
+def property_type_label(property_type: str | None, language: str) -> str:
+    """"Studio", "Chambre"... — empty when the type is unknown."""
+    return _TYPES.get(language, _TYPES["fr"]).get(str(property_type or ""), "")
+
+
 def _xaf(amount: int) -> str:
     return f"{amount:,}".replace(",", " ")
 

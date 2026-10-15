@@ -58,10 +58,14 @@ from loka.bounded_contexts.ai.application.services.decision_shadow import Decisi
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     ADDS_NEIGHBOURHOODS,
     DeterministicClassifier,
+    DeterministicMatch,
 )
 from loka.bounded_contexts.ai.application.services.listing_recap import (
     listing_recap_text,
     photo_received_text,
+)
+from loka.bounded_contexts.ai.application.services.match_proposals import (
+    SHOWN_LISTINGS_KEY,
 )
 from loka.bounded_contexts.ai.application.services.prompts import (
     build_analysis_prompt,
@@ -179,11 +183,37 @@ def _neighbourhood_from_label(label: str | None) -> str | None:
     return None
 
 
-# The listing ids last printed to this tenant, in the order he saw them. The
-# leading underscore keeps it out of every prompt: ``_public_known_facts``
-# strips it, so it costs no tokens and cannot be read back as something the
-# tenant said.
-_SHOWN_LISTINGS = "_shown_listings"
+_SHOWN_LISTINGS = SHOWN_LISTINGS_KEY
+
+# Staged on a landlord's thread when a tenant picks his lodging. Set as the
+# open question there, so his next message is read as the answer to it.
+AVAILABILITY_QUESTION_KEY = "ask.availability_check"
+
+
+def _availability_reading(
+    pending: str | None,
+    hint: DeterministicMatch | None,
+    intent: str,
+    entities: dict[str, Any],
+) -> tuple[str, dict[str, Any]]:
+    """His answer to "le logement est encore disponible ?", when that is open.
+
+    A rule, not a guess. Observed live: "Oui, il est toujours disponible" came
+    back AFFIRMATIVE, was read as a reply to his photo question, and the tenant
+    waiting on it was never released. The rule had it right; the model did not
+    know the question was open.
+
+    A bare "oui" is a yes to the question asked. A bare "non" is left to the
+    model: taken for good or for now are different answers, and only one of
+    them takes the listing out of search.
+    """
+    if pending != AVAILABILITY_QUESTION_KEY:
+        return intent, entities
+    if hint is not None and is_availability_answer(hint.intent):
+        return hint.intent, {**entities, **hint.entities}
+    if intent == "AFFIRMATIVE":
+        return "AVAILABILITY_STILL_AVAILABLE", entities
+    return intent, entities
 
 
 def _carried_question(session: ConversationSession) -> str | None:
@@ -608,6 +638,7 @@ class AnalyseConversationMessageUseCase:
         )
         if denial is not None:
             intent, entities = denial.intent, {**denial.entities, **entities}
+        intent, entities = _availability_reading(pending_key, hint, intent, entities)
         verdict = self._verdict(
             session=session,
             intent=intent,
@@ -1354,6 +1385,13 @@ class AnalyseConversationMessageUseCase:
         """
         if next_step is not FlowStep.PRESENT_RESULTS:
             return None, next_step
+        if session.step is FlowStep.COLLECT_PROPERTY_CHOICE and isinstance(
+            facts.get("property_choice"), int
+        ):
+            # His "1" picks a lodging he was sent; it is not his search again.
+            # Read as one, it re-opened the demand that list had just answered,
+            # was matched again and sent him the same list a second time.
+            return None, next_step
         if self._demands is None or session.user_id is None:
             # Nowhere to keep the demand, so nothing to come back to: a
             # deployment that never wired the port fails as a sentence, not as
@@ -1398,6 +1436,12 @@ class AnalyseConversationMessageUseCase:
         # Read before ``start_flow`` can clear the context: a question left open
         # by an attempt the user has walked away from must not be asked again.
         pending = _carried_question(session)
+        # Answered, the availability question is closed and he is back in the
+        # form he was filling. Left open, his next photo caption would have
+        # been read as a second answer about a lodging already settled.
+        resumed_step: FlowStep | None = None
+        if pending == AVAILABILITY_QUESTION_KEY and is_availability_answer(intent):
+            pending, resumed_step = None, session.step
 
         # Read before the flow opens, because opening it clears the context:
         # the facts stated in the same breath as "publier ou chercher ?"
@@ -1427,7 +1471,9 @@ class AnalyseConversationMessageUseCase:
         # expected_revision equal to the value read from the row.
         if attach_property_id is not None:
             session.attach_property(attach_property_id, now=now)
-        asked = question_to_ask(next_step=next_step, flow=session.flow, pending=pending)
+        asked = question_to_ask(
+            next_step=next_step or resumed_step, flow=session.flow, pending=pending
+        )
         session.record_pending_question(asked)
         await self._sessions.save(session, expected_revision=observed)
         return asked

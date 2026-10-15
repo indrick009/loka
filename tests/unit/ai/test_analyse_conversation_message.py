@@ -2298,6 +2298,40 @@ class TestTheLandlordsAvailabilityAnswerIsActedOn:
 
         assert answers.calls == [(session.user_id, "AVAILABILITY_RENTED")]
 
+    async def test_the_open_question_decides_over_the_model(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: mid-way through his photos, "Oui, il est toujours
+        disponible" came back AFFIRMATIVE and was read as small talk."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_MEDIA
+        )
+        session.context["next_question"] = "ask.availability_check"
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=True, lodgings_left=1, delisted=False
+            )
+        )
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="Oui, il est toujours disponible pour le locataire",
+            model=StubModel(result=_model_result(intent="AFFIRMATIVE", entities={})),
+            availability=answers,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert answers.calls == [(session.user_id, "AVAILABILITY_STILL_AVAILABLE")]
+        # Answered, it is closed: he is back on the question of his own form.
+        assert session.context["next_question"] == "ask.media"
+
     async def test_the_landlord_is_told_the_listing_left_the_catalogue(
         self,
         uow: FakeUnitOfWork,
@@ -2398,6 +2432,41 @@ class TestTheTenantsChoiceReachesTheLandlord:
         )
         session.context["_shown_listings"] = shown
         session.context["next_question"] = "ask.search_choice"
+
+    async def test_the_pick_does_not_reopen_his_search(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: with his criteria all stored, "1" also completed the
+        search form, re-recorded the demand the list had just answered, and he
+        was sent the same list again under "votre demande est enregistrée"."""
+        self.waiting_for_a_choice(session, shown=[str(uuid.uuid4())])
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Jouvence"},
+                "rent": 45_000,
+            }
+        )
+        demands = StubDemands()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="1",
+            availability_requests=FakeAvailabilityRequests(),
+            demands=demands,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert demands.recorded == []
+        assert session.step is FlowStep.AWAITING_AVAILABILITY
+        assert "enregistrée" not in (uow.events.staged[-1].text or "")
 
     async def test_the_number_becomes_a_question_to_the_right_landlord(
         self,
