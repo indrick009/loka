@@ -45,6 +45,10 @@ class InitiateServiceFeeCommand:
     tenant_id: uuid.UUID
     landlord_id: uuid.UUID
     idempotency_key: str | None = None
+    # The mobile-money number to push the withdrawal to (direct payment). The
+    # WhatsApp number is not always the one that holds the money, so the
+    # tenant chooses it; ``None`` asks the provider for a checkout link instead.
+    payer_phone: str | None = None
 
     @property
     def unlock_key(self) -> str:
@@ -140,6 +144,7 @@ class InitiateServiceFeeUseCase:
                 # dashboard instead of a join nobody can run from there.
                 user_id=str(command.tenant_id),
                 message=self._payment_message,
+                payer_phone=command.payer_phone,
             )
         except Exception as exc:  # provider boundary: any transport error is a gateway fault
             raise PaymentGatewayError(

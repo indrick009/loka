@@ -13,6 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
 from loka.bounded_contexts.ai.domain.services.ai_provider import (
@@ -121,6 +122,35 @@ class AvailabilityRequests(Protocol):
     async def request(
         self, *, property_id: uuid.UUID, tenant_id: uuid.UUID | None, now: datetime
     ) -> bool: ...
+
+
+class UnlockRequestOutcome(StrEnum):
+    """What asking for the 1 000 FCFA produced, in the terms the reply needs."""
+
+    REQUESTED = "REQUESTED"
+    ALREADY_UNLOCKED = "ALREADY_UNLOCKED"
+    NOT_CONFIRMED = "NOT_CONFIRMED"
+    FAILED = "FAILED"
+
+
+class UnlockPayments(Protocol):
+    """Starts the withdrawal for one unlock: this tenant, this listing.
+
+    The pipeline knows the tenant agreed and which number to charge; whether
+    the landlord's confirmation still holds, and what the provider does, is
+    Payment's business. Settlement is never reported here — only the
+    provider's callback releases the contact.
+    """
+
+    async def request(
+        self,
+        *,
+        tenant_id: uuid.UUID,
+        property_id: uuid.UUID,
+        landlord_id: uuid.UUID,
+        payer_phone: str,
+        now: datetime,
+    ) -> UnlockRequestOutcome: ...
 
 
 class AvailabilityAnswers(Protocol):

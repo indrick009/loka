@@ -68,6 +68,12 @@ class FlowStep(StrEnum):
     # neighbouring area, or a price a little above.
     AWAITING_MATCH = "AWAITING_MATCH"
     AWAITING_AVAILABILITY = "AWAITING_AVAILABILITY"
+    # The landlord confirmed; the tenant is asked whether to pay the 1 000 FCFA
+    # with the number he writes from or with another one.
+    CONFIRM_PAYMENT = "CONFIRM_PAYMENT"
+    # The withdrawal request is on his phone; only the provider's callback
+    # moves him on — never his word that he paid.
+    AWAITING_PAYMENT = "AWAITING_PAYMENT"
     COLLECT_ACQUISITION_SOURCE = "COLLECT_ACQUISITION_SOURCE"
     COLLECT_REPORT_REASON = "COLLECT_REPORT_REASON"
     AWAITING_CONFIRMATION = "AWAITING_CONFIRMATION"

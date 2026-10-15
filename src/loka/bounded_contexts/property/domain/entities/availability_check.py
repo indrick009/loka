@@ -106,6 +106,9 @@ class AvailabilityCheck(AggregateRoot):
             payload={
                 "check_id": str(self.id),
                 "property_id": str(self.property_id),
+                # Who waits on this answer, and whose contact it releases.
+                "tenant_id": str(self.tenant_id) if self.tenant_id else None,
+                "landlord_id": str(self.landlord_id),
                 "answer": answer.value,
                 "confirms_availability": self.confirms_availability,
             },

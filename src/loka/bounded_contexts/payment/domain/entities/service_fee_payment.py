@@ -250,7 +250,13 @@ class ServiceFeePayment(AggregateRoot):
         self.record(
             "PaymentFailed",
             occurred_at=now,
-            payload={"payment_id": str(self.id), "reason": self.failure_reason},
+            payload={
+                "payment_id": str(self.id),
+                # Who is waiting on it, so he can be told and offered a retry.
+                "tenant_id": str(self.tenant_id),
+                "property_id": str(self.property_id),
+                "reason": self.failure_reason,
+            },
         )
 
     def expire(self, *, now: datetime) -> None:

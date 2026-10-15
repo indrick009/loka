@@ -120,6 +120,9 @@ class FapshiPaymentGateway:
         email = kwargs.get("email")
         if email:
             body["email"] = str(email)
+        payer_phone = kwargs.get("payer_phone")
+        if payer_phone:
+            return await self._direct_pay(body, payer_phone=str(payer_phone))
         if self._settings.redirect_url:
             body["redirectUrl"] = self._settings.redirect_url
 
@@ -144,6 +147,39 @@ class FapshiPaymentGateway:
             provider=self.name_id,
             provider_reference=trans_id,
             provider_url=link,
+            link_ttl_seconds=self._settings.link_ttl_seconds,
+            raw={"dateInitiated": payload.get("dateInitiated")},
+        )
+
+    async def _direct_pay(self, body: dict[str, Any], *, payer_phone: str) -> PaymentInitiation:
+        """Push the withdrawal request straight to the payer's phone.
+
+        No link: the payer validates on his own handset with his own PIN, and
+        the outcome comes back by webhook like any other payment. Fapshi wants
+        the nine local digits, so a "+237" the conversation kept is dropped.
+        """
+        phone = local_mobile_number(payer_phone)
+        if phone is None:
+            raise PaymentGatewayError(
+                "the payer number is not a Cameroonian mobile number",
+                context={"payment_id": body.get("externalId")},
+            )
+        payload = await self._request("POST", "/direct-pay", json={**body, "phone": phone})
+        trans_id = str(payload.get("transId") or "").strip()
+        if not trans_id:
+            raise ExternalServiceUnavailable(
+                "Fapshi accepted the direct payment without returning a transaction id",
+                context={"payment_id": body.get("externalId"), "fields": sorted(payload)},
+            )
+        log.info(
+            "fapshi_direct_pay_requested",
+            payment_id=body.get("externalId"),
+            trans_id=trans_id,
+            amount_xaf=body.get("amount"),
+        )
+        return PaymentInitiation(
+            provider=self.name_id,
+            provider_reference=trans_id,
             link_ttl_seconds=self._settings.link_ttl_seconds,
             raw={"dateInitiated": payload.get("dateInitiated")},
         )
@@ -318,6 +354,22 @@ def _provider_message(response: httpx.Response) -> str:
     if isinstance(body, dict) and body.get("message"):
         return str(body["message"])
     return response.text
+
+
+def local_mobile_number(raw: str) -> str | None:
+    """The nine local digits of a Cameroonian mobile number, or ``None``.
+
+    Accepts what people type and what the conversation stores: "+237 6 58 52
+    86 64", "00237658528664", "658528664".
+    """
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    for prefix in ("00237", "237"):
+        if len(digits) == len(prefix) + 9 and digits.startswith(prefix):
+            digits = digits[len(prefix) :]
+            break
+    if len(digits) == 9 and digits.startswith("6"):
+        return digits
+    return None
 
 
 def _rejected(reason: str) -> VerifiedCallback:
