@@ -89,6 +89,18 @@ class TestBrokenContract:
             IntentResult.from_structured(payload(confidence=value))
 
 
+class TestAnOmittedConfidence:
+    def test_it_is_not_read_as_zero(self) -> None:
+        """Observed live: a correct reading with no confidence field was refused."""
+        body = payload(intent="COLLECT_CHARGES", entities={"charging_policy": "INCLUDED"})
+        del body["confidence"]
+
+        result = IntentResult.from_structured(body)
+
+        assert result.confidence > 0
+        assert result.is_confident
+
+
 class TestValidPayloadsKeepWorking:
     def test_entities_are_carried_through(self) -> None:
         result = IntentResult.from_structured(

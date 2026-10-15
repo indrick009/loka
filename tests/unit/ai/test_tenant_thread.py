@@ -66,6 +66,37 @@ class TestBindingTheTenantsNumber:
         assert self.classify("150000") is None
 
 
+class TestTellingALandlordFromATenant:
+    """Read by the rules alone when the model times out, so they must not flip."""
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Bonjour, j'ai un studio moderne à louer à Douala, je veux le mettre sur Kora",
+            "J'ai une chambre à louer à Biyem-Assi",
+            "Je loue mon appart de 2 chambres à Bastos",
+        ],
+    )
+    def test_a_landlord_offering_is_not_sent_to_the_search(self, text: str) -> None:
+        match = DeterministicClassifier().classify(text, pending=None)
+
+        assert match is not None
+        assert match.intent == "CREATE_PROPERTY"
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "Je cherche un studio à louer à Douala",
+            "Bonsoir mon frère, je cherche un studio moderne à Douala",
+        ],
+    )
+    def test_a_tenant_is_still_a_tenant(self, text: str) -> None:
+        match = DeterministicClassifier().classify(text, pending=None)
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+
+
 class TestReadingSeveralNeighbourhoods:
     """The rules answer a location without a model, so they must keep them all."""
 

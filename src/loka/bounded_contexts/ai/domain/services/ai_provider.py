@@ -85,7 +85,17 @@ class IntentResult:
     def from_structured(
         cls, payload: dict[str, Any], *, language: str = "fr"
     ) -> IntentResult:
-        confidence = _confidence_of(payload.get("confidence", 0.0))
+        # An omitted confidence is "not stated", not "zero". Read as zero it
+        # refused readings the model had right: "eau et électricité comprises
+        # dans le loyer" came back as INCLUDED with no confidence field, the
+        # turn was refused, and the landlord was stuck on the charges question
+        # while the model's own sentences moved through the rest of the form.
+        # The facts it carries are still validated by the domain either way.
+        confidence = (
+            _confidence_of(payload["confidence"])
+            if "confidence" in payload
+            else UNSTATED_CONFIDENCE
+        )
         entities = _entities_of(payload.get("entities"))
         reply = payload.get("reply")
         return cls(
@@ -97,6 +107,9 @@ class IntentResult:
             language=normalise_language(payload.get("language")) or language,
             reply=reply.strip() if isinstance(reply, str) and reply.strip() else None,
         )
+
+
+UNSTATED_CONFIDENCE = 0.75
 
 
 def _confidence_of(raw: Any) -> float:

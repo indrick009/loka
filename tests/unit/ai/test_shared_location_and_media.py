@@ -43,6 +43,9 @@ from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import
     MessageKind,
     SharedLocation,
 )
+from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (
+    ConversationMediaResult,
+)
 from loka.shared.application.unit_of_work import UnitOfWork
 
 pytestmark = pytest.mark.unit
@@ -137,9 +140,11 @@ class FakeListing:
         object_key: str,
         kind: str,
         now: datetime,
-    ) -> bool:
+    ) -> ConversationMediaResult:
         self.attached.append((property_id, object_key, kind))
-        return True
+        return ConversationMediaResult(
+            photos=len(self.attached), published=True, just_published=len(self.attached) == 1
+        )
 
 
 class FakeUow(UnitOfWork):

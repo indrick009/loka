@@ -59,6 +59,10 @@ from loka.bounded_contexts.ai.application.services.deterministic_classifier impo
     ADDS_NEIGHBOURHOODS,
     DeterministicClassifier,
 )
+from loka.bounded_contexts.ai.application.services.listing_recap import (
+    listing_recap_text,
+    photo_received_text,
+)
 from loka.bounded_contexts.ai.application.services.prompts import (
     build_analysis_prompt,
     build_reply_prompt,
@@ -259,7 +263,14 @@ def _inline_reply_fits(
       question the session was not waiting for.
 
     Either way the sentence is dropped and written again against the decision.
+
+    A refused turn is a third way: the model read "Juste un seul" with no
+    confidence, the turn was refused and the quantity kept open, yet its
+    sentence had already moved on to the rent. The landlord's next number
+    would have been filed against a question he no longer thought was open.
     """
+    if not verdict.accepted:
+        return False
     target = _target_flow(session, verdict.intent)
     if _is_search(prompt_flow) is not _is_search(target):
         return False
@@ -586,9 +597,20 @@ class AnalyseConversationMessageUseCase:
         shorthand = self._classifier.shorthand_amount(text)
         if shorthand is not None:
             entities["price"] = shorthand
+        intent = result.intent
+        # A "non" the model read as the bare dialogue act still answers the
+        # open question when that question has exactly one "no": no caution,
+        # neither guard nor parking, a single lodging. Observed live: "Non, ni
+        # gardien ni parking" came back NEGATIVE, nothing was recorded, and the
+        # landlord was asked about "other equipment" until he gave up.
+        denial = (
+            self._classifier.denial_answer(pending_key) if intent == "NEGATIVE" else None
+        )
+        if denial is not None:
+            intent, entities = denial.intent, {**denial.entities, **entities}
         verdict = self._verdict(
             session=session,
-            intent=result.intent,
+            intent=intent,
             confidence=result.confidence,
             entities=entities,
             reason=None,
@@ -722,6 +744,7 @@ class AnalyseConversationMessageUseCase:
         media_kind = "DOCUMENT" if kind is MessageKind.DOCUMENT else "PHOTO"
         property_id = session.assigned_property_id
         reason: str | None = None
+        reply_text: str | None = None
         if self._listing is None or property_id is None:
             reason = "media_without_a_listing"
             _logger.warning(
@@ -732,12 +755,19 @@ class AnalyseConversationMessageUseCase:
             )
         else:
             try:
-                await self._listing.attach_media_from_conversation(
+                attached = await self._listing.attach_media_from_conversation(
                     property_id=property_id,
                     object_key=object_key,
                     kind=media_kind,
                     now=now,
                 )
+                if attached is not None:
+                    reply_text = photo_received_text(
+                        photos=attached.photos,
+                        published=attached.published,
+                        just_published=attached.just_published,
+                        language=session.language,
+                    )
             except DomainError as exc:
                 # The listing refused it — already attached, or past 30 photos.
                 # The turn still happened, and the reason is what tells the
@@ -761,6 +791,7 @@ class AnalyseConversationMessageUseCase:
             cost_usd=Decimal("0"),
             now=now,
             reason=reason,
+            reply_text=reply_text,
         )
 
     async def _without_a_model(
@@ -820,8 +851,13 @@ class AnalyseConversationMessageUseCase:
         cost_usd: Decimal,
         now: datetime,
         reason: str | None = None,
+        reply_text: str | None = None,
     ) -> AnalysisReport:
-        """Close a call that did not reach the model: no reply is written."""
+        """Close a call that did not reach the model.
+
+        No model writes the reply; ``reply_text`` is platform text when the
+        turn has a fact of its own to report, such as a photo just received.
+        """
         return await self._apply(
             session=session,
             message_id=message_id,
@@ -837,6 +873,7 @@ class AnalyseConversationMessageUseCase:
             latency_ms=latency_ms,
             cost_usd=cost_usd,
             now=now,
+            reply_text=reply_text,
         )
 
     def _verdict(
@@ -900,7 +937,9 @@ class AnalyseConversationMessageUseCase:
         if self._response_model is None or not text.strip():
             return None, None
 
-        next_key: str | None = None
+        # A refused turn moved nothing, so the question still open is the one
+        # to ask again — with the rephrase request, never past it.
+        next_key: str | None = _carried_question(session)
         if verdict.accepted:
             next_key = question_to_ask(
                 next_step=verdict.next_step,
@@ -1050,6 +1089,15 @@ class AnalyseConversationMessageUseCase:
             choice_text, next_step = await self._choose_listing(
                 session, facts=facts, next_step=next_step, now=now
             )
+            # The values the landlord is asked to confirm, as stored. Rebuilt
+            # on every turn that lands here, so a correction shows at once.
+            recap_text = (
+                listing_recap_text(
+                    {**_known_facts(session, intent), **facts.as_context()}, session.language
+                )
+                if next_step is FlowStep.CONFIRM_PROPERTY
+                else None
+            )
             # Read before the session moves: it is where he *was* that says his
             # message is a follow-up on a demand already waiting.
             waiting_text = _while_waiting(session, intent=intent, next_step=next_step)
@@ -1070,6 +1118,7 @@ class AnalyseConversationMessageUseCase:
                 or waiting_text
                 or choice_text
                 or listing_text
+                or recap_text
                 or reply_text
             )
         else:

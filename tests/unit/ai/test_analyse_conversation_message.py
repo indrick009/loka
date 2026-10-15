@@ -2102,6 +2102,41 @@ class TestConversationSearch:
             "Logbessou",
         )
 
+    async def test_a_refused_turn_asks_the_open_question_again(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """Observed live: the turn was refused, the quantity stayed open, and
+        the model's own sentence had already moved on to the rent."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_QUANTITY
+        )
+        session.context.update({"property_type": "STUDIO", "next_question": "ask.quantity"})
+        responder = StubResponseModel(text="Je n'ai pas bien compris : combien de logements ?")
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text=AMBIGUOUS_TEXT,
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_QUANTITY",
+                    confidence=0.0,
+                    entities={},
+                    reply="D'accord. Quel loyer demandez-vous ?",
+                )
+            ),
+            response_model=responder,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.accepted is False
+        assert responder.calls == 1
+        assert json.loads(responder.prompts[0].user)["ask_about"] is not None
+        assert "loyer" not in uow.events.staged[0].text
+
     async def test_an_inline_reply_written_for_the_landlord_form_is_rewritten(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:

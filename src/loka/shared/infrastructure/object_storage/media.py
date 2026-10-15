@@ -72,6 +72,32 @@ class S3MediaStorage:
             config=Config(signature_version="s3v4", retries={"max_attempts": 3}),
         )
 
+    async def ensure_bucket(self) -> bool:
+        """Create the bucket when it is missing. ``True`` if it was created.
+
+        Nothing else created it: a fresh MinIO started empty, every upload
+        failed with NoSuchBucket, and a landlord's photos — the step that makes
+        a listing publishable — were answered with a 503 the gateway retried in
+        vain. Any other failure (no permission on a managed bucket, storage
+        down) is left to the first upload to report.
+        """
+        import asyncio
+
+        bucket = self._settings.bucket
+        try:
+            await asyncio.to_thread(self._client.head_bucket, Bucket=bucket)
+            return False
+        except ClientError as exc:
+            code = str(exc.response.get("Error", {}).get("Code", ""))
+            if code not in {"404", "NoSuchBucket", "NotFound"}:
+                raise MediaStoreError(f"cannot check bucket {bucket}: {exc}") from exc
+        try:
+            await asyncio.to_thread(self._client.create_bucket, Bucket=bucket)
+        except ClientError as exc:
+            raise MediaStoreError(f"cannot create bucket {bucket}: {exc}") from exc
+        _logger.info("media_bucket_created", bucket=bucket)
+        return True
+
     async def put(
         self,
         data: bytes,

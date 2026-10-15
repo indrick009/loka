@@ -64,6 +64,20 @@ class ConversationListingResult:
     missing: tuple[str, ...]
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationMediaResult:
+    """What a photo did to the listing, so the reply can say it.
+
+    Without it every photo was answered "envoyez les photos, elles sont
+    indispensables pour publier" — even the photo that had just published the
+    listing — and the landlord concluded his photos were not arriving.
+    """
+
+    photos: int
+    published: bool
+    just_published: bool
+
+
 class CreatePropertyFromConversationUseCase:
     name = "create_property_from_conversation"
 
@@ -129,7 +143,7 @@ class CreatePropertyFromConversationUseCase:
         object_key: str,
         kind: str,
         now: datetime,
-    ) -> bool:
+    ) -> ConversationMediaResult | None:
         """Attach a stored object to the draft, if the draft is still there.
 
         The bytes are already in object storage and already checksummed by the
@@ -137,14 +151,15 @@ class CreatePropertyFromConversationUseCase:
         would confirm it, and leaving it ``PENDING_UPLOAD`` would make a photo
         the landlord has sent not count towards publication.
 
-        ``False`` when the draft is gone. A refusal by the aggregate — the same
+        ``None`` when the draft is gone. A refusal by the aggregate — the same
         object twice, or the thirtieth photo — propagates, because the landlord
         should be told why his photo did not count.
         """
         properties: PropertyRepository = self._uow.repository("property")
         prop = await properties.get(property_id)
         if prop is None:
-            return False
+            return None
+        was_published = prop.status is PropertyStatus.AVAILABLE
 
         media = PropertyMedia(
             media_id=new_id(),
@@ -159,7 +174,12 @@ class CreatePropertyFromConversationUseCase:
             prop.publish(now=now)
         await properties.save(prop)
         self._uow.collect(prop)
-        return True
+        published = prop.status is PropertyStatus.AVAILABLE
+        return ConversationMediaResult(
+            photos=len(prop.usable_photos()),
+            published=published,
+            just_published=published and not was_published,
+        )
 
 
 def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> None:

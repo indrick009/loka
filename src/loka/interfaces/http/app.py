@@ -65,12 +65,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # transport can retry, not take the whole API down with it.
         broker = Broker(resolved.broker)
         container.broker = broker
-        container.media_storage = S3MediaStorage(resolved.object_storage)
+        media_storage = S3MediaStorage(resolved.object_storage)
+        container.media_storage = media_storage
         try:
             await broker.connect()
             await broker.declare_topology()
         except Exception as exc:  # pragma: no cover - depends on broker uptime
             logger.warning("api_broker_unavailable", error=str(exc))
+        # Same rule as the broker: storage that is down right now degrades the
+        # media upload to a 503, it does not keep the API from starting.
+        try:
+            await media_storage.ensure_bucket()
+        except Exception as exc:  # pragma: no cover - depends on storage uptime
+            logger.warning("api_media_bucket_unavailable", error=str(exc))
         logger.info(
             "api_started",
             environment=resolved.environment,

@@ -218,15 +218,21 @@ ACQUISITION_SOURCE_PATTERNS: dict[str, re.Pattern[str]] = {
 LISTING_INTENT_PATTERN = re.compile(
     r"\b(je\s+(?:voudrais|souhaite|veux|dois|ai)\s+"
     r"(?:publier|mettre\s+en\s+ligne|vendre|proposer)|"
-    r"annonce[er]?|je\s+propose|disponible\s+a\s+louer)\b",
+    # "je veux le mettre sur Kora" — the pronoun is the lodging he has just
+    # named; read as "je veux ..." it sent a landlord to the tenant's form.
+    r"je\s+(?:voudrais|souhaite|veux)\s+(?:le|la|les)\s+(?:mettre|publier|proposer)|"
+    r"annonce[er]?|je\s+propose|disponible\s+[aà]\s+louer)\b",
     re.I,
 )
 
 # "Je louer mon studio" is a landlord naming the home they own. The possessive
 # before a property noun is the one unambiguous marker of ownership in a phrase
 # where "louer" alone reads as a tenant ("je loue un studio").
+# "J'ai un studio à louer" says it as plainly as "mon studio": having one is
+# owning one. A tenant "a besoin d'un studio"; he does not "have" one.
 _LANDLORD_OWNERSHIP_PATTERN = re.compile(
-    r"\b(?:mon|ma|mes)\s+(?:appartements?|apparts?|studios?|maisons?|villas?|"
+    r"\b(?:mon|ma|mes|j\s*'?\s*ai\s+(?:un|une|des|deux|trois|\d+))\s+"
+    r"(?:appartements?|apparts?|studios?|maisons?|villas?|"
     r"chambres?|duplex(?:e?s?)?|lofts?|locaux|bureaux?|immeubles?|terrains?|"
     r"parcelles?|pi[eè]ces?|sbg)\b",
     re.I,
@@ -306,6 +312,11 @@ _ONE_ONLY = frozenset(
         "juste une",
         "un seulement",
         "un seul logement",
+        "juste un seul",
+        "juste une seule",
+        "seulement un",
+        "seulement une",
+        "un seul seulement",
         "one",
         "just one",
         "only one",
@@ -545,6 +556,19 @@ class DeterministicClassifier:
         if pending is None and normalized in GREETINGS:
             return DeterministicMatch(intent="SUPPORT", confidence=0.9)
         return None
+
+    @staticmethod
+    def denial_answer(pending: str | None) -> DeterministicMatch | None:
+        """What a "no" means as the answer to the open question, if one thing.
+
+        For callers that already know the message is a refusal — the model
+        said NEGATIVE — and only need the value it gives the question.
+        """
+        meaning = _NO_MEANS.get(pending or "")
+        if meaning is None:
+            return None
+        intent, entities = meaning
+        return DeterministicMatch(intent=intent, confidence=0.95, entities=dict(entities))
 
     @staticmethod
     def _no_to_a_form_question(
