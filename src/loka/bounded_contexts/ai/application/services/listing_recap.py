@@ -287,7 +287,7 @@ def listing_recap_text(facts: Mapping[str, Any], language: str) -> str:
         district = str(location.get("neighbourhood") or "").strip()
         # Observed live: "tu as retenu la localisation ?" — the recap read
         # "Yaoundé" and nothing said the exact spot he shared was kept.
-        pinned = location.get("latitude") is not None
+        pinned = location.get("latitude") is not None and not location.get("approximate")
         lines.append(
             f"- {district + ', ' if district else ''}{location['city']}"
             + (words["pinned"] if pinned else "")

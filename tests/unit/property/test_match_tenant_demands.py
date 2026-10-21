@@ -278,6 +278,8 @@ class TestAPublicationFindsTheDemandsWaiting:
                 "city": "Yaoundé",
                 "neighbourhood": "Jouvence",
                 "rent_xaf": 40_000,
+                "latitude": None,
+                "longitude": None,
                 "photo_object_keys": [],
             }
         ]
@@ -388,3 +390,72 @@ class TestADemandFindsWhatIsAlreadyPublished:
 
         assert await use_case.for_demand(demand.id, now=NOW) == 0
         assert search.criteria is None
+
+
+
+class _NothingExact(FakeSearch):
+    """The catalogue holds only a near miss: the exact search finds nothing."""
+
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        super().__init__(items)
+        self.calls: list[PropertySearchCriteria] = []
+
+    async def search(
+        self, criteria: PropertySearchCriteria, *, cursor: str | None = None, limit: int = 20
+    ) -> PropertySearchResult:
+        self.calls.append(criteria)
+        items = self.items if len(self.calls) > 1 else []
+        return PropertySearchResult(items=items[:limit], next_cursor=None)
+
+
+class TestAGapIsProposedAsAGap:
+    """§8: a little dearer or a little further is proposed, and said so."""
+
+    def test_a_rent_a_little_above_is_tolerated_not_accepted(self) -> None:
+        listing = {
+            "property_type": "STUDIO",
+            "city": "Yaoundé",
+            "neighbourhood": "Jouvence",
+            "rent_xaf": 50_000,  # 45 000 asked: +11 %
+        }
+        assert not a_demand().accepts(**listing)
+        assert a_demand().tolerates(**listing)
+        assert not a_demand().tolerates(**{**listing, "rent_xaf": 55_000})  # +22 %
+
+    def test_a_typed_district_measures_a_gap_but_never_widens_a_match(self) -> None:
+        demand = a_demand(neighbourhoods=("Odza",))
+        demand.near, demand.near_exact = ODZA, False
+
+        assert not demand.is_around(neighbourhood="Ekounou", point=NEAR_ODZA)
+        assert demand.tolerates(
+            property_type="STUDIO",
+            city="Yaoundé",
+            neighbourhood="Ekounou",
+            rent_xaf=45_000,
+            point=NEAR_ODZA,
+        )
+
+    async def test_nothing_exact_falls_back_to_a_wider_search_marked_as_gaps(self) -> None:
+        demand = a_demand(neighbourhoods=("Odza",))
+        demand.near, demand.near_exact = ODZA, False
+        hit = {
+            "property_id": str(uuid.uuid4()),
+            "type": "STUDIO",
+            "city": "Yaoundé",
+            "neighbourhood": "Ekounou",
+            "price_xaf": 50_000,
+            "latitude": NEAR_ODZA[0],
+            "longitude": NEAR_ODZA[1],
+        }
+        search = _NothingExact([hit])
+        uow = FakeUnitOfWork(FakeDemands(demand), FakeProperties(), search)
+
+        proposed = await MatchTenantDemandsUseCase(uow).for_demand(demand.id, now=NOW)
+
+        assert proposed == 1
+        exact, wider = search.calls
+        assert exact.near is None  # a district's centre never widens a match
+        assert wider.near == ODZA and wider.near_radius_km == 6.0
+        assert wider.max_price_xaf == int(45_000 * 1.15)
+        gap = answered_proposals(demand)[0]["gap"]
+        assert gap == {"over_budget_xaf": 5_000, "distance_km": 1.3}

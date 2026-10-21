@@ -39,7 +39,10 @@ from loka.bounded_contexts.property.domain.entities.property_media import (
     MediaKind,
     MediaStatus,
 )
-from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
+from loka.bounded_contexts.property.domain.entities.tenant_demand import (
+    GAP_RADIUS_KM,
+    TenantDemand,
+)
 from loka.bounded_contexts.property.domain.repositories.property_repository import (
     TenantDemandRepository,
 )
@@ -74,6 +77,11 @@ class MatchTenantDemandsUseCase:
         result = await search.search(_criteria(demand), limit=MAX_PROPOSALS)
         proposals = [_from_search(item) for item in result.items]
         if not proposals:
+            # Nothing exact: the gaps §8 allows — a little dearer, a little
+            # further — each proposed with what differs, never as a match.
+            result = await search.search(_criteria(demand, gap=True), limit=MAX_PROPOSALS)
+            proposals = [_as_gap(demand, _from_search(item)) for item in result.items]
+        if not proposals:
             return 0
 
         demand.mark_answered(now=now, proposals=proposals)
@@ -101,15 +109,20 @@ class MatchTenantDemandsUseCase:
         demands: TenantDemandRepository = self._uow.repository("tenant_demand")
         answered = 0
         for demand in await demands.open_demands(limit=MAX_OPEN_DEMANDS):
-            if not demand.accepts(
-                property_type=proposal["property_type"],
-                city=proposal["city"],
-                neighbourhood=proposal["neighbourhood"],
-                rent_xaf=proposal["rent_xaf"],
-                point=_point(prop),
-            ):
+            criteria = {
+                "property_type": proposal["property_type"],
+                "city": proposal["city"],
+                "neighbourhood": proposal["neighbourhood"],
+                "rent_xaf": proposal["rent_xaf"],
+                "point": _point(prop),
+            }
+            if demand.accepts(**criteria):
+                offered = proposal
+            elif demand.tolerates(**criteria):
+                offered = _as_gap(demand, proposal)
+            else:
                 continue
-            demand.mark_answered(now=now, proposals=[proposal])
+            demand.mark_answered(now=now, proposals=[offered])
             await demands.save(demand)
             self._uow.collect(demand)
             answered += 1
@@ -125,8 +138,10 @@ class MatchTenantDemandsUseCase:
         return answered
 
 
-def _criteria(demand: TenantDemand) -> PropertySearchCriteria:
-    band = demand.price_band()
+def _criteria(demand: TenantDemand, *, gap: bool = False) -> PropertySearchCriteria:
+    band = demand.gap_band() if gap else demand.price_band()
+    # Only a real pin widens an exact match; any point measures a gap.
+    near = demand.near if gap or demand.near_exact else None
     return PropertySearchCriteria(
         city=demand.city,
         neighbourhoods=demand.neighbourhoods,
@@ -136,7 +151,8 @@ def _criteria(demand: TenantDemand) -> PropertySearchCriteria:
         near_price_xaf=demand.max_rent.amount if demand.max_rent else None,
         verified_only=False,
         sort="price_nearest" if band else "recent",
-        near=demand.near,
+        near=near,
+        near_radius_km=GAP_RADIUS_KM if gap else 3.0,
     )
 
 
@@ -148,6 +164,8 @@ def _from_search(item: dict[str, Any]) -> dict[str, Any]:
         "city": item.get("city"),
         "neighbourhood": item.get("neighbourhood") or None,
         "rent_xaf": item.get("price_xaf"),
+        "latitude": item.get("latitude"),
+        "longitude": item.get("longitude"),
         # The photos the listing was published with, in order, so the tenant is
         # shown the lodging and not just a line of text about it.
         "photo_object_keys": [str(key) for key in keys] if isinstance(keys, list) else [],
@@ -163,8 +181,17 @@ def _from_listing(prop: Property) -> dict[str, Any]:
         "city": location.city if location else None,
         "neighbourhood": (location.neighbourhood or None) if location else None,
         "rent_xaf": price.amount if price else None,
+        "latitude": point[0] if (point := _point(prop)) else None,
+        "longitude": point[1] if point else None,
         "photo_object_keys": _photo_object_keys(prop),
     }
+
+
+def _as_gap(demand: TenantDemand, proposal: dict[str, Any]) -> dict[str, Any]:
+    """A proposal marked with how it differs from what he asked for."""
+    latitude, longitude = proposal.get("latitude"), proposal.get("longitude")
+    point = (latitude, longitude) if latitude is not None and longitude is not None else None
+    return {**proposal, "gap": demand.gap_with(rent_xaf=proposal.get("rent_xaf"), point=point)}
 
 
 def _point(prop: Property) -> tuple[float, float] | None:

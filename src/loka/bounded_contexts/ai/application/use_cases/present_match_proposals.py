@@ -27,6 +27,7 @@ from loka.bounded_contexts.ai.application.services.match_proposals import (
     match_proposal_line,
     match_proposals_text,
 )
+from loka.bounded_contexts.ai.domain.knowledge.places import nearest_district
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -105,7 +106,9 @@ class PresentMatchProposalsUseCase:
                 recipient_phone=session.phone.e164,
                 reply_kind="QUESTION",
                 question_key=CHOICE_QUESTION_KEY,
-                text=match_proposals_text(shown, session.language),
+                text=match_proposals_text(
+                    shown, session.language, tenant_district=_tenant_district(session)
+                ),
                 intent="DEMAND_MATCHED",
                 language=session.language,
             )
@@ -173,3 +176,17 @@ class PresentMatchProposalsUseCase:
                     )
                 )
         return events
+
+
+def _tenant_district(session: ConversationSession) -> str | None:
+    """Where he wants to live: the district he named, else the one his pin is in."""
+    location = session.context.get("location")
+    if not isinstance(location, dict):
+        return None
+    named = location.get("neighbourhood")
+    if isinstance(named, str) and named.strip():
+        return named.strip()
+    latitude, longitude = location.get("latitude"), location.get("longitude")
+    if isinstance(latitude, int | float) and isinstance(longitude, int | float):
+        return nearest_district(latitude, longitude)
+    return None

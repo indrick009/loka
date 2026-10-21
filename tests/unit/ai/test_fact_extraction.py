@@ -36,6 +36,18 @@ def extractor() -> FactExtractor:
     return FactExtractor()
 
 
+
+def _named(location: object) -> object:
+    """The place as named, without the centre a district carries."""
+    if not isinstance(location, dict):
+        return location
+    return {
+        key: value
+        for key, value in location.items()
+        if key not in ("latitude", "longitude", "approximate")
+    }
+
+
 class TestAcceptedFacts:
     def test_a_plausible_rent_is_kept(self, extractor: FactExtractor) -> None:
         facts = extractor.validate({"price": 250_000})
@@ -55,7 +67,7 @@ class TestAcceptedFacts:
     def test_a_city_builds_a_location(self, extractor: FactExtractor) -> None:
         facts = extractor.validate({"city": "Douala", "neighbourhood": " Bonapriso "})
 
-        assert facts.get("location") == {"city": "Douala", "neighbourhood": "Bonapriso"}
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Bonapriso"}
 
     def test_a_standing_is_kept_from_either_spelling(
         self, extractor: FactExtractor
@@ -116,7 +128,7 @@ class TestRefusedFacts:
             }
         )
 
-        assert facts.get("location") == {
+        assert _named(facts.get("location")) == {
             "city": "Douala",
             "neighbourhood": "Bonamoussadi",
             "neighbourhoods": ["Bonamoussadi", "Makepe"],
@@ -162,21 +174,21 @@ class TestLocationHint:
         Yaoundé, so the location question can actually close."""
         facts = extractor.validate({"location_hint": "Bastos"})
 
-        assert facts.get("location") == {"city": "Yaoundé", "neighbourhood": "Bastos"}
+        assert _named(facts.get("location")) == {"city": "Yaoundé", "neighbourhood": "Bastos"}
 
     def test_a_bare_neighbourhood_without_a_city_resolves(
         self, extractor: FactExtractor
     ) -> None:
         facts = extractor.validate({"neighbourhood": "Bonapriso"})
 
-        assert facts.get("location") == {"city": "Douala", "neighbourhood": "Bonapriso"}
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Bonapriso"}
 
     def test_an_accented_neighbourhood_matches(
         self, extractor: FactExtractor
     ) -> None:
         facts = extractor.validate({"neighbourhood": "Deido"})
 
-        assert facts.get("location") == {"city": "Douala", "neighbourhood": "Deido"}
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Deido"}
 
     def test_a_vague_hint_is_refused(self, extractor: FactExtractor) -> None:
         facts = extractor.validate({"location_hint": "-"})
@@ -417,6 +429,30 @@ class TestTenantSearchForm:
         step = extractor.next_step("SUPPORT", facts, flow=FlowName.PROPERTY_SEARCH)
 
         assert step is None
+
+
+class TestADistrictHasAPlaceOnTheMap:
+    """The offline OpenStreetMap gazetteer gives each half its other half."""
+
+    def test_a_typed_district_carries_its_centre_marked_approximate(
+        self, extractor: FactExtractor
+    ) -> None:
+        location = extractor.validate({"city": "Yaoundé", "neighbourhood": "Odza"}).get(
+            "location"
+        )
+
+        assert location["approximate"] is True
+        assert location["latitude"] == pytest.approx(3.7986, abs=0.01)
+
+    def test_a_pin_with_no_name_is_named_after_the_nearest_district(
+        self, extractor: FactExtractor
+    ) -> None:
+        location = extractor.validate({"latitude": 3.7905, "longitude": 11.5370}).get(
+            "location"
+        )
+
+        assert location["neighbourhood"] == "Odza"
+        assert "approximate" not in location
 
 
 class TestTheLocationStep:

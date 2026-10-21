@@ -42,6 +42,12 @@ BUDGET_UPPER_TOLERANCE = 0.05
 # district boundary means nothing to him: three kilometres is a short moto ride.
 NEAR_RADIUS_KM = 3.0
 
+# §8's "écart": when nothing matches exactly, a lodging a little dearer or a
+# little further is still worth proposing — said as such, never passed off as a
+# match, so the tenant decides whether he can consider it.
+GAP_UPPER_TOLERANCE = 0.15
+GAP_RADIUS_KM = 6.0
+
 _EARTH_RADIUS_KM = 6371.0
 
 Point = tuple[float, float]
@@ -72,6 +78,7 @@ class TenantDemand(AggregateRoot):
         "demand_id",
         "max_rent",
         "near",
+        "near_exact",
         "neighbourhoods",
         "property_type",
         "received_at",
@@ -91,6 +98,7 @@ class TenantDemand(AggregateRoot):
         max_rent: Money | None,
         now: datetime,
         near: Point | None = None,
+        near_exact: bool = True,
     ) -> None:
         super().__init__(aggregate_type="TenantDemand")
         self._assign_id(demand_id)
@@ -100,8 +108,11 @@ class TenantDemand(AggregateRoot):
         self.city = city
         self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
-        # The WhatsApp location he shared, when he shared one.
+        # The WhatsApp location he shared, or the centre of the district he
+        # typed (``near_exact`` False). Only a real pin widens an exact match;
+        # a district's centre only measures how far a gap is.
         self.near = near
+        self.near_exact = near_exact
         self.status = DemandStatus.OPEN
         self.received_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
@@ -126,6 +137,7 @@ class TenantDemand(AggregateRoot):
         max_rent: Money | None,
         now: datetime,
         near: Point | None = None,
+        near_exact: bool = True,
     ) -> None:
         """He sharpened what he is after; it is still the same request.
 
@@ -143,6 +155,7 @@ class TenantDemand(AggregateRoot):
         self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
         self.near = near
+        self.near_exact = near_exact
         self.updated_at = ensure_utc(now)
         self.record(
             "TenantDemandRestated",
@@ -228,11 +241,56 @@ class TenantDemand(AggregateRoot):
         """
         if neighbourhood is not None and neighbourhood in self.neighbourhoods:
             return True
-        if self.near is not None:
+        if self.near is not None and self.near_exact:
             if point is not None:
                 return distance_km(self.near, point) <= NEAR_RADIUS_KM
             return not self.neighbourhoods
         return not self.neighbourhoods
+
+    def tolerates(
+        self,
+        *,
+        property_type: str | None,
+        city: str | None,
+        neighbourhood: str | None,
+        rent_xaf: int | None,
+        point: Point | None = None,
+    ) -> bool:
+        """Whether a lodging is close enough to be proposed as a gap (§8).
+
+        Same type and city, rent up to ``GAP_UPPER_TOLERANCE`` above his
+        budget, and within ``GAP_RADIUS_KM`` of where he wants to live. A
+        lodging with no position, or a demand with no point, is held to the
+        districts he named — distance cannot be measured, so it is not guessed.
+        """
+        if not self.is_answerable or city != self.city:
+            return False
+        if self.property_type and property_type != self.property_type:
+            return False
+        band = self.gap_band()
+        if band is not None and (rent_xaf is None or not band[0] <= rent_xaf <= band[1]):
+            return False
+        if neighbourhood is not None and neighbourhood in self.neighbourhoods:
+            return True
+        if self.near is not None and point is not None:
+            return distance_km(self.near, point) <= GAP_RADIUS_KM
+        return not self.neighbourhoods and self.near is None
+
+    def gap_band(self) -> tuple[int, int] | None:
+        """The rent range a gap may fall in: the usual floor, a wider ceiling."""
+        band = self.price_band()
+        if band is None or self.max_rent is None:
+            return None
+        return band[0], int(self.max_rent.amount * (1 + GAP_UPPER_TOLERANCE))
+
+    def gap_with(self, *, rent_xaf: int | None, point: Point | None) -> dict[str, Any]:
+        """How a lodging differs from what he asked, in the words he will read."""
+        gap: dict[str, Any] = {}
+        if self.max_rent is not None and rent_xaf is not None and rent_xaf > self.max_rent.amount:
+            gap["over_budget_xaf"] = rent_xaf - self.max_rent.amount
+        if self.near is not None and point is not None:
+            gap["distance_km"] = round(distance_km(self.near, point), 1)
+        return gap
 
     def withdraw(self, *, reason: str, now: datetime) -> None:
         """He is no longer looking. Not an answer, and not a failure either."""

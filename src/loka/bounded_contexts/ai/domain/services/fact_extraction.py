@@ -16,6 +16,10 @@ from datetime import date, datetime
 from typing import Any
 
 from loka.bounded_contexts.ai.domain.knowledge import market
+from loka.bounded_contexts.ai.domain.knowledge.places import (
+    district_centre,
+    nearest_district,
+)
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
@@ -475,6 +479,12 @@ class FactExtractor:
             raise ValidationFailed(
                 "no city was extracted", context={"entities": sorted(entities)}
             )
+        if not neighbourhood_text and coordinates is not None:
+            # A pin with no place name: the nearest known district names it,
+            # so a tenant reads "Studio - Odza" rather than "Studio - Yaoundé".
+            neighbourhood_text = (
+                nearest_district(coordinates.latitude, coordinates.longitude) or ""
+            )
         location = Location(
             city=city,
             neighbourhood=neighbourhood_text or None,
@@ -494,6 +504,13 @@ class FactExtractor:
             # exact, and dropping it here would throw that away at the last step.
             built["latitude"] = location.coordinates.latitude
             built["longitude"] = location.coordinates.longitude
+        elif location.neighbourhood:
+            # A typed district carries its centre, marked approximate: enough
+            # to measure a gap ("à 5 km d'Odza"), never mistaken for a pin.
+            centre = district_centre(location.neighbourhood, city=location.city)
+            if centre is not None:
+                built["latitude"], built["longitude"] = centre
+                built["approximate"] = True
         return built
 
 

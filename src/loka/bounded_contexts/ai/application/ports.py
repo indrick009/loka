@@ -230,8 +230,10 @@ class ConversationSearchQuery:
     property_types: tuple[str, ...] = ()
     budget_xaf: int | None = None
     min_bedrooms: int | None = None
-    # The WhatsApp location he shared from where he wants to live.
+    # The WhatsApp location he shared from where he wants to live, or the
+    # centre of the district he typed when ``near_exact`` is false.
     near: tuple[float, float] | None = None
+    near_exact: bool = True
 
 
 @dataclass(frozen=True, slots=True)

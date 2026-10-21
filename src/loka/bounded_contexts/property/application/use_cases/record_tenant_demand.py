@@ -35,8 +35,10 @@ class RecordTenantDemandCommand:
     city: str | None = None
     neighbourhoods: tuple[str, ...] = ()
     max_rent_xaf: int | None = None
-    # The (latitude, longitude) he shared from where he wants to live.
+    # The (latitude, longitude) he shared from where he wants to live, or the
+    # centre of the district he typed when ``near_exact`` is false.
     near: tuple[float, float] | None = None
+    near_exact: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,6 +76,7 @@ class RecordTenantDemandUseCase:
                 max_rent=max_rent,
                 now=now,
                 near=command.near,
+                near_exact=command.near_exact,
             )
             await demands.save(existing)
             self._uow.collect(existing)
@@ -89,6 +92,7 @@ class RecordTenantDemandUseCase:
             max_rent=max_rent,
             now=now,
             near=command.near,
+            near_exact=command.near_exact,
         )
         try:
             await demands.add(demand)

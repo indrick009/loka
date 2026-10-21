@@ -284,9 +284,11 @@ class TenantDemandRow(Base):
     neighbourhoods: Mapped[list[str]] = mapped_column(
         ARRAY(String(96)), nullable=False, default=list
     )
-    # The WhatsApp location he shared from where he wants to live, if any.
+    # The WhatsApp location he shared from where he wants to live, or the
+    # centre of the district he typed (``near_is_exact`` false).
     latitude: Mapped[float | None] = mapped_column(nullable=True)
     longitude: Mapped[float | None] = mapped_column(nullable=True)
+    near_is_exact: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

@@ -31,6 +31,7 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     PHOTO_BURST_SECONDS,
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
+    _confirms_the_summary,
     _is_a_question,
     _keeping_the_place,
 )
@@ -613,3 +614,26 @@ class TestWhatTheLiveTestShowed:
 
         assert model.calls == 0
         assert uow.events.staged[0].answering == "2"
+
+
+class TestAPlainYesToTheSummary:
+    """Observed live: "oui c'est bon publie" came back CREATE_PROPERTY."""
+
+    @pytest.mark.parametrize(
+        "text", ["oui c'est bon publie", "Ok vas-y", "c'est bon", "Oui", "d'accord publie"]
+    )
+    def test_a_plain_yes_confirms(self, text: str) -> None:
+        assert _confirms_the_summary(text)
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "oui mais le loyer c'est 45 mil",
+            "non attends",
+            "oui ?",
+            "Tu as retenu la localisation ?",
+            "je me suis trompé",
+        ],
+    )
+    def test_a_yes_with_a_but_or_a_question_does_not(self, text: str) -> None:
+        assert not _confirms_the_summary(text)

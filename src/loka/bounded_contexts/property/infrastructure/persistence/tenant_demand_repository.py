@@ -100,6 +100,7 @@ def _to_row(demand: TenantDemand) -> dict[str, Any]:
         "neighbourhoods": list(demand.neighbourhoods),
         "latitude": demand.near[0] if demand.near else None,
         "longitude": demand.near[1] if demand.near else None,
+        "near_is_exact": demand.near_exact,
         "max_rent_xaf": demand.max_rent.amount if demand.max_rent else None,
         "currency": demand.max_rent.currency if demand.max_rent else "XAF",
         "received_at": demand.received_at,
@@ -124,6 +125,7 @@ def _from_row(row: TenantDemandRow) -> TenantDemand:
             if row.latitude is not None and row.longitude is not None
             else None
         ),
+        near_exact=row.near_is_exact,
     )
     demand.pull_events()
     demand.status = DemandStatus(row.status)

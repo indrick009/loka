@@ -1444,7 +1444,8 @@ class TestSessionAdvancement:
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert session.context["location"] == {"city": "Yaoundé", "neighbourhood": "Bastos"}
+        assert session.context["location"]["neighbourhood"] == "Bastos"
+        assert session.context["location"]["city"] == "Yaoundé"
         assert report.next_step == "COLLECT_PRICE"
 
     async def test_the_revision_is_bumped_when_state_moves(
@@ -1831,6 +1832,10 @@ class TestSingleCallReply:
         assert "next_question" not in payload["conversation"]["known_facts"]
 
 
+# Where the gazetteer puts Bastos: a typed district carries its centre.
+BASTOS_CENTRE = (3.894, 11.5107)
+
+
 class StubSearch:
     """The catalogue behind the port: what it was asked, and what it holds."""
 
@@ -1904,6 +1909,8 @@ class TestConversationSearch:
                     neighbourhoods=("Bastos",),
                     property_types=("APARTMENT",),
                     budget_xaf=180_000,
+                    near=BASTOS_CENTRE,
+                    near_exact=False,
                 ),
             )
         ]
@@ -2142,6 +2149,8 @@ class TestConversationSearch:
                 neighbourhoods=("Bastos",),
                 property_types=("APARTMENT",),
                 budget_xaf=150_000,
+                near=BASTOS_CENTRE,
+                near_exact=False,
             )
         ]
         assert session.step is FlowStep.AWAITING_MATCH

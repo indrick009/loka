@@ -304,6 +304,7 @@ def search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
         budget_xaf=_optional_amount(rent),
         min_bedrooms=_optional_amount(bedrooms, minimum=1),
         near=_point(location),
+        near_exact=not location.get("approximate"),
     )
 
 

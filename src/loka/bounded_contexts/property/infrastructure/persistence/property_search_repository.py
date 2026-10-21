@@ -227,6 +227,8 @@ class PropertySearchRepository:
             "type": row.property_type,
             "city": row.city,
             "neighbourhood": row.neighbourhood,
+            "latitude": row.latitude,
+            "longitude": row.longitude,
             "price_xaf": row.public_price_xaf,
             "rent_xaf": row.rent_xaf,
             "charges_xaf": row.charges_xaf,

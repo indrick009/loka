@@ -44,7 +44,7 @@ class ConversationPropertySearch:
             neighbourhoods=query.neighbourhoods,
             property_types=query.property_types,
             min_bedrooms=query.min_bedrooms,
-            near=query.near,
+            near=query.near if query.near_exact else None,
         )
         if query.budget_xaf is not None:
             low, high = budget_band(query.budget_xaf)

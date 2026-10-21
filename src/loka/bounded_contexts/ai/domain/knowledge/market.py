@@ -102,7 +102,7 @@ NEIGHBOURHOODS: tuple[Neighbourhood, ...] = (
     Neighbourhood("Bali", "Douala", "njikam"),
     Neighbourhood("Cité des Palmiers", "Douala", "njikam"),
     Neighbourhood("Makepe", "Douala", "apparts"),
-    Neighbourhood("Mvan", "Douala", "apparts"),
+    Neighbourhood("Mvan", "Yaoundé", "apparts"),  # OSM: 3.82, 11.52 — south Yaoundé
     Neighbourhood("Logbessou", "Douala", "apparts"),
     Neighbourhood("Ndokotti", "Douala", "njikam"),
     Neighbourhood("Kotto", "Douala", "njikam"),

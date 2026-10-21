@@ -221,3 +221,34 @@ class TestTheMessage:
 
         assert "I found 2 places" in text
         assert "40 000 FCFA/month" in text
+
+
+
+class TestAGapIsSaid:
+    """A near miss is never passed off as a match (§8)."""
+
+    def test_the_list_says_nothing_matched_and_what_differs(self) -> None:
+        ekounou = {
+            **JOUVENCE,
+            "neighbourhood": "Ekounou",
+            "rent_xaf": 65_000,
+            "gap": {"over_budget_xaf": 5_000, "distance_km": 4.8},
+        }
+
+        text = match_proposals_text([ekounou], "fr", tenant_district="Odza")
+
+        assert text.startswith("Je n'ai rien trouvé qui corresponde exactement")
+        assert "(5 000 FCFA au-dessus de votre budget, à 4,8 km d'Odza)" in text
+        assert "Pouvez-vous l'envisager ?" in text
+
+    def test_the_same_district_is_said_as_such(self) -> None:
+        odza = {**JOUVENCE, "neighbourhood": "Odza", "gap": {"over_budget_xaf": 3_000}}
+
+        text = match_proposals_text([odza], "fr", tenant_district="Odza")
+
+        assert "(3 000 FCFA au-dessus de votre budget, dans le même quartier)" in text
+
+    def test_a_pin_only_lodging_is_named_after_its_district(self) -> None:
+        pinned = {**JOUVENCE, "neighbourhood": None, "latitude": 3.7905, "longitude": 11.5370}
+
+        assert "Studio - Odza, Yaoundé" in match_proposals_text([pinned], "fr")

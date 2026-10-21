@@ -369,6 +369,24 @@ def _is_a_question(text: str | None) -> bool:
     return stripped.endswith("?") or stripped.startswith(_QUESTION_OPENINGS)
 
 
+CONFIRM_QUESTION_KEY = "ask.confirm_property"
+
+_AFFIRMATIONS = ("oui", "ok", "okay", "d'accord", "dac", "c'est bon", "vas y", "vas-y",
+                 "publie", "go", "yes", "yep", "valide", "confirme", "exact", "parfait")
+_HESITATIONS = ("non", "pas ", "attends", "attend ", "corrige", "change", "modifie",
+                "erreur", "trompé", "trompe", "mais ")
+
+
+def _confirms_the_summary(text: str | None) -> bool:
+    """A plain yes to "confirmez-vous la publication ?", with no "but" in it."""
+    stripped = (text or "").strip().casefold()
+    if not stripped or _is_a_question(stripped):
+        return False
+    if any(word in stripped for word in _HESITATIONS):
+        return False
+    return stripped.startswith(_AFFIRMATIONS)
+
+
 def _is_search(flow: FlowName) -> bool:
     """Which form a prompt shows: the tenant's search, or the landlord's.
 
@@ -739,6 +757,7 @@ class AnalyseConversationMessageUseCase:
                 hint=shortcut,
                 intent=shortcut.intent,
                 entities=dict(shortcut.entities),
+                text=text,
             )
             return await self._finish(
                 session=session,
@@ -833,7 +852,7 @@ class AnalyseConversationMessageUseCase:
             entities["price"] = shorthand
         intent = result.intent
         intent, entities = self._read_open_question(
-            pending_key=pending_key, hint=hint, intent=intent, entities=entities
+            pending_key=pending_key, hint=hint, intent=intent, entities=entities, text=text
         )
         verdict = self._verdict(
             session=session,
@@ -1206,6 +1225,7 @@ class AnalyseConversationMessageUseCase:
         hint: DeterministicMatch | None,
         intent: str,
         entities: dict[str, Any],
+        text: str | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """Apply the rules that only mean something while a question is open.
 
@@ -1226,6 +1246,12 @@ class AnalyseConversationMessageUseCase:
         )
         if denial is not None:
             intent, entities = denial.intent, {**denial.entities, **entities}
+        if pending_key == CONFIRM_QUESTION_KEY and _confirms_the_summary(text):
+            # The most consequential answer in the flow is read by a rule, not
+            # left to a label. Observed live: "oui c'est bon publie" came back
+            # CREATE_PROPERTY, the listing was never registered, and the
+            # landlord was shown his summary again.
+            intent = "AFFIRMATIVE"
         return _availability_reading(pending_key, hint, intent, entities)
 
     def _verdict(
