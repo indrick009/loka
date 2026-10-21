@@ -2224,6 +2224,44 @@ class TestConversationSearch:
         # Stock copy: the outbound layer may say it in his voice.
         assert staged.answering == "Mais tu me reviens quand ?"
 
+    async def test_taking_the_lodging_already_put_to_its_owner_is_not_a_new_search(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """Observed live: "ok je prends le premier", sent while the owner was
+        being asked, re-recorded the demand and the same lodging came back."""
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.AWAITING_AVAILABILITY
+        )
+        session.context.update(
+            {
+                "property_type": "APARTMENT",
+                "location": {"city": "Douala", "neighbourhood": "Bali"},
+                "rent": 200_000,
+            }
+        )
+        demands = StubDemands()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="ok je prends le premier",
+            model=StubModel(
+                result=_model_result(
+                    intent="PROPERTY_SEARCH",
+                    entities={"property_type": "APARTMENT", "property_choice": 1},
+                )
+            ),
+            demands=demands,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert demands.recorded == []
+        assert session.step is FlowStep.AWAITING_AVAILABILITY
+        assert "bailleur" in (uow.events.staged[0].text or "")
+
     async def test_a_follow_up_the_rules_cannot_read_still_gets_the_criteria(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:

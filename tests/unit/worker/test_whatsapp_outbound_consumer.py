@@ -33,10 +33,19 @@ from loka.shared.infrastructure.broker.topology import QUEUES, Broker, QueueSpec
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.object_storage.media import MediaStoreError
+from loka.shared.infrastructure.redis_client import LockBackendUnavailable, NotAcquired
 
 pytestmark = pytest.mark.unit
 
 RECIPIENT = "690000000"
+
+
+class _NoLock:
+    async def __aenter__(self) -> object:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
 
 
 class _RateLimiter:
@@ -65,7 +74,11 @@ def build(
 ) -> WhatsAppOutboundConsumer:
     spec = next(spec for spec in QUEUES if spec.name == OUTBOUND_QUEUE)
     consumer = WhatsAppOutboundConsumer(
-        spec, Broker(settings.broker), Database(settings.database), settings
+        spec,
+        Broker(settings.broker),
+        Database(settings.database),
+        settings,
+        lock_factory=lambda _name: _NoLock(),
     )
     limiter = _RateLimiter(allowed)
     consumer._rate_limiter = limiter  # type: ignore[attr-defined]
@@ -329,3 +342,41 @@ def test_the_gateway_url_is_stripped_of_a_trailing_slash() -> None:
     # Stored canonical, so the base URL that ends up in logs and in httpx is
     # the one that was configured rather than a normalised surprise.
     assert consumer._gateway_url == "http://baileys:3000"  # type: ignore[attr-defined]
+
+
+class _RefusingLock:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def __aenter__(self) -> object:
+        raise self._error
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+
+class TestThreadOrder:
+    """One send at a time per phone: "bonne nouvelle" once overtook the
+    acknowledgement of the very search it answered."""
+
+    async def test_a_send_already_in_flight_to_that_phone_waits_its_turn(
+        self, settings: Settings
+    ) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+        consumer._lock_factory = lambda _name: _RefusingLock(NotAcquired("busy"))  # type: ignore[attr-defined]
+
+        with pytest.raises(RetryableHandlerError, match="in flight"):
+            await consumer.handle(outbound(reply_kind="ACK", text="Salut"))
+        assert captured == {}
+
+    async def test_a_lock_backend_that_is_down_still_delivers(self, settings: Settings) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+        consumer._lock_factory = lambda _name: _RefusingLock(  # type: ignore[attr-defined]
+            LockBackendUnavailable("redis down")
+        )
+
+        await consumer.handle(outbound(reply_kind="ACK", text="Salut"))
+
+        assert captured["text"] == "Salut"

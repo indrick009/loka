@@ -19,6 +19,8 @@ Two rules the rest of the system relies on:
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 
@@ -30,6 +32,10 @@ from loka.bounded_contexts.ai.infrastructure.composition import (
 )
 from loka.bounded_contexts.messaging.infrastructure.persistence.sent_messages import (
     SqlAlchemySentMessageLog,
+)
+from loka.interfaces.worker.conversation_analysis_consumer import (
+    ConversationLockFactory,
+    redis_lock_factory,
 )
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import (
@@ -48,7 +54,11 @@ from loka.shared.infrastructure.object_storage.media import (
     MediaStoreError,
     S3MediaStorage,
 )
-from loka.shared.infrastructure.redis_client import RedisRateLimiter
+from loka.shared.infrastructure.redis_client import (
+    LockBackendUnavailable,
+    NotAcquired,
+    RedisRateLimiter,
+)
 
 OUTBOUND_QUEUE = "whatsapp.outgoing"
 
@@ -57,12 +67,19 @@ _logger = get_logger(__name__)
 
 class WhatsAppOutboundConsumer(ConsumerBase):
     def __init__(
-        self, spec: QueueSpec, broker: Broker, database: Database, settings: Settings
+        self,
+        spec: QueueSpec,
+        broker: Broker,
+        database: Database,
+        settings: Settings,
+        *,
+        lock_factory: ConversationLockFactory | None = None,
     ) -> None:
         super().__init__(broker)
         self.queue_spec = spec
         self._database = database
         self._settings = settings
+        self._lock_factory = lock_factory or redis_lock_factory(settings)
         whatsapp = settings.whatsapp
         self._gateway_url = whatsapp.gateway_url.rstrip("/")
         self._api_key = whatsapp.api_key.get_secret_value()
@@ -96,6 +113,36 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             raise PermanentHandlerError("outbound payload has no metadata")
 
         recipient = _require_str(metadata, "recipient_phone")
+        async with self._in_thread_order(recipient):
+            await self._deliver(body, metadata, recipient)
+
+    @asynccontextmanager
+    async def _in_thread_order(self, recipient: str) -> AsyncIterator[None]:
+        """One send at a time per phone, so a thread reads in the order written.
+
+        Observed live: the acknowledgement of a search, slowed by its rewrite,
+        reached the tenant *after* the lodging found for it — "bonne nouvelle"
+        followed by "si un logement correspond, je reviens vers toi". Photos
+        captioned 1/3, 2/3, 3/3 race the same way. Ordering is a courtesy,
+        delivery is not: a lock backend that is down sends unordered.
+        """
+        try:
+            lock = self._lock_factory(f"outbound:{recipient}")
+            await lock.__aenter__()
+        except LockBackendUnavailable as exc:
+            _logger.warning("outbound_order_unavailable", error=str(exc))
+            yield
+            return
+        except NotAcquired as exc:
+            raise RetryableHandlerError(f"a send to {recipient} is still in flight") from exc
+        try:
+            yield
+        finally:
+            await lock.__aexit__(None, None, None)
+
+    async def _deliver(
+        self, body: dict[str, Any], metadata: dict[str, Any], recipient: str
+    ) -> None:
         reply_kind = str(metadata.get("reply_kind") or "ACK")
         # A model-written sentence wins; the template is the fallback for the
         # deterministic path and for every deployment without an AI key.

@@ -1769,6 +1769,16 @@ class AnalyseConversationMessageUseCase:
             # Read as one, it re-opened the demand that list had just answered,
             # was matched again and sent him the same list a second time.
             return None, next_step
+        stated = facts.as_context()
+        if session.step is FlowStep.AWAITING_AVAILABILITY and not any(
+            name in stated and stated[name] != session.context.get(name)
+            for name, _ in SEARCH_REQUIREMENTS
+        ):
+            # Same trap one step later. Observed live: his lodging was already
+            # put to its owner, "ok je prends le premier" re-recorded the
+            # demand and the same lodging was proposed to him again. Only a new
+            # criterion is a new search; anything else waits on the owner.
+            return availability_pending_text(session.language), FlowStep.AWAITING_AVAILABILITY
         if self._demands is None or session.user_id is None:
             # Nowhere to keep the demand, so nothing to come back to: a
             # deployment that never wired the port fails as a sentence, not as
