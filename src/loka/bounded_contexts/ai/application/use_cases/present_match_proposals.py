@@ -10,6 +10,10 @@ and the lodgings he was just sent would name nothing.
 His session is only taken over while it is still his search. A tenant who has
 since started something else — publishing a lodging of his own — still gets
 the message, but his form is not torn up to read a digit he may never send.
+
+A tenant waiting on an owner's answer, or on the 1 000 FCFA offer, is not
+interrupted at all: a new list would turn his "oui" to the payment into a
+choice. ``TenantBusy`` asks the caller to try again later.
 """
 
 from __future__ import annotations
@@ -44,6 +48,15 @@ from loka.shared.application.unit_of_work import UnitOfWork
 
 CHOICE_QUESTION_KEY = "ask.search_choice"
 
+# The steps a later proposal or a reminder must not cut into.
+BUSY_STEPS = frozenset(
+    {FlowStep.AWAITING_AVAILABILITY, FlowStep.CONFIRM_PAYMENT, FlowStep.AWAITING_PAYMENT}
+)
+
+
+class TenantBusy(Exception):
+    """He is in the middle of an unlock: write to him later, not now."""
+
 _CLOSED = (SessionStatus.COMPLETED, SessionStatus.ABANDONED)
 
 # The gap between the list and each of its photos, in order.
@@ -77,6 +90,8 @@ class PresentMatchProposalsUseCase:
         session = await self._sessions.latest_by_user(tenant_id)
         if session is None or not shown:
             return False
+        if session.step in BUSY_STEPS:
+            raise TenantBusy(str(session.id))
 
         if session.flow is FlowName.PROPERTY_SEARCH and session.status not in _CLOSED:
             observed = session.revision

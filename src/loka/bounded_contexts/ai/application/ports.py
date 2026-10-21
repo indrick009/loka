@@ -110,6 +110,17 @@ class TenantDemands(Protocol):
     ) -> bool: ...
 
 
+class DemandFollowUp(Protocol):
+    """His answer to "cherchez-vous toujours ?": renew the watch, or end it.
+
+    Both return whether he had a search running at all.
+    """
+
+    async def renew(self, *, tenant_id: uuid.UUID, now: datetime) -> bool: ...
+
+    async def stop(self, *, tenant_id: uuid.UUID, now: datetime) -> bool: ...
+
+
 class AvailabilityRequests(Protocol):
     """Puts the question to the landlord of a listing a tenant picked.
 

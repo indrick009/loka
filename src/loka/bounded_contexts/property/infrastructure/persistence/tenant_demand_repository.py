@@ -9,6 +9,7 @@ already in flight instead of returning a 500 to a tenant who did nothing wrong.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, cast
 
 from sqlalchemy import select, update
@@ -17,6 +18,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from loka.bounded_contexts.property.domain.entities.tenant_demand import (
+    REMINDER_AFTER,
+    REMINDER_GRACE,
     DemandStatus,
     TenantDemand,
 )
@@ -25,6 +28,10 @@ from loka.bounded_contexts.property.infrastructure.persistence.models import (
     TenantDemandRow,
 )
 from loka.shared.domain.errors import ConcurrencyConflict
+
+_IS_WATCHING = TenantDemandRow.status.in_(
+    (DemandStatus.OPEN.value, DemandStatus.ANSWERED.value)
+)
 
 
 class SqlAlchemyTenantDemandRepository:
@@ -47,14 +54,37 @@ class SqlAlchemyTenantDemandRepository:
         row = result.scalar_one_or_none()
         return _from_row(row) if row is not None else None
 
-    async def open_demands(self, *, limit: int) -> list[TenantDemand]:
-        """The answers still owed, in the order the tenants have been waiting."""
-        result = await self._session.execute(
-            select(TenantDemandRow)
-            .where(TenantDemandRow.status == DemandStatus.OPEN.value)
-            .order_by(TenantDemandRow.received_at.asc())
-            .limit(limit)
+    async def watching_demands(self, *, limit: int) -> list[TenantDemand]:
+        """The searches a new listing may answer, oldest first."""
+        return await self._select(_IS_WATCHING, limit=limit)
+
+    async def watching_for_tenant(self, tenant_id: Any) -> list[TenantDemand]:
+        return await self._select(_IS_WATCHING, TenantDemandRow.tenant_id == tenant_id)
+
+    async def due_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]:
+        """Watched for a month with no word from him, and not yet asked."""
+        return await self._select(
+            _IS_WATCHING,
+            TenantDemandRow.reminded_at.is_(None),
+            TenantDemandRow.confirmed_at <= now - REMINDER_AFTER,
+            limit=limit,
         )
+
+    async def lapsed_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]:
+        """Asked whether he is still looking, a week ago, and never answered."""
+        return await self._select(
+            _IS_WATCHING,
+            TenantDemandRow.reminded_at <= now - REMINDER_GRACE,
+            limit=limit,
+        )
+
+    async def _select(self, *clauses: Any, limit: int | None = None) -> list[TenantDemand]:
+        statement = (
+            select(TenantDemandRow).where(*clauses).order_by(TenantDemandRow.received_at.asc())
+        )
+        if limit is not None:
+            statement = statement.limit(limit)
+        result = await self._session.execute(statement)
         return [_from_row(row) for row in result.scalars().all()]
 
     async def add(self, demand: TenantDemand) -> None:
@@ -107,6 +137,9 @@ def _to_row(demand: TenantDemand) -> dict[str, Any]:
         "received_at": demand.received_at,
         "updated_at": demand.updated_at,
         "answered_at": demand.answered_at,
+        "proposed_property_ids": list(demand.proposed_ids),
+        "confirmed_at": demand.confirmed_at,
+        "reminded_at": demand.reminded_at,
     }
 
 
@@ -133,6 +166,9 @@ def _from_row(row: TenantDemandRow) -> TenantDemand:
     demand.status = DemandStatus(row.status)
     demand.updated_at = row.updated_at
     demand.answered_at = row.answered_at
+    demand.proposed_ids = tuple(row.proposed_property_ids or ())
+    demand.confirmed_at = row.confirmed_at
+    demand.reminded_at = row.reminded_at
     demand.mark_persisted(row.version)
     return demand
 

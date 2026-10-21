@@ -14,6 +14,12 @@ One open demand per tenant, not one per message. He refines as he talks —
 another neighbourhood, a higher budget — and that is the same request being
 sharpened, not five requests. Restating replaces the criteria; the demand keeps
 its identity and the clock it has been waiting on.
+
+An answer does not end the search. The lodging he picked may be taken, or
+nothing on the list may suit him: an answered demand keeps watching the
+listings published after it, never proposing one he has already been shown.
+Thirty days on he is asked whether he is still looking; "oui" renews the watch,
+"non" — or a week of silence — ends it.
 """
 
 from __future__ import annotations
@@ -21,7 +27,7 @@ from __future__ import annotations
 import math
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -52,6 +58,11 @@ GAP_RADIUS_KM = 6.0
 # family can stretch to, a year against five months is not (§8).
 GAP_ADVANCE_MONTHS = 2
 
+# How long a search is watched before he is asked whether he is still looking,
+# and how long that question waits for an answer before the watch ends.
+REMINDER_AFTER = timedelta(days=30)
+REMINDER_GRACE = timedelta(days=7)
+
 _EARTH_RADIUS_KM = 6371.0
 
 Point = tuple[float, float]
@@ -68,17 +79,21 @@ def distance_km(a: Point, b: Point) -> float:
 
 
 class DemandStatus(StrEnum):
-    """Owed an answer, or no longer owed one."""
+    """Owed a first answer, answered and still watching, or over."""
 
     OPEN = "OPEN"
     ANSWERED = "ANSWERED"
     WITHDRAWN = "WITHDRAWN"
 
 
+_WATCHING = (DemandStatus.OPEN, DemandStatus.ANSWERED)
+
+
 class TenantDemand(AggregateRoot):
     __slots__ = (
         "answered_at",
         "city",
+        "confirmed_at",
         "demand_id",
         "max_advance_months",
         "max_rent",
@@ -86,7 +101,9 @@ class TenantDemand(AggregateRoot):
         "near_exact",
         "neighbourhoods",
         "property_type",
+        "proposed_ids",
         "received_at",
+        "reminded_at",
         "status",
         "tenant_id",
         "updated_at",
@@ -125,6 +142,13 @@ class TenantDemand(AggregateRoot):
         self.received_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
         self.answered_at: datetime | None = None
+        # The listings already put to him, so a later publication never sends
+        # the same lodging twice.
+        self.proposed_ids: tuple[str, ...] = ()
+        # When he last said he is looking: the demand itself, or his "oui" to
+        # the reminder. ``reminded_at`` is set while that question is open.
+        self.confirmed_at = ensure_utc(now)
+        self.reminded_at: datetime | None = None
         self.record(
             "TenantDemandRecorded",
             occurred_at=now,
@@ -180,17 +204,21 @@ class TenantDemand(AggregateRoot):
     def mark_answered(
         self, *, now: datetime, proposals: Sequence[Mapping[str, Any]] = ()
     ) -> None:
-        """Kora came back to him. Nothing more is owed on this demand.
+        """Kora came back to him, first or once more.
 
         ``proposals`` are the lodgings he is being sent, in the order he will
         read them: the event carries them so whoever writes the message shows
         exactly what was matched, and his "2" later names the same lodging.
         """
-        if self.status is not DemandStatus.OPEN:
+        if self.status not in _WATCHING:
             raise InvalidStateTransition(
-                "only an open demand can be answered",
+                "only a demand still watched can be answered",
                 context={"demand_id": str(self.id), "status": self.status.value},
             )
+        self.proposed_ids = (
+            *self.proposed_ids,
+            *(str(proposal.get("property_id")) for proposal in proposals),
+        )
         self.status = DemandStatus.ANSWERED
         self.answered_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
@@ -230,7 +258,7 @@ class TenantDemand(AggregateRoot):
         listing: a lodging published after the demand never went through that
         search, and has to be held to the same bar.
         """
-        if not self.is_answerable or city != self.city:
+        if not self.is_watching or city != self.city:
             return False
         if self.property_type and property_type != self.property_type:
             return False
@@ -277,7 +305,7 @@ class TenantDemand(AggregateRoot):
         lodging with no position, or a demand with no point, is held to the
         districts he named — distance cannot be measured, so it is not guessed.
         """
-        if not self.is_answerable or city != self.city:
+        if not self.is_watching or city != self.city:
             return False
         if self.property_type and property_type != self.property_type:
             return False
@@ -336,11 +364,57 @@ class TenantDemand(AggregateRoot):
             gap["distance_km"] = round(distance_km(self.near, point), 1)
         return gap
 
+    def has_seen(self, property_id: str) -> bool:
+        """Whether this lodging was already put to him."""
+        return property_id in self.proposed_ids
+
+    def is_due_reminder(self, now: datetime) -> bool:
+        """A month of watching without a word from him: time to ask."""
+        return (
+            self.is_watching
+            and self.reminded_at is None
+            and ensure_utc(now) - self.confirmed_at >= REMINDER_AFTER
+        )
+
+    def remind(self, *, now: datetime) -> None:
+        """Ask him whether he is still looking. Asked once per watch."""
+        if not self.is_due_reminder(now):
+            raise InvalidStateTransition(
+                "this demand is not due a reminder",
+                context={"demand_id": str(self.id), "status": self.status.value},
+            )
+        self.reminded_at = ensure_utc(now)
+        self.updated_at = ensure_utc(now)
+        self.record(
+            "TenantDemandReminderDue",
+            occurred_at=now,
+            payload={"demand_id": str(self.id), "tenant_id": str(self.tenant_id)},
+        )
+
+    def renew(self, *, now: datetime) -> None:
+        """He is still looking: watch for another month."""
+        if not self.is_watching:
+            raise InvalidStateTransition(
+                "only a demand still watched can be renewed",
+                context={"demand_id": str(self.id), "status": self.status.value},
+            )
+        self.confirmed_at = ensure_utc(now)
+        self.reminded_at = None
+        self.updated_at = ensure_utc(now)
+
+    def reminder_lapsed(self, now: datetime) -> bool:
+        """Asked a week ago and never answered."""
+        return (
+            self.is_watching
+            and self.reminded_at is not None
+            and ensure_utc(now) - self.reminded_at >= REMINDER_GRACE
+        )
+
     def withdraw(self, *, reason: str, now: datetime) -> None:
         """He is no longer looking. Not an answer, and not a failure either."""
-        if self.status is not DemandStatus.OPEN:
+        if self.status not in _WATCHING:
             raise InvalidStateTransition(
-                "only an open demand can be withdrawn",
+                "only a demand still watched can be withdrawn",
                 context={"demand_id": str(self.id), "status": self.status.value},
             )
         self.status = DemandStatus.WITHDRAWN
@@ -353,5 +427,10 @@ class TenantDemand(AggregateRoot):
 
     @property
     def is_answerable(self) -> bool:
-        """Whether a city is known — without one there is nothing to search."""
+        """Owed a first answer, and a city is known to search in."""
         return self.status is DemandStatus.OPEN and bool(self.city)
+
+    @property
+    def is_watching(self) -> bool:
+        """Still held against every new listing."""
+        return self.status in _WATCHING and bool(self.city)

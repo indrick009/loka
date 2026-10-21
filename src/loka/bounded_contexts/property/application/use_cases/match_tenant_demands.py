@@ -11,9 +11,10 @@ projection fed asynchronously from the very ``PropertyPublished`` that triggers
 it, so the lodging that just went live may not be there yet; the listing itself
 is read instead, and :meth:`TenantDemand.accepts` holds it to the same bar.
 
-A demand is answered once, with every lodging found at that moment, and then
-closed: he is owed one message, not one per publication. A later search opens
-a new demand.
+A demand is first answered with every lodging found at that moment. It then
+keeps watching: a lodging published later that suits him is sent on its own,
+never one he was already shown, until he stops looking (see ``TenantDemand``).
+A new search replaces the watch.
 
 Verification ranks a landlord, it does not gate him, so unverified listings are
 proposed too.
@@ -52,9 +53,9 @@ from loka.shared.application.unit_of_work import UnitOfWork
 # Enough to choose from, few enough to read on a phone and answer with a digit.
 MAX_PROPOSALS = 5
 
-# Open demands held against one new listing. Far above what 1 000 users a day
+# Watched demands held against one new listing. Far above what 1 000 users a day
 # leave open; past it the oldest are served first, as the repository orders them.
-MAX_OPEN_DEMANDS = 500
+MAX_WATCHED_DEMANDS = 500
 
 
 class MatchTenantDemandsUseCase:
@@ -108,7 +109,9 @@ class MatchTenantDemandsUseCase:
 
         demands: TenantDemandRepository = self._uow.repository("tenant_demand")
         answered = 0
-        for demand in await demands.open_demands(limit=MAX_OPEN_DEMANDS):
+        for demand in await demands.watching_demands(limit=MAX_WATCHED_DEMANDS):
+            if demand.has_seen(proposal["property_id"]):
+                continue
             criteria = {
                 "property_type": proposal["property_type"],
                 "city": proposal["city"],

@@ -107,8 +107,30 @@ class FakeDemands:
     async def get(self, demand_id: Any) -> TenantDemand | None:
         return self.store.get(demand_id)
 
-    async def open_demands(self, *, limit: int) -> list[TenantDemand]:
-        return [d for d in self.store.values() if d.status is DemandStatus.OPEN][:limit]
+    async def watching_demands(self, *, limit: int) -> list[TenantDemand]:
+        return [d for d in self.store.values() if d.is_watching][:limit]
+
+    async def watching_for_tenant(self, tenant_id: Any) -> list[TenantDemand]:
+        return [d for d in self.store.values() if d.is_watching and d.tenant_id == tenant_id]
+
+    async def get_open_for_tenant(self, tenant_id: Any) -> TenantDemand | None:
+        return next(
+            (
+                d
+                for d in self.store.values()
+                if d.status is DemandStatus.OPEN and d.tenant_id == tenant_id
+            ),
+            None,
+        )
+
+    async def add(self, demand: TenantDemand) -> None:
+        self.store[demand.id] = demand
+
+    async def due_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]:
+        return [d for d in self.store.values() if d.is_due_reminder(now)][:limit]
+
+    async def lapsed_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]:
+        return [d for d in self.store.values() if d.reminder_lapsed(now)][:limit]
 
     async def save(self, demand: TenantDemand) -> None:
         return None

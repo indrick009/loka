@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any, Protocol
 
 from loka.bounded_contexts.property.domain.entities.availability_check import (
@@ -73,7 +74,8 @@ class TenantDemandRepository(Protocol):
     rather than a new one: he changes the neighbourhood as he talks, and the
     demand keeps its identity and the time it has been waiting.
 
-    ``open_demands`` is how whoever prepares the answers finds the work. Oldest
+    ``watching_demands`` is how a new listing finds the tenants it may suit:
+    those never answered and those answered who are still looking. Oldest
     first, because the person who has waited longest is the one to serve.
     """
 
@@ -81,7 +83,13 @@ class TenantDemandRepository(Protocol):
 
     async def get_open_for_tenant(self, tenant_id: Any) -> TenantDemand | None: ...
 
-    async def open_demands(self, *, limit: int) -> list[TenantDemand]: ...
+    async def watching_demands(self, *, limit: int) -> list[TenantDemand]: ...
+
+    async def watching_for_tenant(self, tenant_id: Any) -> list[TenantDemand]: ...
+
+    async def due_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]: ...
+
+    async def lapsed_reminders(self, *, now: datetime, limit: int) -> list[TenantDemand]: ...
 
     async def add(self, demand: TenantDemand) -> None: ...
 

@@ -35,6 +35,7 @@ from loka.bounded_contexts.ai.application.ports import (
     ConversationExchanges,
     ConversationTurn,
     ConversationTurnRepository,
+    DemandFollowUp,
     Exchange,
     IntentModel,
     PropertyListing,
@@ -59,6 +60,11 @@ from loka.bounded_contexts.ai.application.services.conversation_copy import (
     search_unavailable_text,
 )
 from loka.bounded_contexts.ai.application.services.decision_shadow import DecisionShadow
+from loka.bounded_contexts.ai.application.services.demand_reminder import (
+    STILL_SEARCHING_KEY,
+    reminder_text,
+    still_searching,
+)
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     ADDS_NEIGHBOURHOODS,
     DeterministicClassifier,
@@ -601,6 +607,7 @@ class AnalyseConversationMessageUseCase:
         availability_requests: AvailabilityRequests | None = None,
         unlock_payments: UnlockPayments | None = None,
         demands: TenantDemands | None = None,
+        follow_up: DemandFollowUp | None = None,
         search: PropertySearchGateway | None = None,
         shadow: DecisionShadow | None = None,
         exchanges: ConversationExchanges | None = None,
@@ -622,6 +629,7 @@ class AnalyseConversationMessageUseCase:
         self._availability_requests = availability_requests
         self._unlock_payments = unlock_payments
         self._demands = demands
+        self._follow_up = follow_up
         self._search = search
         self._shadow = shadow
 
@@ -1461,6 +1469,23 @@ class AnalyseConversationMessageUseCase:
         # the user was actually asked.
         question: str | None = None
 
+        # "Cherchez-vous toujours ?" is answered by a rule too: it renews or
+        # ends a month of proposals. What the rule cannot settle carries on.
+        if session.context.get("next_question") == STILL_SEARCHING_KEY:
+            settled = await self._settle_reminder_turn(
+                session,
+                message_id=message_id,
+                text=text,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+            if settled is not None:
+                return settled
+
         # The 1 000 FCFA answer is read by a rule and never by the model: a
         # misread charges the wrong number, or charges twice. It is settled here,
         # before the ordinary flow, and closes the turn on its own.
@@ -1800,6 +1825,41 @@ class AnalyseConversationMessageUseCase:
             now=now,
         )
 
+    async def _settle_reminder_turn(
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        text: str | None,
+        intent: str,
+        confidence: float,
+        used_llm: bool,
+        latency_ms: int,
+        cost_usd: Decimal,
+        now: datetime,
+    ) -> AnalysisReport | None:
+        """Renew or end his search on a plain yes or no; ``None`` otherwise."""
+        answer = still_searching(text)
+        if answer is None or self._follow_up is None or session.user_id is None:
+            return None
+        if answer:
+            await self._follow_up.renew(tenant_id=session.user_id, now=now)
+        else:
+            await self._follow_up.stop(tenant_id=session.user_id, now=now)
+        return await self._close_payment_turn(
+            session,
+            next_step=session.step,
+            question_key=None,
+            reply=reminder_text("renewed" if answer else "stopped", session.language),
+            message_id=message_id,
+            intent=intent,
+            confidence=confidence,
+            used_llm=used_llm,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            now=now,
+        )
+
     async def _close_payment_turn(
         self,
         session: ConversationSession,
@@ -1816,7 +1876,10 @@ class AnalyseConversationMessageUseCase:
         now: datetime,
         clear_unlock: bool = False,
     ) -> AnalysisReport:
-        """Move the payment step, stage its one sentence, and commit.
+        """Move the step, stage its one sentence, and commit.
+
+        Shared by every turn settled by a rule alone: the payment, and the
+        month-on reminder.
 
         The turn was already recorded by ``_apply``; this closes it exactly like
         the ordinary path would, so the session state and the sentence cannot

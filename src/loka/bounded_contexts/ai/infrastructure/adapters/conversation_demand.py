@@ -12,6 +12,9 @@ import uuid
 from datetime import datetime
 
 from loka.bounded_contexts.ai.application.ports import ConversationSearchQuery
+from loka.bounded_contexts.property.application.use_cases.follow_up_tenant_demands import (
+    FollowUpTenantDemandsUseCase,
+)
 from loka.bounded_contexts.property.application.use_cases.record_tenant_demand import (
     RecordTenantDemandCommand,
     RecordTenantDemandUseCase,
@@ -48,3 +51,16 @@ class ConversationTenantDemands:
             # happen, and the turn is never lost to a silence.
             return False
         return True
+
+
+class ConversationDemandFollowUp:
+    """The month-on answer, carried to the Property context's watch."""
+
+    def __init__(self, uow: UnitOfWork) -> None:
+        self._follow_up = FollowUpTenantDemandsUseCase(uow)
+
+    async def renew(self, *, tenant_id: uuid.UUID, now: datetime) -> bool:
+        return await self._follow_up.renew(tenant_id, now=now)
+
+    async def stop(self, *, tenant_id: uuid.UUID, now: datetime) -> bool:
+        return await self._follow_up.stop(tenant_id, now=now)

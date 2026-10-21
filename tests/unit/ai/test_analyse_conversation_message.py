@@ -305,6 +305,7 @@ def build(
     availability: Any | None = None,
     availability_requests: Any | None = None,
     demands: Any | None = None,
+    follow_up: Any | None = None,
 ) -> tuple[
     AnalyseConversationMessageUseCase,
     FakeTurnRepository,
@@ -338,6 +339,7 @@ def build(
         availability=availability,
         availability_requests=availability_requests,
         demands=demands,
+        follow_up=follow_up,
     )
     return use_case, turns, usage, session_repo
 
@@ -2956,3 +2958,70 @@ class TestTheTenantsChoiceReachesTheLandlord:
         )
 
         assert listing_id not in model.prompts[0].user
+
+
+class StubFollowUp:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, uuid.UUID]] = []
+
+    async def renew(self, *, tenant_id: uuid.UUID, now: datetime) -> bool:
+        self.calls.append(("renew", tenant_id))
+        return True
+
+    async def stop(self, *, tenant_id: uuid.UUID, now: datetime) -> bool:
+        self.calls.append(("stop", tenant_id))
+        return True
+
+
+class TestStillSearching:
+    """A month on: "cherchez-vous toujours ?" is answered by a rule."""
+
+    def _asked(self, session: ConversationSession) -> None:
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PROPERTY_CHOICE
+        )
+        session.context["next_question"] = "ask.still_searching"
+
+    @pytest.mark.parametrize(
+        ("text", "move", "reply"),
+        [
+            ("oui je cherche toujours", "renew", "je continue à chercher"),
+            ("non merci j'ai trouvé", "stop", "j'arrête la recherche"),
+        ],
+    )
+    async def test_yes_or_no_settles_the_watch(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+        text: str,
+        move: str,
+        reply: str,
+    ) -> None:
+        self._asked(session)
+        follow_up = StubFollowUp()
+        use_case, _, _, _ = build(uow, session, message_id, text=text, follow_up=follow_up)
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.used_llm is False
+        assert follow_up.calls == [(move, session.user_id)]
+        assert "next_question" not in session.context
+        assert reply in uow.events.staged[0].text
+
+    async def test_a_changed_search_goes_on_to_the_pipeline(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        self._asked(session)
+        follow_up = StubFollowUp()
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="oui mais à Bastos maintenant", follow_up=follow_up
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert follow_up.calls == []

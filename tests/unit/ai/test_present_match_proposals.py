@@ -18,8 +18,12 @@ from loka.bounded_contexts.ai.application.services.match_proposals import (
     SHOWN_LISTINGS_KEY,
     match_proposals_text,
 )
+from loka.bounded_contexts.ai.application.use_cases.ask_still_searching import (
+    AskStillSearchingUseCase,
+)
 from loka.bounded_contexts.ai.application.use_cases.present_match_proposals import (
     PresentMatchProposalsUseCase,
+    TenantBusy,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
@@ -154,6 +158,15 @@ class TestTheTenantIsWrittenTo:
         assert sessions.saved == []
         assert len(uow.events.staged) == 1
 
+    async def test_a_tenant_mid_unlock_is_not_interrupted(self) -> None:
+        """A new list would turn his "oui" to the 1 000 FCFA offer into a choice."""
+        session = a_tenant_waiting()
+        session.transition(FlowStep.CONFIRM_PAYMENT, now=NOW)
+
+        with pytest.raises(TenantBusy):
+            await present(session, [JOUVENCE])
+        assert session.step is FlowStep.CONFIRM_PAYMENT
+
     async def test_nobody_to_write_to_sends_nothing(self) -> None:
         sent, uow, _ = await present(None, [JOUVENCE])
 
@@ -259,3 +272,35 @@ class TestAGapIsSaid:
         text = match_proposals_text([heavier], "fr")
 
         assert "(2 mois d'avance de plus que prévu)" in text
+
+
+class TestStillSearchingIsAsked:
+    async def _ask(self, session: ConversationSession) -> tuple[bool, FakeUnitOfWork]:
+        uow, sessions = FakeUnitOfWork(), FakeSessions(session)
+        asked = await AskStillSearchingUseCase(uow, sessions).execute(  # type: ignore[arg-type]
+            tenant_id=uuid.uuid4(), correlation_id="c", now=NOW
+        )
+        return asked, uow
+
+    async def test_the_question_is_put_and_left_open(self) -> None:
+        session = a_tenant_waiting()
+
+        asked, uow = await self._ask(session)
+
+        assert asked is True
+        assert session.context["next_question"] == "ask.still_searching"
+        [message] = uow.events.staged
+        assert "Cherchez-vous toujours ?" in message.text
+
+    async def test_a_tenant_mid_unlock_is_asked_later(self) -> None:
+        session = a_tenant_waiting()
+        session.transition(FlowStep.AWAITING_AVAILABILITY, now=NOW)
+
+        with pytest.raises(TenantBusy):
+            await self._ask(session)
+
+    async def test_a_tenant_filling_another_form_is_not_asked(self) -> None:
+        asked, uow = await self._ask(a_tenant_waiting(FlowName.PROPERTY_CREATION))
+
+        assert asked is False
+        assert uow.events.staged == []

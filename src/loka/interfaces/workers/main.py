@@ -11,6 +11,7 @@ import contextlib
 import signal
 
 from loka.bounded_contexts.ai.infrastructure.composition import validate_ai_settings
+from loka.interfaces.workers.demand_follow_up import sweep_forever
 from loka.interfaces.workers.registry import handler_registry
 from loka.shared.infrastructure.broker.topology import Broker
 from loka.shared.infrastructure.config.settings import get_settings
@@ -57,13 +58,17 @@ async def run() -> None:
     dispatcher = OutboxDispatcher(database, broker)
     dispatch_task = asyncio.create_task(dispatcher.run_forever(), name="outbox-dispatcher")
     logger.info("outbox_dispatcher_started")
+    # A month on, a tenant is asked whether he is still looking; a week of
+    # silence after that ends the search. Nothing else would ever end it.
+    follow_up_task = asyncio.create_task(sweep_forever(database), name="demand-follow-up")
 
     try:
         await stop.wait()
     finally:
-        dispatch_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await dispatch_task
+        for task in (dispatch_task, follow_up_task):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         for consumer in consumers:
             await consumer.stop()
         await broker.close()

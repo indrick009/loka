@@ -86,6 +86,14 @@ class RecordTenantDemandUseCase:
             await self._uow.commit()
             return RecordedDemand(demand_id=existing.demand_id, restated=True)
 
+        # An earlier search already answered is still watching new listings.
+        # This one replaces it: two watches would send him lodgings for a
+        # budget or a district he has since moved on from.
+        for earlier in await demands.watching_for_tenant(command.tenant_id):
+            earlier.withdraw(reason="replaced by a new search", now=now)
+            await demands.save(earlier)
+            self._uow.collect(earlier)
+
         demand = TenantDemand(
             demand_id=new_id(),
             tenant_id=command.tenant_id,

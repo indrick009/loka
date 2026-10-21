@@ -299,6 +299,13 @@ class TenantDemandRow(Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The listings already put to him, never sent twice.
+    proposed_property_ids: Mapped[list[str]] = mapped_column(
+        ARRAY(String(36)), nullable=False, default=list
+    )
+    # When he last said he is looking, and when he was asked whether he still is.
+    confirmed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reminded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         Index(

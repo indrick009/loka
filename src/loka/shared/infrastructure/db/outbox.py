@@ -42,6 +42,8 @@ _TOPIC_BY_EVENT = {
     "TenantDemandRecorded": "property.events",
     "TenantDemandRestated": "property.events",
     "TenantDemandAnswered": "property.events",
+    "TenantDemandReminderDue": "property.events",
+    "TenantDemandWithdrawn": "property.events",
     "PaymentSucceeded": "payments.events",
     "ContactInformationUnlocked": "payments.events",
     "FraudRiskScoreUpdated": "fraud.events",

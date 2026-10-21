@@ -30,6 +30,7 @@ from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability 
     ConversationAvailabilityRequests,
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_demand import (
+    ConversationDemandFollowUp,
     ConversationTenantDemands,
 )
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
@@ -143,6 +144,8 @@ def analyse_conversation_message_use_case(
         # A tenant's search is recorded, not answered in the thread: Kora
         # acknowledges and comes back once it has something worth sending.
         demands=ConversationTenantDemands(uow),
+        # A month on, his "oui"/"non" to "cherchez-vous toujours ?".
+        follow_up=ConversationDemandFollowUp(uow),
         # The 1 000 FCFA unlock: the tenant's yes becomes a withdrawal request.
         # The conversation depends on the act of asking, not on Payment's use
         # case, and settlement stays out of it — only the provider's callback
