@@ -186,7 +186,9 @@ QUESTION_TOPICS: dict[str, str] = {
     "ask.search_type": "the type of property you are looking for",
     "ask.search_location": (
         "the area where you want to look for a place to live — your "
-        "workplace, for example — and not where you are right now"
+        "workplace, for example — and not where you are right now. Suggest "
+        "first sharing the WhatsApp location while standing in that area: it "
+        "is the most precise; naming the neighbourhood works too"
     ),
     "ask.search_budget": "the maximum monthly rent you are willing to pay, in XAF",
     "ask.search_criteria": "which of your search criteria you want to change",
@@ -217,7 +219,11 @@ _LANDLORD_TOPICS: dict[str, str] = {
         "how many lodgings of this exact type, characteristics and price you "
         "are listing at once"
     ),
-    "ask.location": "the city and neighbourhood where your property is",
+    "ask.location": (
+        "the city and neighbourhood where your property is. Suggest first "
+        "sharing the WhatsApp location from the property itself: it is the most "
+        "precise; naming the neighbourhood works too"
+    ),
     "ask.rent": "the monthly rent you are asking for it, in XAF",
     "ask.charges": (
         "whether water and electricity are included in your rent and, if not, "
@@ -251,7 +257,9 @@ _TENANT_TOPICS: dict[str, str] = {
     "ask.standing": "whether you want a modern property or not",
     "ask.location": (
         "the area you want to live in, near your workplace for example — not "
-        "where you are right now"
+        "where you are right now. Suggest first sharing the WhatsApp location "
+        "while standing in that area: it is the most precise; naming the "
+        "neighbourhood works too"
     ),
     "ask.rent": "the maximum monthly rent you are willing to pay, in XAF",
 }

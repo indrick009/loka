@@ -869,6 +869,9 @@ class AnalyseConversationMessageUseCase:
             latency_ms=0,
             cost_usd=Decimal("0"),
             now=now,
+            # Answered by stock copy, in "vous", with no word about the pin:
+            # the rewriter is told what he sent so the reply can say so.
+            media_marker="(position WhatsApp partagée)",
         )
 
     async def _from_media(
