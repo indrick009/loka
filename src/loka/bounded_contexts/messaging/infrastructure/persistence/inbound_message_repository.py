@@ -68,6 +68,7 @@ class SqlAlchemyInboundMessageRepository:
                 InboundMessageRow.location_longitude,
                 InboundMessageRow.location_label,
                 InboundMessageRow.media_object_key,
+                InboundMessageRow.metadata_json,
             ).where(InboundMessageRow.id == message_id)
         )
         row = result.one_or_none()
@@ -82,6 +83,7 @@ class SqlAlchemyInboundMessageRepository:
             kind=_kind_of(row[5]),
             location=_point_of(row[6], row[7], row[8]),
             media_object_key=row[9],
+            media_refused=_media_refused(row[10]),
         )
 
     async def add_if_absent(self, message: InboundMessage) -> StoredInboundMessage | None:
@@ -164,3 +166,8 @@ def _point_of(
     if latitude is None or longitude is None:
         return None
     return SharedLocation(latitude=latitude, longitude=longitude, label=label)
+
+
+def _media_refused(metadata: object) -> str | None:
+    reason = metadata.get("media_refused") if isinstance(metadata, dict) else None
+    return reason if isinstance(reason, str) and reason else None

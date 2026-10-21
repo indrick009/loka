@@ -27,6 +27,8 @@ class StoredInboundMessage:
     kind: MessageKind = MessageKind.TEXT
     location: SharedLocation | None = None
     media_object_key: str | None = None
+    # Why the media sent could not be stored, when the user should be told.
+    media_refused: str | None = None
 
 
 class InboundMessageRepository(Protocol):

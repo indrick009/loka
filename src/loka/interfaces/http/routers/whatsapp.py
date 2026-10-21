@@ -142,7 +142,14 @@ async def receive_gateway_event(
         raise ExternalServiceUnavailable(
             "the message broker is unreachable", context={"component": "broker"}
         ) from exc
-    if body.text is None and body.media_object_key is None and body.location is None:
+    if (
+        body.text is None
+        and body.media_object_key is None
+        and body.location is None
+        # A video the gateway could not store for its size still deserves an
+        # answer telling the user so; dropping it was a silent thread.
+        and not body.metadata.get("media_refused")
+    ):
         raise ValidationFailed(
             "a gateway delivery must carry text, a media object or a location",
             context={"message_kind": body.message_kind},

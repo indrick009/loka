@@ -14,7 +14,15 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { kindOf, locationOf, mediaDescriptorOf, carriesContent } = require('../src/media');
+const {
+  MAX_MEDIA_BYTES,
+  carriesContent,
+  declaredSizeOf,
+  kindOf,
+  locationOf,
+  mediaDescriptorOf,
+  uploadMedia,
+} = require('../src/media');
 
 const LOCATION = {
   locationMessage: {
@@ -131,4 +139,48 @@ test('carriesContent still rejects a message with nothing in it', () => {
   assert.strictEqual(carriesContent({ conversation: '   ' }), false);
   // A contact card carries neither bytes nor a position the platform can use.
   assert.strictEqual(carriesContent({ contactMessage: {} }), false);
+});
+
+const SILENT_LOG = { info() {}, warn() {}, error() {} };
+
+test('declaredSizeOf reads fileLength as a Long, a number or a string', () => {
+  assert.strictEqual(declaredSizeOf({ videoMessage: { fileLength: { toNumber: () => 42 } } }), 42);
+  assert.strictEqual(declaredSizeOf({ videoMessage: { fileLength: 42 } }), 42);
+  assert.strictEqual(declaredSizeOf({ imageMessage: { fileLength: '42' } }), 42);
+  assert.strictEqual(declaredSizeOf({ videoMessage: {} }), null);
+  assert.strictEqual(declaredSizeOf({ conversation: 'salut' }), null);
+});
+
+test('a video past the ceiling is refused before anything is downloaded', async () => {
+  let downloaded = false;
+  const result = await uploadMedia({
+    entry: { key: { id: 'X' } },
+    descriptor: { kind: 'VIDEO', mimetype: 'video/mp4' },
+    log: SILENT_LOG,
+    download: async () => {
+      downloaded = true;
+      return Buffer.from('x');
+    },
+    declaredBytes: MAX_MEDIA_BYTES + 1,
+  });
+
+  assert.deepStrictEqual(result, { objectKey: null, refusal: 'too_large' });
+  assert.strictEqual(downloaded, false);
+});
+
+test('a size the platform refuses is reported as too large, not as a failure', async () => {
+  const original = global.fetch;
+  global.fetch = async () => new Response('too large', { status: 413 });
+  try {
+    const result = await uploadMedia({
+      entry: { key: { id: 'X' } },
+      descriptor: { kind: 'VIDEO', mimetype: 'video/mp4' },
+      log: SILENT_LOG,
+      mediaUrl: 'http://platform/media',
+      download: async () => Buffer.from('x'),
+    });
+    assert.deepStrictEqual(result, { objectKey: null, refusal: 'too_large' });
+  } finally {
+    global.fetch = original;
+  }
 });

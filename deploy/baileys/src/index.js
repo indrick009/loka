@@ -35,6 +35,7 @@ const {
 } = require('@whiskeysockets/baileys');
 const {
   carriesContent,
+  declaredSizeOf,
   extractText,
   kindOf,
   locationOf,
@@ -294,8 +295,9 @@ async function handleOne(entry, upsertType) {
   // still forwarded when it carries a caption or a pin — losing the photo is
   // bad, losing the sentence the landlord wrote with it is worse.
   let mediaObjectKey = null;
+  let mediaRefused = null;
   if (descriptor) {
-    mediaObjectKey = await uploadMedia({
+    const upload = await uploadMedia({
       entry,
       descriptor,
       sock: gateway.sock,
@@ -303,8 +305,13 @@ async function handleOne(entry, upsertType) {
       apiKey: PLATFORM_API_KEY,
       log,
       download: downloadMediaMessage,
+      declaredBytes: declaredSizeOf(message),
     });
-    if (!mediaObjectKey && !text && !location) {
+    mediaObjectKey = upload.objectKey;
+    // A refusal the user can act on — "too large" — still travels, so Kora
+    // can tell him; only an unexplained failure with nothing else is dropped.
+    mediaRefused = upload.refusal;
+    if (!mediaObjectKey && !mediaRefused && !text && !location) {
       log.error(
         { external_message_id: key.id, kind: descriptor.kind },
         'delivery skipped: media could not be stored and nothing else was sent'
@@ -321,7 +328,7 @@ async function handleOne(entry, upsertType) {
     // The stored kind follows what actually survived: an IMAGE whose bytes
     // were lost but whose caption arrived is a text message, and claiming
     // otherwise promises the pipeline a photo it can never read.
-    message_kind: mediaObjectKey || !descriptor ? kindOf(message) : 'TEXT',
+    message_kind: mediaObjectKey || mediaRefused || !descriptor ? kindOf(message) : 'TEXT',
     provider_timestamp: new Date(timestamp * 1000).toISOString(),
     text,
     media_object_key: mediaObjectKey,
@@ -329,6 +336,7 @@ async function handleOne(entry, upsertType) {
     metadata: {
       pushName: entry.pushName || null,
       session_name: SESSION_NAME,
+      ...(mediaRefused ? { media_refused: mediaRefused } : {}),
     },
   });
 }

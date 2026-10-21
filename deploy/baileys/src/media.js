@@ -17,6 +17,13 @@
 
 const MAX_UPLOAD_ATTEMPTS = 3;
 
+/**
+ * The platform's own ceiling (MAX_MEDIA_BYTES in routers/whatsapp.py). Checked
+ * here too, before downloading: a two-minute video is tens of megabytes held
+ * in this process's memory for an upload that can only be refused.
+ */
+const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
+
 /** The mime type each kind falls back to when WhatsApp omits its own. */
 const DEFAULT_MIMETYPE = {
   IMAGE: 'image/jpeg',
@@ -117,6 +124,22 @@ function mediaDescriptorOf(message) {
 }
 
 /**
+ * The size WhatsApp announces for a media message, in bytes, or null.
+ *
+ * `fileLength` arrives as a protobuf Long, a number or a string depending on
+ * the path the message took; all three are read.
+ */
+function declaredSizeOf(message) {
+  const field = MEDIA_FIELD_BY_KIND[kindOf(message)];
+  const raw = field && message && message[field] ? message[field].fileLength : null;
+  if (raw === null || raw === undefined) return null;
+  const size = typeof raw === 'object' && typeof raw.toNumber === 'function'
+    ? raw.toNumber()
+    : Number(raw);
+  return Number.isFinite(size) && size > 0 ? size : null;
+}
+
+/**
  * Whether this message says anything at all.
  *
  * The rule that replaces `no_text`. Text, bytes or a position each count on
@@ -142,9 +165,35 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * Returns null when the bytes could not be stored. The caller decides what to
  * do with a message whose media is lost; it must not pretend the key exists.
  */
-async function uploadMedia({ entry, descriptor, sock, mediaUrl, apiKey, log, download }) {
+/**
+ * Store one media message and say what became of it.
+ *
+ * Resolves to `{ objectKey, refusal }`: the stored key, or why it was not
+ * stored when the reason is one the user should hear — `too_large` for a
+ * video past the platform's ceiling. Both null means a transient failure the
+ * user cannot act on. A refusal used to be indistinguishable from that, so
+ * the delivery was dropped and the landlord's video met silence.
+ */
+async function uploadMedia({
+  entry,
+  descriptor,
+  sock,
+  mediaUrl,
+  apiKey,
+  log,
+  download,
+  declaredBytes = null,
+}) {
   const externalId = (entry.key && entry.key.id) || '';
   let lastError = 'not attempted';
+
+  if (declaredBytes !== null && declaredBytes > MAX_MEDIA_BYTES) {
+    log.warn(
+      { external_message_id: externalId, kind: descriptor.kind, size_bytes: declaredBytes },
+      'media refused before download: too large'
+    );
+    return { objectKey: null, refusal: 'too_large' };
+  }
 
   for (let attempt = 1; attempt <= MAX_UPLOAD_ATTEMPTS; attempt += 1) {
     try {
@@ -155,6 +204,13 @@ async function uploadMedia({ entry, descriptor, sock, mediaUrl, apiKey, log, dow
         reuploadRequest: sock && sock.updateMediaMessage,
       });
       if (!buffer || !buffer.length) throw new Error('media download was empty');
+      if (buffer.length > MAX_MEDIA_BYTES) {
+        log.warn(
+          { external_message_id: externalId, kind: descriptor.kind, size_bytes: buffer.length },
+          'media refused: too large'
+        );
+        return { objectKey: null, refusal: 'too_large' };
+      }
 
       const headers = {
         'content-type': descriptor.mimetype,
@@ -179,8 +235,9 @@ async function uploadMedia({ entry, descriptor, sock, mediaUrl, apiKey, log, dow
           },
           'media stored'
         );
-        return body.media_object_key || null;
+        return { objectKey: body.media_object_key || null, refusal: null };
       }
+      if (response.status === 413) return { objectKey: null, refusal: 'too_large' };
 
       lastError = `HTTP ${response.status}: ${(await response.text()).slice(0, 300)}`;
       // The platform refuses this body for what it contains — the type, the
@@ -199,12 +256,14 @@ async function uploadMedia({ entry, descriptor, sock, mediaUrl, apiKey, log, dow
     { external_message_id: externalId, kind: descriptor.kind, error: lastError },
     'media upload failed'
   );
-  return null;
+  return { objectKey: null, refusal: null };
 }
 
 module.exports = {
+  MAX_MEDIA_BYTES,
   MAX_UPLOAD_ATTEMPTS,
   carriesContent,
+  declaredSizeOf,
   extractText,
   kindOf,
   locationOf,

@@ -96,7 +96,12 @@ class InboundMessage:
         self._require_text(self.provider, "provider", 32)
         self._require_text(self.external_message_id, "external_message_id", MAX_EXTERNAL_MESSAGE_ID)
         self._require_text(self.conversation_ref, "conversation_ref", MAX_CONVERSATION_REF)
-        if self.text is None and self.media_object_key is None and self.location is None:
+        if (
+            self.text is None
+            and self.media_object_key is None
+            and self.location is None
+            and self.media_refused is None
+        ):
             raise ValidationFailed(
                 "an inbound message must carry text, a media object or a location",
                 context={
@@ -105,6 +110,12 @@ class InboundMessage:
                     "kind": self.kind.value,
                 },
             )
+
+    @property
+    def media_refused(self) -> str | None:
+        """Why the transport could not store the media sent ("too_large")."""
+        reason = self.metadata.get("media_refused")
+        return reason if isinstance(reason, str) and reason else None
 
     @property
     def has_media(self) -> bool:

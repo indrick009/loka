@@ -69,6 +69,7 @@ from loka.bounded_contexts.ai.application.services.listing_recap import (
     listing_recap_text,
     media_kept_text,
     media_received_text,
+    media_refused_text,
     unsupported_media_text,
 )
 from loka.bounded_contexts.ai.application.services.match_proposals import (
@@ -668,6 +669,25 @@ class AnalyseConversationMessageUseCase:
         if message.location is not None:
             return await self._from_shared_location(
                 session, message_id=command.message_id, point=message.location, now=moment
+            )
+        if message.media_refused is not None:
+            # Too heavy to store — the gateway still forwarded it so he hears
+            # why, instead of a video that vanished without a word.
+            ai_bypass_total.labels(stage="media").inc()
+            return await self._finish(
+                session=session,
+                message_id=command.message_id,
+                intent="UNKNOWN",
+                confidence=1.0,
+                entities={},
+                used_llm=False,
+                latency_ms=0,
+                cost_usd=Decimal("0"),
+                now=moment,
+                reason="media_refused",
+                reply_text=media_refused_text(message.media_refused, session.language),
+                text=text,
+                media_marker=_MEDIA_MARKERS.get(message.kind, "(fichier envoyé)"),
             )
         if message.media_object_key is not None:
             return await self._from_media(

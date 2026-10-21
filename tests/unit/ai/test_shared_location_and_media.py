@@ -217,6 +217,7 @@ def _build(
     media_object_key: str | None = None,
     text: str | None = None,
     listing: FakeListing | None = None,
+    media_refused: str | None = None,
 ) -> tuple[AnalyseConversationMessageUseCase, uuid.UUID, RefusingModel, FakeUow]:
     message_id = uuid.uuid4()
     inbound = FakeInbound(
@@ -230,6 +231,7 @@ def _build(
                 kind=kind,
                 location=location,
                 media_object_key=media_object_key,
+                media_refused=media_refused,
             )
         }
     )
@@ -524,3 +526,29 @@ class TestAPinAndADistrictAreOnePlace:
         merged = _keeping_the_place({"latitude": 4.05, "longitude": 9.70}, session)
 
         assert "neighbourhood" not in merged
+
+
+class TestAVideoTooHeavyToStore:
+    """The gateway used to drop it: no bytes, no text, no answer at all."""
+
+    async def test_he_is_told_why_and_what_to_send_instead(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_MEDIA,
+            property_id=uuid.uuid4(),
+        )
+        listing = FakeListing()
+        use_case, message_id, model, uow = _build(
+            session, kind=MessageKind.VIDEO, listing=listing, media_refused="too_large"
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert listing.attached == []
+        assert report.reason == "media_refused"
+        staged = uow.events.staged[0]
+        assert "16 Mo" in staged.text
+        assert staged.answering == "(vidéo envoyée)"

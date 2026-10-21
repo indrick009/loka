@@ -86,3 +86,9 @@ class TestAdmission:
     def test_a_message_carrying_nothing_at_all_is_still_refused(self) -> None:
         with pytest.raises(ValidationFailed, match="text, a media object or a location"):
             _message()
+
+    def test_a_media_too_heavy_to_store_is_admitted_so_it_can_be_answered(self) -> None:
+        """The gateway used to drop it, and the user's video met silence."""
+        message = _message(kind=MessageKind.VIDEO, metadata={"media_refused": "too_large"})
+        assert message.media_refused == "too_large"
+        assert message.has_media is False

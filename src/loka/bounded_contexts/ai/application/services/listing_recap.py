@@ -138,6 +138,11 @@ _MEDIA_TEXT: dict[str, dict[str, str]] = {
             "Je ne peux pas encore écouter les notes vocales. Pouvez-vous me "
             "l'écrire en quelques mots ?"
         ),
+        "too_large": (
+            "Cette vidéo est trop lourde pour moi : au-delà de 16 Mo, je ne peux "
+            "pas la recevoir. Envoyez une vidéo plus courte (moins d'une minute) "
+            "ou des photos."
+        ),
         "other": (
             "Je ne peux pas utiliser ce type de fichier. Envoyez plutôt une photo "
             "ou un texte."
@@ -166,6 +171,10 @@ _MEDIA_TEXT: dict[str, dict[str, str]] = {
             "me which place it is."
         ),
         "AUDIO": "I cannot listen to voice notes yet. Could you write it in a few words?",
+        "too_large": (
+            "This video is too heavy for me: above 16 MB I cannot receive it. "
+            "Please send a shorter video (under a minute) or photos."
+        ),
         "other": "I cannot use this kind of file. Please send a photo or a text instead.",
         "kept_published": (
             "Listing saved with your {count}: it is now published, tenants looking "
@@ -215,6 +224,12 @@ def kept_media_published_text(*, count: int, photos_only: bool, language: str) -
 def _amount(words: Mapping[str, str], *, count: int, photos_only: bool) -> str:
     one, many = ("one_photo", "many_photos") if photos_only else ("one", "many")
     return words[one] if count == 1 else words[many].format(count=count)
+
+
+def media_refused_text(reason: str, language: str) -> str:
+    """The transport could not store what was sent, and here is why."""
+    words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
+    return words.get(reason, words["other"])
 
 
 def unsupported_media_text(kind: str, language: str) -> str:
