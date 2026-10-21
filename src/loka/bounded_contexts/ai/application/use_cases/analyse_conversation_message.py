@@ -308,6 +308,47 @@ def _with_known_neighbourhoods(
     return merged
 
 
+def _keeping_the_place(
+    entities: dict[str, Any], session: ConversationSession
+) -> dict[str, Any]:
+    """A pin and a district name are two halves of one place: keep both.
+
+    Each used to replace the other. A landlord who shared his location and was
+    then asked the neighbourhood lost the pin the moment he typed "Odza"; one
+    who typed it first lost the name to the pin, which carries none. Merged
+    only when both name the same city — a place in another city starts over.
+    """
+    known = session.context.get("location")
+    if not isinstance(known, dict) or not known.get("city"):
+        return entities
+    pinned = isinstance(entities.get("latitude"), int | float)
+    named = bool(entities.get("neighbourhood") or entities.get("neighbourhoods"))
+    if pinned and not named and known.get("neighbourhood"):
+        city = market.resolve_city_by_coordinates(entities["latitude"], entities["longitude"])
+        if city == known["city"]:
+            return {
+                **entities,
+                "neighbourhood": known["neighbourhood"],
+                **(
+                    {"neighbourhoods": known["neighbourhoods"]}
+                    if known.get("neighbourhoods")
+                    else {}
+                ),
+            }
+    if named and not pinned and isinstance(known.get("latitude"), int | float):
+        city = entities.get("city") or market.resolve_neighbourhood(
+            str(entities.get("neighbourhood") or "")
+        )
+        if city in (None, "", known["city"]):
+            return {
+                **entities,
+                "city": known["city"],
+                "latitude": known["latitude"],
+                "longitude": known["longitude"],
+            }
+    return entities
+
+
 def _is_search(flow: FlowName) -> bool:
     """Which form a prompt shows: the tenant's search, or the landlord's.
 
@@ -1158,7 +1199,9 @@ class AnalyseConversationMessageUseCase:
         if reason is None and confidence < MIN_ACCEPTED_CONFIDENCE:
             reason = "low_confidence"
 
-        facts = self._extractor.validate(_with_known_neighbourhoods(entities, session))
+        facts = self._extractor.validate(
+            _keeping_the_place(_with_known_neighbourhoods(entities, session), session)
+        )
         # The next step must consider the whole form, not just this message: a
         # landlord who gives their city after naming the property type is one
         # step further, not back at the type question. When this message opens a

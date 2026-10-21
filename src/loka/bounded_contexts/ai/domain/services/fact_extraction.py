@@ -423,6 +423,16 @@ class FactExtractor:
         for name, step in requirements:
             if not facts.has(name) and name not in already_known:
                 return step
+            if (
+                name == "location"
+                and requirements is PROPERTY_REQUIREMENTS
+                and not _places_the_lodging(facts, already_known)
+            ):
+                # Housing §4: the shared location places a lodging reliably;
+                # without it Kora asks "la ville et le quartier", and the step
+                # must be validated before moving on. "Douala" alone used to
+                # close it, and a tenant then read "Studio - Douala".
+                return step
         return complete
 
     @staticmethod
@@ -485,6 +495,14 @@ class FactExtractor:
             built["latitude"] = location.coordinates.latitude
             built["longitude"] = location.coordinates.longitude
         return built
+
+
+def _places_the_lodging(facts: ExtractedFacts, known: dict[str, Any]) -> bool:
+    """A shared pin, or a city together with its neighbourhood."""
+    location = facts.get("location") if facts.has("location") else known.get("location")
+    if not isinstance(location, dict):
+        return False
+    return location.get("latitude") is not None or bool(location.get("neighbourhood"))
 
 
 def _accepted_neighbourhoods(main: str, listed: Any) -> list[str]:

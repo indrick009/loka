@@ -840,6 +840,7 @@ class TestModelWrittenReply:
                         "standing": "MODERN",
                         "quantity": 1,
                         "city": "Douala",
+                        "neighbourhood": "Akwa",
                     },
                 )
             ),
@@ -1275,6 +1276,7 @@ class TestSessionAdvancement:
                         "standing": "MODERN",
                         "quantity": 1,
                         "city": "Douala",
+                        "neighbourhood": "Akwa",
                     }
                 )
             ),
@@ -1328,10 +1330,11 @@ class TestSessionAdvancement:
             uow,
             session,
             message_id,
-            text="Cameroun Yaoundé",
+            text="Cameroun Yaoundé, Bastos",
             model=StubModel(
                 result=_model_result(
-                    intent="COLLECT_LOCATION", entities={"city": "Yaoundé"}
+                    intent="COLLECT_LOCATION",
+                    entities={"city": "Yaoundé", "neighbourhood": "Bastos"},
                 )
             ),
         )
@@ -1360,6 +1363,7 @@ class TestSessionAdvancement:
                         "standing": "MODERN",
                         "quantity": 1,
                         "city": "Douala",
+                        "neighbourhood": "Akwa",
                         "price": 250_000,
                         "charges": 0,
                         "charging_policy": "INCLUDED",
@@ -1396,6 +1400,7 @@ class TestSessionAdvancement:
                         "standing": "MODERN",
                         "quantity": 1,
                         "city": "Douala",
+                        "neighbourhood": "Akwa",
                         "price": 250_000,
                     }
                 )
@@ -1477,6 +1482,7 @@ class TestTheStagedReply:
                         "standing": "MODERN",
                         "quantity": 1,
                         "city": "Douala",
+                        "neighbourhood": "Akwa",
                     }
                 )
             ),

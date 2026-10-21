@@ -215,7 +215,7 @@ class TestConversationOrder:
             ({"property_type": "APARTMENT"}, FlowStep.COLLECT_STANDING),
             ({"standing": "MODERN"}, FlowStep.COLLECT_QUANTITY),
             ({"quantity": 2}, FlowStep.COLLECT_LOCATION),
-            ({"city": "Douala"}, FlowStep.COLLECT_PRICE),
+            ({"city": "Douala", "neighbourhood": "Bonamoussadi"}, FlowStep.COLLECT_PRICE),
             ({"price": 250_000}, FlowStep.COLLECT_CHARGES),
             ({"charges": 0, "charging_policy": "INCLUDED"}, FlowStep.COLLECT_DEPOSIT),
             ({"deposit_months": 2}, FlowStep.COLLECT_ADVANCE),
@@ -256,6 +256,7 @@ class TestConversationOrder:
                 "standing": "MODERN",
                 "quantity": 1,
                 "city": "Douala",
+                "neighbourhood": "Akwa",
             }
         )
 
@@ -288,7 +289,7 @@ class TestConversationOrder:
     ) -> None:
         """A landlord who answers the location question after naming the type
         moves to the rent question, not back to the type question."""
-        facts = extractor.validate({"city": "Yaoundé"})
+        facts = extractor.validate({"city": "Yaoundé", "neighbourhood": "Bastos"})
 
         step = extractor.next_step(
             "COLLECT_LOCATION",
@@ -416,6 +417,48 @@ class TestTenantSearchForm:
         step = extractor.next_step("SUPPORT", facts, flow=FlowName.PROPERTY_SEARCH)
 
         assert step is None
+
+
+class TestTheLocationStep:
+    """Housing §4: a shared pin, or the city and the neighbourhood."""
+
+    def test_a_city_alone_does_not_place_a_listing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
+        )
+
+        assert step is FlowStep.COLLECT_LOCATION
+
+    def test_a_shared_pin_places_it_without_a_district_name(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"latitude": 3.7905, "longitude": 11.5370})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
+
+    def test_a_tenant_may_search_a_whole_city(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_SEARCH,
+            known={"property_type": "STUDIO"},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
 
 
 class TestAmountShorthand:

@@ -31,6 +31,7 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     PHOTO_BURST_SECONDS,
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
+    _keeping_the_place,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
@@ -480,3 +481,46 @@ class TestAnImageIsAttachedToTheListing:
         )
 
         assert listing.attached == [(property_id, "chat/abc/plan.pdf", "DOCUMENT")]
+
+
+class TestAPinAndADistrictAreOnePlace:
+    """Each used to replace the other: typing "Odza" after the pin lost the
+    pin, sharing the pin after "Odza" lost the name."""
+
+    def test_a_district_typed_after_the_pin_keeps_the_pin(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_LOCATION,
+            context={"location": {"city": "Yaoundé", "latitude": 3.79, "longitude": 11.537}},
+        )
+
+        merged = _keeping_the_place({"neighbourhood": "Odza"}, session)
+
+        assert merged == {
+            "neighbourhood": "Odza",
+            "city": "Yaoundé",
+            "latitude": 3.79,
+            "longitude": 11.537,
+        }
+
+    def test_a_pin_shared_after_the_district_keeps_its_name(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_LOCATION,
+            context={"location": {"city": "Yaoundé", "neighbourhood": "Odza"}},
+        )
+
+        merged = _keeping_the_place({"latitude": 3.79, "longitude": 11.537}, session)
+
+        assert merged["neighbourhood"] == "Odza"
+
+    def test_a_place_in_another_city_starts_over(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_LOCATION,
+            context={"location": {"city": "Yaoundé", "neighbourhood": "Odza"}},
+        )
+
+        merged = _keeping_the_place({"latitude": 4.05, "longitude": 9.70}, session)
+
+        assert "neighbourhood" not in merged
