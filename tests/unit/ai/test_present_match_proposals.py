@@ -173,6 +173,10 @@ class TestThePhotos:
         assert text.media_object_key is None
         assert first.media_object_key == "p/1/a.jpg"
         assert second.media_object_key == "p/1/b.jpg"
+        # Staged together they raced: each photo now waits behind the one before.
+        assert text.not_before is None
+        assert first.not_before is not None and second.not_before is not None
+        assert first.not_before < second.not_before
 
     async def test_the_caption_is_the_numbered_line_the_reply_names(self) -> None:
         session = a_tenant_waiting()

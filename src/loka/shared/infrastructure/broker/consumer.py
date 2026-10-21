@@ -51,6 +51,19 @@ class PermanentHandlerError(Exception):
     """Unretryable failure: straight to the DLQ."""
 
 
+class DeferredHandlerError(Exception):
+    """Not a failure, just not yet: park the message for ``delay_ms``.
+
+    Parked in the same delay queue as a retry, so waiting costs no consumer
+    slot, but the attempt counter is left alone: a message asked to wait
+    six seconds has not failed, and must not creep towards the DLQ.
+    """
+
+    def __init__(self, delay_ms: int) -> None:
+        super().__init__(f"deferred {delay_ms} ms")
+        self.delay_ms = max(1, delay_ms)
+
+
 class ConsumerBase(ABC):
     queue_spec: QueueSpec
 
@@ -95,6 +108,8 @@ class ConsumerBase(ABC):
             try:
                 async with self._semaphore:
                     await self.handle(payload)
+            except DeferredHandlerError as exc:
+                await self._park(message, dict(message.headers or {}), delay_ms=exc.delay_ms)
             except PermanentHandlerError as exc:
                 _logger.error(
                     "message_rejected_permanently",
@@ -143,10 +158,17 @@ class ConsumerBase(ABC):
         headers = dict(message.headers or {})
         headers["x-retry-attempt"] = attempt + 1
         headers["x-last-error"] = (str(exc) or type(exc).__name__)[:512]
-        # Park the retry in the delay queue and ack the original: the queue
-        # dead-letters the parked copy back here once its expiration elapses.
-        # Publishing before the ack means a crash between the two duplicates the
-        # attempt rather than losing the message.
+        await self._park(message, headers, delay_ms=delay)
+
+    async def _park(
+        self, message: AbstractIncomingMessage, headers: dict[str, Any], *, delay_ms: int
+    ) -> None:
+        """Park a copy in the delay queue and ack the original.
+
+        The queue dead-letters the parked copy back here once its expiration
+        elapses. Publishing before the ack means a crash between the two
+        duplicates the attempt rather than losing the message.
+        """
         await self._broker.channel.default_exchange.publish(
             Message(
                 body=message.body,
@@ -154,9 +176,9 @@ class ConsumerBase(ABC):
                 content_type=message.content_type,
                 delivery_mode=DeliveryMode.PERSISTENT,
                 correlation_id=message.correlation_id,
-                expiration=delay / 1000,
+                expiration=delay_ms / 1000,
             ),
-            routing_key=delay_queue_name(spec.name),
+            routing_key=delay_queue_name(self.queue_spec.name),
         )
         await message.ack()
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -26,6 +27,7 @@ from loka.interfaces.worker.whatsapp_replies import (
     render_reply,
 )
 from loka.shared.infrastructure.broker.consumer import (
+    DeferredHandlerError,
     PermanentHandlerError,
     RetryableHandlerError,
 )
@@ -380,3 +382,50 @@ class TestThreadOrder:
         await consumer.handle(outbound(reply_kind="ACK", text="Salut"))
 
         assert captured["text"] == "Salut"
+
+
+class TestPhotoBursts:
+    """An album of ten photos is ten messages: answered once, by the last."""
+
+    async def test_a_message_held_back_is_deferred_not_failed(self, settings: Settings) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+        later = (datetime.now(UTC) + timedelta(seconds=5)).isoformat()
+
+        with pytest.raises(DeferredHandlerError) as deferred:
+            await consumer.handle(outbound(reply_kind="ACK", text="Photo", not_before=later))
+
+        assert 0 < deferred.value.delay_ms <= 5_000
+        assert captured == {}
+
+    async def test_an_acknowledgement_overtaken_by_a_newer_photo_is_dropped(
+        self, settings: Settings
+    ) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+
+        async def newer(_message_id: uuid.UUID) -> bool:
+            return True
+
+        consumer._a_newer_photo_follows = newer  # type: ignore[method-assign]
+
+        await consumer.handle(
+            outbound(reply_kind="ACK", text="Photo reçue (1)", media_burst_of=str(uuid.uuid4()))
+        )
+
+        assert captured == {}
+
+    async def test_the_last_photo_of_a_burst_is_answered(self, settings: Settings) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+
+        async def newer(_message_id: uuid.UUID) -> bool:
+            return False
+
+        consumer._a_newer_photo_follows = newer  # type: ignore[method-assign]
+
+        await consumer.handle(
+            outbound(reply_kind="ACK", text="Photos reçues (5)", media_burst_of=str(uuid.uuid4()))
+        )
+
+        assert captured["text"] == "Photos reçues (5)"

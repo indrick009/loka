@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import structlog
@@ -44,6 +44,9 @@ from loka.shared.application.unit_of_work import UnitOfWork
 CHOICE_QUESTION_KEY = "ask.search_choice"
 
 _CLOSED = (SessionStatus.COMPLETED, SessionStatus.ABANDONED)
+
+# The gap between the list and each of its photos, in order.
+PHOTO_SPACING_SECONDS = 2
 
 
 class PresentMatchProposalsUseCase:
@@ -134,6 +137,7 @@ class PresentMatchProposalsUseCase:
         presigns the key — a URL minted here could expire before the send.
         """
         events: list[WhatsAppMessageSendRequested] = []
+        position = 0
         for number, proposal in enumerate(shown, start=1):
             raw = proposal.get("photo_object_keys")
             if not isinstance(raw, list):
@@ -143,6 +147,7 @@ class PresentMatchProposalsUseCase:
                 continue
             line = match_proposal_line(proposal, number, session.language)
             for index, key in enumerate(keys, start=1):
+                position += 1
                 events.append(
                     WhatsAppMessageSendRequested(
                         aggregate_type="ConversationSession",
@@ -161,6 +166,10 @@ class PresentMatchProposalsUseCase:
                         media_object_key=key,
                         intent="DEMAND_MATCHED_PHOTO",
                         language=session.language,
+                        # Staged together, these used to race: a photo reached
+                        # the tenant before the sentence that numbers it. Each
+                        # waits its turn behind the list and the photo before.
+                        not_before=now + timedelta(seconds=PHOTO_SPACING_SECONDS * position),
                     )
                 )
         return events

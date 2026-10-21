@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from loka.shared.domain.events import DomainEvent
@@ -95,6 +96,12 @@ class WhatsAppMessageSendRequested(DomainEvent):
     ``answering`` carries the user's message when ``text`` is the platform's
     own sentence: the outbound layer may then have it rewritten in the user's
     voice, keeping its facts. Absent, ``text`` is sent as it is.
+
+    ``not_before`` holds a message back until that moment: the photos of a
+    proposal go out after the sentence that numbers them. ``media_burst_of``
+    names the photo this message acknowledges; when a newer photo of the same
+    thread has arrived by send time, this acknowledgement is dropped and only
+    the last one of the burst is sent.
     """
 
     event_type: str = "WhatsAppMessageSendRequested"
@@ -107,6 +114,8 @@ class WhatsAppMessageSendRequested(DomainEvent):
     intent: str | None = None
     language: str = "fr"
     answering: str | None = None
+    not_before: datetime | None = None
+    media_burst_of: uuid.UUID | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload = DomainEvent.to_payload(self)
@@ -114,6 +123,8 @@ class WhatsAppMessageSendRequested(DomainEvent):
             **payload["metadata"],
             "session_id": str(self.session_id) if self.session_id else None,
             "answering": self.answering,
+            "not_before": self.not_before.isoformat() if self.not_before else None,
+            "media_burst_of": str(self.media_burst_of) if self.media_burst_of else None,
             "recipient_phone": self.recipient_phone,
             "reply_kind": self.reply_kind,
             "question_key": self.question_key,

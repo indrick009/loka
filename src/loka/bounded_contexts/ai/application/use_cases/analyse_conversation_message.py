@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loka.bounded_contexts.ai.application.ports import (
     AiUsageLedger,
@@ -65,8 +65,11 @@ from loka.bounded_contexts.ai.application.services.deterministic_classifier impo
     DeterministicMatch,
 )
 from loka.bounded_contexts.ai.application.services.listing_recap import (
+    kept_media_published_text,
     listing_recap_text,
-    photo_received_text,
+    media_kept_text,
+    media_received_text,
+    unsupported_media_text,
 )
 from loka.bounded_contexts.ai.application.services.match_proposals import (
     SHOWN_LISTINGS_KEY,
@@ -134,6 +137,11 @@ from loka.shared.infrastructure.metrics import (
     llm_tokens_total,
 )
 
+if TYPE_CHECKING:
+    from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (  # noqa: E501
+        ConversationMediaResult,
+    )
+
 USE_CASE = "analyse_conversation_message"
 
 _logger = get_logger(__name__)
@@ -195,6 +203,32 @@ def _neighbourhood_from_label(label: str | None) -> str | None:
 
 
 _SHOWN_LISTINGS = SHOWN_LISTINGS_KEY
+
+# What each WhatsApp kind becomes on a listing. A voice note or a sticker is
+# absent on purpose: both used to be filed as photos of the lodging.
+_LISTING_MEDIA: dict[MessageKind, str] = {
+    MessageKind.IMAGE: "PHOTO",
+    MessageKind.VIDEO: "VIDEO",
+    MessageKind.DOCUMENT: "DOCUMENT",
+}
+
+# What the rewriter is told the user sent when there is no caption: told
+# "(photo)" for a video, it wrote back that his photo was received.
+_MEDIA_MARKERS: dict[MessageKind, str] = {
+    MessageKind.IMAGE: "(photo envoyée)",
+    MessageKind.VIDEO: "(vidéo envoyée)",
+    MessageKind.DOCUMENT: "(document envoyé)",
+    MessageKind.AUDIO: "(note vocale envoyée)",
+    MessageKind.STICKER: "(sticker envoyé)",
+}
+
+# Photos sent before the listing exists — very common, and they used to be
+# lost. Kept as ``[{"key", "kind"}]`` and attached the moment it is saved.
+# The leading underscore keeps them out of every prompt.
+PENDING_MEDIA_KEY = "_pending_media"
+
+# How long an acknowledgement waits for the rest of an album.
+PHOTO_BURST_SECONDS = 6
 
 # Staged on a landlord's thread when a tenant picks his lodging. Set as the
 # open question there, so his next message is read as the answer to it.
@@ -853,23 +887,45 @@ class AnalyseConversationMessageUseCase:
         media pipeline exists to serve. There is nothing to classify: the bytes
         are already stored and the kind is already known.
 
-        With no listing to attach to, the turn is still recorded and reported
-        with a reason — a photo that vanishes with no trace is the defect, not
-        the missing draft.
+        A photo sent before the listing exists is kept and attached once it is
+        saved. Its acknowledgement names the photo (``media_burst_of``), so an
+        album of ten is answered once, by its last photo, instead of ten times.
         """
         ai_bypass_total.labels(stage="media").inc()
-        media_kind = "DOCUMENT" if kind is MessageKind.DOCUMENT else "PHOTO"
+        media_kind = _LISTING_MEDIA.get(kind)
+        if media_kind is None:
+            return await self._finish(
+                session=session,
+                message_id=message_id,
+                intent="UNKNOWN",
+                confidence=1.0,
+                entities={},
+                used_llm=False,
+                latency_ms=0,
+                cost_usd=Decimal("0"),
+                now=now,
+                reason="media_unsupported",
+                reply_text=unsupported_media_text(kind.value, session.language),
+                text=text,
+                media_marker=_MEDIA_MARKERS.get(kind, "(fichier envoyé)"),
+            )
         property_id = session.assigned_property_id
         reason: str | None = None
         reply_text: str | None = None
         if self._listing is None or property_id is None:
-            reason = "media_without_a_listing"
-            _logger.warning(
-                "media_without_a_listing",
-                session_id=str(session.id),
-                object_key=object_key,
-                kind=media_kind,
-            )
+            if session.flow is FlowName.PROPERTY_SEARCH or self._listing is None:
+                reason = "media_without_a_listing"
+                _logger.warning(
+                    "media_without_a_listing",
+                    session_id=str(session.id),
+                    object_key=object_key,
+                    kind=media_kind,
+                )
+            else:
+                reason = "media_kept_for_listing"
+                reply_text = await self._keep_for_listing(
+                    session, object_key=object_key, kind=media_kind, now=now
+                )
         else:
             try:
                 attached = await self._listing.attach_media_from_conversation(
@@ -879,7 +935,8 @@ class AnalyseConversationMessageUseCase:
                     now=now,
                 )
                 if attached is not None:
-                    reply_text = photo_received_text(
+                    reply_text = media_received_text(
+                        kind=media_kind,
                         photos=attached.photos,
                         published=attached.published,
                         just_published=attached.just_published,
@@ -910,7 +967,52 @@ class AnalyseConversationMessageUseCase:
             reason=reason,
             reply_text=reply_text,
             text=text,
+            media_burst_of=message_id,
+            media_marker=_MEDIA_MARKERS.get(kind, "(fichier envoyé)"),
         )
+
+    async def _keep_for_listing(
+        self, session: ConversationSession, *, object_key: str, kind: str, now: datetime
+    ) -> str:
+        """Hold a photo sent before its listing exists, and say so."""
+        observed = session.revision
+        earlier = session.context.get(PENDING_MEDIA_KEY)
+        kept = [
+            *(earlier if isinstance(earlier, list) else []),
+            {"key": object_key, "kind": kind},
+        ]
+        session.merge_context({PENDING_MEDIA_KEY: kept}, now=now)
+        await self._sessions.save(session, expected_revision=observed)
+        return media_kept_text(
+            count=len(kept),
+            photos_only=all(item.get("kind") == "PHOTO" for item in kept),
+            listing_started=session.flow in LISTING_FLOWS,
+            language=session.language,
+        )
+
+    async def _attach_kept_media(
+        self, session: ConversationSession, property_id: uuid.UUID, *, now: datetime
+    ) -> ConversationMediaResult | None:
+        """The photos sent early, onto the listing just saved."""
+        kept = session.context.get(PENDING_MEDIA_KEY)
+        if self._listing is None or not isinstance(kept, list):
+            return None
+        result: ConversationMediaResult | None = None
+        for item in kept:
+            if not isinstance(item, dict) or not isinstance(item.get("key"), str):
+                continue
+            try:
+                result = await self._listing.attach_media_from_conversation(
+                    property_id=property_id,
+                    object_key=item["key"],
+                    kind=str(item.get("kind") or "PHOTO"),
+                    now=now,
+                ) or result
+            except DomainError as exc:
+                _logger.warning(
+                    "kept_media_refused", session_id=str(session.id), error=exc.message
+                )
+        return result
 
     async def _without_a_model(
         self,
@@ -973,6 +1075,8 @@ class AnalyseConversationMessageUseCase:
         reason: str | None = None,
         reply_text: str | None = None,
         text: str | None = None,
+        media_burst_of: uuid.UUID | None = None,
+        media_marker: str | None = None,
     ) -> AnalysisReport:
         """Close a call that did not reach the model.
 
@@ -998,6 +1102,8 @@ class AnalyseConversationMessageUseCase:
             cost_usd=cost_usd,
             now=now,
             reply_text=reply_text,
+            media_burst_of=media_burst_of,
+            media_marker=media_marker,
         )
 
     def _read_open_question(
@@ -1180,6 +1286,8 @@ class AnalyseConversationMessageUseCase:
         output_tokens: int = 0,
         reply_text: str | None = None,
         text: str | None = None,
+        media_burst_of: uuid.UUID | None = None,
+        media_marker: str | None = None,
     ) -> AnalysisReport:
         """Record the turn, move the conversation, and stage the answer.
 
@@ -1307,8 +1415,14 @@ class AnalyseConversationMessageUseCase:
             text=reply_text,
             now=now,
             # Stock copy goes out in the user's voice; a recap to confirm and
-            # the model's own sentence go out as they are.
-            answering=text if platform_text and reply_text == platform_text else None,
+            # the model's own sentence go out as they are. A photo's caption
+            # may be empty, and its acknowledgement is stock copy too.
+            answering=(
+                (text or media_marker)
+                if media_marker is not None
+                else text if platform_text and reply_text == platform_text else None
+            ),
+            media_burst_of=media_burst_of,
         )
 
         await self._uow.commit()
@@ -1337,6 +1451,7 @@ class AnalyseConversationMessageUseCase:
         now: datetime,
         text: str | None = None,
         answering: str | None = None,
+        media_burst_of: uuid.UUID | None = None,
     ) -> None:
         """Request the one reply this turn owes the user.
 
@@ -1361,6 +1476,14 @@ class AnalyseConversationMessageUseCase:
                     text=text,
                     language=session.language,
                     answering=answering or None,
+                    media_burst_of=media_burst_of,
+                    # Long enough for the rest of an album to arrive: only the
+                    # last photo of a burst is answered (see the outbound layer).
+                    not_before=(
+                        now + timedelta(seconds=PHOTO_BURST_SECONDS)
+                        if media_burst_of is not None
+                        else None
+                    ),
                 )
             ],
             correlation_id=current_context().get("correlation_id") or "unknown",
@@ -1668,6 +1791,16 @@ class AnalyseConversationMessageUseCase:
         if result is None:
             return listing_unsaved_text(session.language), next_step, None
 
+        kept = await self._attach_kept_media(session, result.property_id, now=now)
+        if kept is not None and kept.published and not result.published:
+            # The photos he sent early were all the listing was waiting for.
+            return (
+                kept_media_published_text(
+                    count=kept.photos, photos_only=True, language=session.language
+                ),
+                FlowStep.PUBLISHED,
+                result.property_id,
+            )
         if result.published:
             return None, FlowStep.PUBLISHED, result.property_id
         return (
@@ -1841,6 +1974,11 @@ class AnalyseConversationMessageUseCase:
 
         opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
         if opening_flow is not None and _opens_new_flow(session, intent):
+            # Photos sent before he said what they were for belong to the
+            # listing he is about to start, not to the context being reset.
+            kept_media = session.context.get(PENDING_MEDIA_KEY)
+            if kept_media:
+                carried = {**carried, PENDING_MEDIA_KEY: kept_media}
             # Resets the context, so it must come first: the facts about to be
             # merged belong to this new attempt, not to the abandoned one.
             session.start_flow(opening_flow, now=now, first_step=next_step or FlowStep.START)
@@ -1851,8 +1989,12 @@ class AnalyseConversationMessageUseCase:
         # every save look like a conflict.
         if next_step is not None:
             session.transition(next_step, now=now, expected_revision=session.revision)
+        # Attached with the listing just saved, so never attached twice.
+        released: dict[str, Any] = (
+            {PENDING_MEDIA_KEY: []} if attach_property_id is not None else {}
+        )
         session.merge_context(
-            {**carried, **facts.as_context(), **(extra_context or {})}, now=now
+            {**carried, **facts.as_context(), **(extra_context or {}), **released}, now=now
         )
         # Attaching after the baseline is captured keeps the save's
         # expected_revision equal to the value read from the row.

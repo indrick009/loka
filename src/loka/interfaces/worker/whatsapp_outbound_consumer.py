@@ -30,6 +30,9 @@ from redis.asyncio import Redis
 from loka.bounded_contexts.ai.infrastructure.composition import (
     voice_platform_reply_use_case,
 )
+from loka.bounded_contexts.messaging.infrastructure.persistence.media_bursts import (
+    SqlAlchemyMediaBursts,
+)
 from loka.bounded_contexts.messaging.infrastructure.persistence.sent_messages import (
     SqlAlchemySentMessageLog,
 )
@@ -40,6 +43,7 @@ from loka.interfaces.worker.conversation_analysis_consumer import (
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
+    DeferredHandlerError,
     PermanentHandlerError,
     RetryableHandlerError,
 )
@@ -113,8 +117,30 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             raise PermanentHandlerError("outbound payload has no metadata")
 
         recipient = _require_str(metadata, "recipient_phone")
+        not_before = _optional_datetime(metadata.get("not_before"))
+        if not_before is not None:
+            wait_ms = int((not_before - datetime.now(UTC)).total_seconds() * 1000)
+            if wait_ms > 0:
+                raise DeferredHandlerError(wait_ms)
+        burst_of = _optional_uuid(metadata.get("media_burst_of"))
+        if burst_of is not None and await self._a_newer_photo_follows(burst_of):
+            _logger.info("photo_ack_superseded", session_id=metadata.get("session_id"))
+            return
         async with self._in_thread_order(recipient):
             await self._deliver(body, metadata, recipient)
+
+    async def _a_newer_photo_follows(self, message_id: uuid.UUID) -> bool:
+        """Whether this acknowledgement is not the last of its burst.
+
+        A failed check answers "no": an extra "photo reçue" is a small cost,
+        a burst left with no answer at all is the silence Kora must never give.
+        """
+        try:
+            async with unit_of_work(self._database) as uow:
+                return await SqlAlchemyMediaBursts(uow.session).has_newer_media(message_id)
+        except Exception as exc:  # an unanswered burst is worse than two answers
+            _logger.warning("photo_burst_check_failed", error=type(exc).__name__)
+            return False
 
     @asynccontextmanager
     async def _in_thread_order(self, recipient: str) -> AsyncIterator[None]:
@@ -305,5 +331,12 @@ def _optional_str(metadata: dict[str, Any], name: str) -> str | None:
 def _optional_uuid(value: Any) -> uuid.UUID | None:
     try:
         return uuid.UUID(str(value)) if value else None
+    except ValueError:
+        return None
+
+
+def _optional_datetime(value: Any) -> datetime | None:
+    try:
+        return datetime.fromisoformat(str(value)) if value else None
     except ValueError:
         return None

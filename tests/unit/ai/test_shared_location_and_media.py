@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -27,6 +27,8 @@ from loka.bounded_contexts.ai.application.ports import (
     UsageEntry,
 )
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
+    PENDING_MEDIA_KEY,
+    PHOTO_BURST_SECONDS,
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
 )
@@ -377,11 +379,12 @@ class TestAnImageIsAttachedToTheListing:
         assert listing.attached == [(property_id, "chat/abc/photo.jpg", "PHOTO")]
         assert report.accepted is True
 
-    async def test_a_photo_with_no_listing_yet_is_not_lost_silently(self) -> None:
-        """Nothing to attach it to: the turn is still recorded and reported."""
-        session = _session(flow=FlowName.PROPERTY_CREATION, step=FlowStep.COLLECT_MEDIA)
+    async def test_a_photo_sent_before_its_listing_is_kept_for_it(self) -> None:
+        """Landlords send the photos first. They used to be dropped, and the
+        landlord asked to rephrase a message that was a picture."""
+        session = _session(flow=FlowName.PROPERTY_CREATION, step=FlowStep.COLLECT_LOCATION)
         listing = FakeListing()
-        use_case, message_id, _, _ = _build(
+        use_case, message_id, _, uow = _build(
             session,
             kind=MessageKind.IMAGE,
             media_object_key="chat/abc/photo.jpg",
@@ -393,7 +396,69 @@ class TestAnImageIsAttachedToTheListing:
         )
 
         assert listing.attached == []
-        assert report.reason == "media_without_a_listing"
+        assert report.reason == "media_kept_for_listing"
+        assert session.context[PENDING_MEDIA_KEY] == [
+            {"key": "chat/abc/photo.jpg", "kind": "PHOTO"}
+        ]
+        assert "garde" in uow.events.staged[0].text
+
+    async def test_a_photo_is_answered_once_per_album(self) -> None:
+        """Ten photos used to get ten "photo bien reçue": the reply names its
+        photo and waits, so only the last of a burst is sent."""
+        property_id = uuid.uuid4()
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION, step=FlowStep.COLLECT_MEDIA, property_id=property_id
+        )
+        use_case, message_id, _, uow = _build(
+            session,
+            kind=MessageKind.IMAGE,
+            media_object_key="chat/abc/photo.jpg",
+            listing=FakeListing(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        staged = uow.events.staged[0]
+        assert staged.media_burst_of == message_id
+        assert staged.not_before == NOW + timedelta(seconds=PHOTO_BURST_SECONDS)
+
+    async def test_a_video_is_attached_as_a_video_not_a_photo(self) -> None:
+        property_id = uuid.uuid4()
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION, step=FlowStep.COLLECT_MEDIA, property_id=property_id
+        )
+        listing = FakeListing()
+        use_case, message_id, _, _ = _build(
+            session, kind=MessageKind.VIDEO, media_object_key="chat/abc/tour.mp4", listing=listing
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert listing.attached == [(property_id, "chat/abc/tour.mp4", "VIDEO")]
+
+    @pytest.mark.parametrize("kind", [MessageKind.AUDIO, MessageKind.STICKER])
+    async def test_a_voice_note_or_a_sticker_is_never_a_photo(self, kind: MessageKind) -> None:
+        """Both used to be filed as photos of the lodging."""
+        property_id = uuid.uuid4()
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION, step=FlowStep.COLLECT_MEDIA, property_id=property_id
+        )
+        listing = FakeListing()
+        use_case, message_id, _, uow = _build(
+            session, kind=kind, media_object_key="chat/abc/note.ogg", listing=listing
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert listing.attached == []
+        assert report.reason == "media_unsupported"
+        assert uow.events.staged[0].text
 
     async def test_a_document_is_attached_as_a_document_not_a_photo(self) -> None:
         property_id = uuid.uuid4()

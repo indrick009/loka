@@ -164,7 +164,9 @@ class CreatePropertyFromConversationUseCase:
         media = PropertyMedia(
             media_id=new_id(),
             object_key=object_key,
-            kind=MediaKind.DOCUMENT if kind.upper() == "DOCUMENT" else MediaKind.PHOTO,
+            # A video stays a video: it is shown to tenants but never counts as
+            # the photo publication requires, and never goes out as an image.
+            kind=_MEDIA_KINDS.get(kind.upper(), MediaKind.PHOTO),
         )
         media.mark_uploaded(when=now)
         prop.add_media(media, now=now)
@@ -180,6 +182,13 @@ class CreatePropertyFromConversationUseCase:
             published=published,
             just_published=published and not was_published,
         )
+
+
+_MEDIA_KINDS = {
+    "PHOTO": MediaKind.PHOTO,
+    "VIDEO": MediaKind.VIDEO,
+    "DOCUMENT": MediaKind.DOCUMENT,
+}
 
 
 def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> None:

@@ -119,6 +119,110 @@ def photo_received_text(
     return words["published" if published else "draft"].format(count=count)
 
 
+_MEDIA_TEXT: dict[str, dict[str, str]] = {
+    "fr": {
+        "video": "Vidéo bien reçue, elle est ajoutée à votre annonce.",
+        "video_needs_photo": (
+            "Vidéo bien reçue. Pour publier l'annonce, il faut aussi au moins une photo."
+        ),
+        "document": "Document bien reçu.",
+        "kept": (
+            "Bien reçu ({count}), je le garde pour votre annonce : il y sera ajouté "
+            "dès qu'elle sera enregistrée."
+        ),
+        "kept_first": (
+            "Bien reçu ({count}), je le garde. C'est pour mettre un logement en "
+            "location ? Dites-moi de quel logement il s'agit."
+        ),
+        "AUDIO": (
+            "Je ne peux pas encore écouter les notes vocales. Pouvez-vous me "
+            "l'écrire en quelques mots ?"
+        ),
+        "other": (
+            "Je ne peux pas utiliser ce type de fichier. Envoyez plutôt une photo "
+            "ou un texte."
+        ),
+        "kept_published": (
+            "Annonce enregistrée avec vos {count} : elle est maintenant publiée, les "
+            "locataires qui cherchent un logement comme le vôtre peuvent la trouver."
+        ),
+        "one": "1 fichier",
+        "many": "{count} fichiers",
+        "one_photo": "1 photo",
+        "many_photos": "{count} photos",
+    },
+    "en": {
+        "video": "Video received, it is added to your listing.",
+        "video_needs_photo": (
+            "Video received. To publish the listing, at least one photo is needed too."
+        ),
+        "document": "Document received.",
+        "kept": (
+            "Received ({count}), I am keeping it for your listing: it will be added "
+            "as soon as the listing is saved."
+        ),
+        "kept_first": (
+            "Received ({count}), I am keeping it. Is it to rent out a place? Tell "
+            "me which place it is."
+        ),
+        "AUDIO": "I cannot listen to voice notes yet. Could you write it in a few words?",
+        "other": "I cannot use this kind of file. Please send a photo or a text instead.",
+        "kept_published": (
+            "Listing saved with your {count}: it is now published, tenants looking "
+            "for a place like yours can find it."
+        ),
+        "one": "1 file",
+        "many": "{count} files",
+        "one_photo": "1 photo",
+        "many_photos": "{count} photos",
+    },
+}
+
+
+def media_received_text(
+    *, kind: str, photos: int, published: bool, just_published: bool, language: str
+) -> str:
+    """What one stored photo, video or document did to the listing."""
+    if kind == "PHOTO":
+        return photo_received_text(
+            photos=photos, published=published, just_published=just_published, language=language
+        )
+    words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
+    if kind == "VIDEO":
+        # A video is shown to tenants but never stands in for a photo.
+        return words["video" if published or photos else "video_needs_photo"]
+    return words["document"]
+
+
+def media_kept_text(
+    *, count: int, photos_only: bool, listing_started: bool, language: str
+) -> str:
+    """Sent before any listing exists: kept, and said to be kept."""
+    words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
+    return words["kept" if listing_started else "kept_first"].format(
+        count=_amount(words, count=count, photos_only=photos_only)
+    )
+
+
+def kept_media_published_text(*, count: int, photos_only: bool, language: str) -> str:
+    """The photos sent early were all the listing was waiting for."""
+    words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
+    return words["kept_published"].format(
+        count=_amount(words, count=count, photos_only=photos_only)
+    )
+
+
+def _amount(words: Mapping[str, str], *, count: int, photos_only: bool) -> str:
+    one, many = ("one_photo", "many_photos") if photos_only else ("one", "many")
+    return words[one] if count == 1 else words[many].format(count=count)
+
+
+def unsupported_media_text(kind: str, language: str) -> str:
+    """A voice note or a sticker: never filed as a photo of a lodging."""
+    words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
+    return words.get(kind, words["other"])
+
+
 def property_type_label(property_type: str | None, language: str) -> str:
     """"Studio", "Chambre"... — empty when the type is unknown."""
     return _TYPES.get(language, _TYPES["fr"]).get(str(property_type or ""), "")
