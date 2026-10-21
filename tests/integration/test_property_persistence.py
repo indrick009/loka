@@ -28,7 +28,7 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     RentMonths,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
+from loka.bounded_contexts.property.domain.value_objects.location import Coordinates, Location
 from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.bounded_contexts.property.infrastructure.persistence.models import (
     PropertyMediaRow,
@@ -340,6 +340,48 @@ async def test_price_nearest_orders_by_distance_to_the_budget(session: AsyncSess
     # price tie-break, and the 120 000 is last.
     assert [item["price_xaf"] for item in result.items] == [145_000, 155_000, 120_000]
     assert result.next_cursor is None
+
+
+
+async def test_a_shared_location_finds_the_nearest_and_drops_the_far(
+    session: AsyncSession,
+) -> None:
+    """A tenant's pin used to mean "the whole city". Measured in SQL now: a
+    lodging a short ride away qualifies whatever its district, one across town
+    does not, and one with no position is kept but ranked last."""
+    landlord_id = uuid.uuid4()
+    now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    placed = {
+        "near": ("Bonamoussadi", (4.0590, 9.7410)),  # ~1.5 km from the pin
+        "far": ("Bonabéri", (4.0780, 9.6600)),  # ~8 km, across the Wouri
+        "unmeasured": ("Bali", None),
+    }
+    repository = SqlAlchemyPropertyRepository(session)
+    projected: list[Property] = []
+    ids: dict[str, uuid.UUID] = {}
+    for index, (name, (neighbourhood, point)) in enumerate(placed.items()):
+        prop = _listing(landlord_id, now=now + timedelta(minutes=index))
+        coordinates = Coordinates(*point) if point else None
+        prop.set_location(
+            Location(city="Douala", neighbourhood=neighbourhood, coordinates=coordinates),
+            now=now,
+        )
+        prop.publish(now=now + timedelta(minutes=index), actor_id=landlord_id)
+        prop.mark_verified(now=now + timedelta(minutes=index))
+        await repository.add(prop)
+        projected.append(prop)
+        ids[name] = prop.id
+    await session.commit()
+    await _project(session, projected)
+
+    result = await PropertySearchRepository(session).search(
+        PropertySearchCriteria(city="Douala", near=(4.0510, 9.7530))
+    )
+
+    assert [item["property_id"] for item in result.items] == [
+        str(ids["near"]),
+        str(ids["unmeasured"]),
+    ]
 
 
 async def test_the_quantity_survives_a_round_trip(session: AsyncSession) -> None:

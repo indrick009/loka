@@ -35,6 +35,8 @@ class RecordTenantDemandCommand:
     city: str | None = None
     neighbourhoods: tuple[str, ...] = ()
     max_rent_xaf: int | None = None
+    # The (latitude, longitude) he shared from where he wants to live.
+    near: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +73,7 @@ class RecordTenantDemandUseCase:
                 neighbourhoods=command.neighbourhoods,
                 max_rent=max_rent,
                 now=now,
+                near=command.near,
             )
             await demands.save(existing)
             self._uow.collect(existing)
@@ -85,6 +88,7 @@ class RecordTenantDemandUseCase:
             neighbourhoods=command.neighbourhoods,
             max_rent=max_rent,
             now=now,
+            near=command.near,
         )
         try:
             await demands.add(demand)

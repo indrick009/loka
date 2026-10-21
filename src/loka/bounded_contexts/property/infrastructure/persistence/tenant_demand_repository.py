@@ -98,6 +98,8 @@ def _to_row(demand: TenantDemand) -> dict[str, Any]:
         "property_type": demand.property_type,
         "city": demand.city,
         "neighbourhoods": list(demand.neighbourhoods),
+        "latitude": demand.near[0] if demand.near else None,
+        "longitude": demand.near[1] if demand.near else None,
         "max_rent_xaf": demand.max_rent.amount if demand.max_rent else None,
         "currency": demand.max_rent.currency if demand.max_rent else "XAF",
         "received_at": demand.received_at,
@@ -117,6 +119,11 @@ def _from_row(row: TenantDemandRow) -> TenantDemand:
             Money(row.max_rent_xaf, row.currency) if row.max_rent_xaf is not None else None
         ),
         now=row.received_at,
+        near=(
+            (row.latitude, row.longitude)
+            if row.latitude is not None and row.longitude is not None
+            else None
+        ),
     )
     demand.pull_events()
     demand.status = DemandStatus(row.status)

@@ -230,6 +230,8 @@ class ConversationSearchQuery:
     property_types: tuple[str, ...] = ()
     budget_xaf: int | None = None
     min_bedrooms: int | None = None
+    # The WhatsApp location he shared from where he wants to live.
+    near: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True, slots=True)

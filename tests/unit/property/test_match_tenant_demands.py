@@ -28,8 +28,10 @@ from loka.bounded_contexts.property.domain.entities.property_media import (
     PropertyMedia,
 )
 from loka.bounded_contexts.property.domain.entities.tenant_demand import (
+    NEAR_RADIUS_KM,
     DemandStatus,
     TenantDemand,
+    distance_km,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     ChargingPolicy,
@@ -217,6 +219,45 @@ class TestDemandAccepts:
     def test_no_neighbourhood_named_means_the_whole_city(self) -> None:
         assert a_demand(neighbourhoods=()).accepts(
             property_type="STUDIO", city="Yaoundé", neighbourhood=None, rent_xaf=40_000
+        )
+
+
+# A tenant's pin in Odza, and two lodgings: one a short ride away in a district
+# he never named, one across town in Bastos.
+ODZA = (3.7905, 11.5370)
+NEAR_ODZA = (3.8020, 11.5400)  # about 1.3 km
+BASTOS = (3.8905, 11.5139)  # about 11 km
+
+
+class TestASharedLocation:
+    """A pin used to be read as "the whole city": it now measures distance."""
+
+    def _pinned(self, *, neighbourhoods: tuple[str, ...] = ()) -> TenantDemand:
+        demand = a_demand(neighbourhoods=neighbourhoods)
+        demand.near = ODZA
+        return demand
+
+    def test_a_lodging_a_short_ride_away_qualifies_whatever_its_district(self) -> None:
+        assert distance_km(ODZA, NEAR_ODZA) < NEAR_RADIUS_KM
+        assert self._pinned().is_around(neighbourhood="Ekounou", point=NEAR_ODZA)
+
+    def test_a_lodging_across_town_does_not(self) -> None:
+        assert not self._pinned().is_around(neighbourhood="Bastos", point=BASTOS)
+
+    def test_a_district_he_named_always_counts(self) -> None:
+        demand = self._pinned(neighbourhoods=("Bastos",))
+        assert demand.is_around(neighbourhood="Bastos", point=BASTOS)
+
+    def test_a_lodging_with_no_position_is_not_shut_out_by_a_pin_alone(self) -> None:
+        assert self._pinned().is_around(neighbourhood="Mvan", point=None)
+
+    def test_the_rule_applies_to_a_freshly_published_lodging(self) -> None:
+        assert self._pinned().accepts(
+            property_type="STUDIO",
+            city="Yaoundé",
+            neighbourhood="Ekounou",
+            rent_xaf=40_000,
+            point=NEAR_ODZA,
         )
 
 

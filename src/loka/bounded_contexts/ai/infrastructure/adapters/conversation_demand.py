@@ -35,6 +35,7 @@ class ConversationTenantDemands:
                     city=query.city,
                     neighbourhoods=query.neighbourhoods,
                     max_rent_xaf=query.budget_xaf,
+                    near=query.near,
                 ),
                 now=now,
             )

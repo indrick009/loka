@@ -127,6 +127,10 @@ class PropertySearchDocumentRow(Base):
     property_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
     city: Mapped[str | None] = mapped_column(String(64), nullable=True)
     neighbourhood: Mapped[str | None] = mapped_column(String(96), nullable=True)
+    # Copied from the listing so a tenant's shared location can be matched by
+    # distance, not only by the district's name.
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
 
     public_price_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -280,6 +284,9 @@ class TenantDemandRow(Base):
     neighbourhoods: Mapped[list[str]] = mapped_column(
         ARRAY(String(96)), nullable=False, default=list
     )
+    # The WhatsApp location he shared from where he wants to live, if any.
+    latitude: Mapped[float | None] = mapped_column(nullable=True)
+    longitude: Mapped[float | None] = mapped_column(nullable=True)
     max_rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

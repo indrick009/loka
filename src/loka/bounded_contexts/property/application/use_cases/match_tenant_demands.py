@@ -106,6 +106,7 @@ class MatchTenantDemandsUseCase:
                 city=proposal["city"],
                 neighbourhood=proposal["neighbourhood"],
                 rent_xaf=proposal["rent_xaf"],
+                point=_point(prop),
             ):
                 continue
             demand.mark_answered(now=now, proposals=[proposal])
@@ -135,6 +136,7 @@ def _criteria(demand: TenantDemand) -> PropertySearchCriteria:
         near_price_xaf=demand.max_rent.amount if demand.max_rent else None,
         verified_only=False,
         sort="price_nearest" if band else "recent",
+        near=demand.near,
     )
 
 
@@ -163,6 +165,12 @@ def _from_listing(prop: Property) -> dict[str, Any]:
         "rent_xaf": price.amount if price else None,
         "photo_object_keys": _photo_object_keys(prop),
     }
+
+
+def _point(prop: Property) -> tuple[float, float] | None:
+    """Where the landlord shared the lodging from, when he did."""
+    coordinates = prop.location.coordinates if prop.location else None
+    return (coordinates.latitude, coordinates.longitude) if coordinates else None
 
 
 def _photo_object_keys(prop: Property) -> list[str]:

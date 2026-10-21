@@ -303,7 +303,16 @@ def search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
         property_types=(str(property_type),) if property_type else (),
         budget_xaf=_optional_amount(rent),
         min_bedrooms=_optional_amount(bedrooms, minimum=1),
+        near=_point(location),
     )
+
+
+def _point(location: Mapping[str, Any]) -> tuple[float, float] | None:
+    """The pin he shared, as (latitude, longitude), when there is one."""
+    latitude, longitude = location.get("latitude"), location.get("longitude")
+    if isinstance(latitude, int | float) and isinstance(longitude, int | float):
+        return float(latitude), float(longitude)
+    return None
 
 
 def _neighbourhoods(location: Mapping[str, Any]) -> tuple[str, ...]:

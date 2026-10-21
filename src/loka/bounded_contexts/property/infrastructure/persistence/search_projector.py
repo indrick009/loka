@@ -60,6 +60,8 @@ class SqlAlchemySearchProjector:
         document.property_type = source.property_type
         document.city = source.city
         document.neighbourhood = source.neighbourhood
+        document.latitude = source.latitude
+        document.longitude = source.longitude
         document.public_price_xaf = source.public_price_xaf
         document.rent_xaf = source.rent_xaf
         document.charges_xaf = source.charges_xaf

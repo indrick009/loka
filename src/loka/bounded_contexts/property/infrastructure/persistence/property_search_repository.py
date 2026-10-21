@@ -48,7 +48,9 @@ class PropertySearchRepository:
         ]
         if criteria.city:
             clauses.append(PropertySearchDocumentRow.city == criteria.city)
-        if criteria.neighbourhoods:
+        if criteria.near is not None:
+            clauses.append(self._around(criteria))
+        elif criteria.neighbourhoods:
             clauses.append(PropertySearchDocumentRow.neighbourhood.in_(criteria.neighbourhoods))
         if criteria.property_types:
             clauses.append(PropertySearchDocumentRow.property_type.in_(criteria.property_types))
@@ -107,6 +109,22 @@ class PropertySearchRepository:
         return PropertySearchResult(items=items, next_cursor=next_cursor)
 
     @staticmethod
+    def _around(criteria: PropertySearchCriteria) -> Any:
+        """The same rule as ``TenantDemand.is_around``, in SQL."""
+        assert criteria.near is not None
+        distance = _distance_km(criteria.near)
+        named = (
+            PropertySearchDocumentRow.neighbourhood.in_(criteria.neighbourhoods)
+            if criteria.neighbourhoods
+            else None
+        )
+        unmeasured = PropertySearchDocumentRow.latitude.is_(None)
+        if named is None:
+            return or_(unmeasured, distance <= criteria.near_radius_km)
+        return or_(named, and_(PropertySearchDocumentRow.latitude.is_not(None),
+                               distance <= criteria.near_radius_km))
+
+    @staticmethod
     def _is_sortable(criteria: PropertySearchCriteria, sort: str) -> bool:
         if sort == "price_nearest":
             return criteria.near_price_xaf is not None
@@ -127,6 +145,10 @@ class PropertySearchRepository:
         sort: str,
         cursor: str | None,
     ) -> Select[Any]:
+        if criteria.near is not None:
+            # A shared location is the strongest wish he expressed: the nearest
+            # lodgings first, the unmeasured last, the price breaking ties.
+            statement = statement.order_by(_distance_km(criteria.near).asc().nulls_last())
         if sort == "price_nearest":
             anchor = int(criteria.near_price_xaf or 0)
             return statement.order_by(
@@ -219,3 +241,20 @@ class PropertySearchRepository:
             "media_object_keys": row.media_object_keys,
             "published_at": row.published_at.isoformat() if row.published_at else None,
         }
+
+def _distance_km(point: tuple[float, float]) -> Any:
+    """Great-circle distance from ``point`` to a document, in SQL (haversine).
+
+    Plain trigonometry rather than PostGIS: at a few thousand listings a
+    sequential evaluation is microseconds, and an extension is one more thing
+    to install, migrate and back up.
+    """
+    latitude, longitude = point
+    doc_lat = func.radians(PropertySearchDocumentRow.latitude)
+    inner = func.power(func.sin((doc_lat - func.radians(latitude)) / 2), 2) + func.cos(
+        func.radians(latitude)
+    ) * func.cos(doc_lat) * func.power(
+        func.sin((func.radians(PropertySearchDocumentRow.longitude) - func.radians(longitude)) / 2),
+        2,
+    )
+    return 2 * 6371.0 * func.asin(func.least(1.0, func.sqrt(inner)))

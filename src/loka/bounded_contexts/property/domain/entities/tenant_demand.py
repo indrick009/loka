@@ -18,6 +18,7 @@ its identity and the clock it has been waiting on.
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import datetime
@@ -36,6 +37,25 @@ from loka.shared.domain.errors import InvalidStateTransition
 BUDGET_LOWER_TOLERANCE = 0.20
 BUDGET_UPPER_TOLERANCE = 0.05
 
+# How far from the point a tenant shared a lodging still counts as "there". A
+# pin is where he wants to live — his workplace, a relative's street — and a
+# district boundary means nothing to him: three kilometres is a short moto ride.
+NEAR_RADIUS_KM = 3.0
+
+_EARTH_RADIUS_KM = 6371.0
+
+Point = tuple[float, float]
+
+
+def distance_km(a: Point, b: Point) -> float:
+    """Great-circle distance between two (latitude, longitude) points."""
+    lat1, lat2 = math.radians(a[0]), math.radians(b[0])
+    inner = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin(math.radians(b[1] - a[1]) / 2) ** 2
+    )
+    return 2 * _EARTH_RADIUS_KM * math.asin(min(1.0, math.sqrt(inner)))
+
 
 class DemandStatus(StrEnum):
     """Owed an answer, or no longer owed one."""
@@ -51,6 +71,7 @@ class TenantDemand(AggregateRoot):
         "city",
         "demand_id",
         "max_rent",
+        "near",
         "neighbourhoods",
         "property_type",
         "received_at",
@@ -69,6 +90,7 @@ class TenantDemand(AggregateRoot):
         neighbourhoods: tuple[str, ...],
         max_rent: Money | None,
         now: datetime,
+        near: Point | None = None,
     ) -> None:
         super().__init__(aggregate_type="TenantDemand")
         self._assign_id(demand_id)
@@ -78,6 +100,8 @@ class TenantDemand(AggregateRoot):
         self.city = city
         self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
+        # The WhatsApp location he shared, when he shared one.
+        self.near = near
         self.status = DemandStatus.OPEN
         self.received_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
@@ -101,6 +125,7 @@ class TenantDemand(AggregateRoot):
         neighbourhoods: tuple[str, ...],
         max_rent: Money | None,
         now: datetime,
+        near: Point | None = None,
     ) -> None:
         """He sharpened what he is after; it is still the same request.
 
@@ -117,6 +142,7 @@ class TenantDemand(AggregateRoot):
         self.city = city
         self.neighbourhoods = neighbourhoods
         self.max_rent = max_rent
+        self.near = near
         self.updated_at = ensure_utc(now)
         self.record(
             "TenantDemandRestated",
@@ -172,6 +198,7 @@ class TenantDemand(AggregateRoot):
         city: str | None,
         neighbourhood: str | None,
         rent_xaf: int | None,
+        point: Point | None = None,
     ) -> bool:
         """Whether one published lodging answers this demand.
 
@@ -183,12 +210,29 @@ class TenantDemand(AggregateRoot):
             return False
         if self.property_type and property_type != self.property_type:
             return False
-        if self.neighbourhoods and neighbourhood not in self.neighbourhoods:
+        if not self.is_around(neighbourhood=neighbourhood, point=point):
             return False
         band = self.price_band()
         if band is None:
             return True
         return rent_xaf is not None and band[0] <= rent_xaf <= band[1]
+
+    def is_around(self, *, neighbourhood: str | None, point: Point | None) -> bool:
+        """Whether a lodging is where he wants to live.
+
+        A district he named always counts. A shared location adds every lodging
+        within ``NEAR_RADIUS_KM`` of it, whatever its district is called — and
+        excludes those placed further away. A lodging with no position of its
+        own cannot be measured, so a pin alone never shuts it out: it is
+        ranked after the measured ones instead (see the search).
+        """
+        if neighbourhood is not None and neighbourhood in self.neighbourhoods:
+            return True
+        if self.near is not None:
+            if point is not None:
+                return distance_km(self.near, point) <= NEAR_RADIUS_KM
+            return not self.neighbourhoods
+        return not self.neighbourhoods
 
     def withdraw(self, *, reason: str, now: datetime) -> None:
         """He is no longer looking. Not an answer, and not a failure either."""

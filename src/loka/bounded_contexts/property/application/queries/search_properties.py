@@ -44,6 +44,12 @@ class PropertySearchCriteria:
     available_before: date | None = None
     verified_only: bool = True
     sort: str = "recent"
+    # A (latitude, longitude) the tenant shared. With it, lodgings placed
+    # within ``near_radius_km`` qualify whatever their district is called,
+    # those placed further away do not, and the nearest come first. A lodging
+    # with no position of its own stays eligible, ranked after the measured.
+    near: tuple[float, float] | None = None
+    near_radius_km: float = 3.0
 
 
 @dataclass(frozen=True, slots=True)
