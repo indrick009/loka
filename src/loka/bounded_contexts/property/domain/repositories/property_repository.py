@@ -11,6 +11,7 @@ from loka.bounded_contexts.property.domain.entities.availability_check import (
 )
 from loka.bounded_contexts.property.domain.entities.property import Property
 from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
+from loka.bounded_contexts.property.domain.services.negotiation import Offer
 
 
 class PropertyRepository(Protocol):
@@ -61,6 +62,10 @@ class AvailabilityCheckRepository(Protocol):
     async def latest_answered_for_listing(
         self, property_id: Any
     ) -> AvailabilityCheck | None: ...
+
+    async def asked_since(self, property_id: Any, *, since: datetime) -> int: ...
+
+    async def offers_made(self, property_id: Any) -> list[Offer]: ...
 
     async def add(self, check: AvailabilityCheck) -> None: ...
 

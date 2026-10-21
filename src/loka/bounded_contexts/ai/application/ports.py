@@ -207,7 +207,12 @@ class AvailabilityAnswers(Protocol):
     """
 
     async def record_answer(
-        self, *, landlord_id: uuid.UUID, answer: str, now: datetime
+        self,
+        *,
+        landlord_id: uuid.UUID,
+        answer: str,
+        now: datetime,
+        offer_reply: Mapping[str, Any] | None = None,
     ) -> AvailabilityAnswerResult | None: ...
 
 

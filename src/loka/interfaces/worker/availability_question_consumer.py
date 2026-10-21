@@ -20,6 +20,10 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from loka.bounded_contexts.ai.application.services.negotiation_copy import (
+    OFFER_QUESTION_KEY,
+    landlord_offer_text,
+)
 from loka.bounded_contexts.landlord.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.bounded_contexts.messaging.domain.events.message_events import (
     WhatsAppMessageSendRequested,
@@ -54,6 +58,10 @@ class AvailabilityQuestionConsumer(ConsumerBase):
     async def handle(self, payload: dict[str, Any]) -> None:
         landlord_profile_id = _uuid_field(payload, "landlord_id")
         property_id = _uuid_field(payload, "property_id")
+        offer = payload.get("payload", {}).get("metadata", {}).get("offer")
+        # With the tenant's terms in it (§8), the question needs its numbers and
+        # its own key, so the reply is read as an answer to the offer too.
+        question_key = OFFER_QUESTION_KEY if offer else LANDLORD_QUESTION_KEY
 
         async with unit_of_work(self._database) as uow:
             landlords = uow.repository(LANDLORD_DIRECTORY)
@@ -74,7 +82,7 @@ class AvailabilityQuestionConsumer(ConsumerBase):
             # the middle of: left on his photo question, "oui, toujours
             # disponible" was read as small talk and the tenant never released.
             observed = session.revision
-            session.record_pending_question(LANDLORD_QUESTION_KEY)
+            session.record_pending_question(question_key)
             session.merge_context({}, now=datetime.now(UTC))
             await sessions.save(session, expected_revision=observed)
 
@@ -88,11 +96,11 @@ class AvailabilityQuestionConsumer(ConsumerBase):
                         session_id=session.id,
                         recipient_phone=session.phone.e164,
                         reply_kind="QUESTION",
-                        question_key=LANDLORD_QUESTION_KEY,
+                        question_key=question_key,
                         # No model-written sentence: the wording of this
                         # question *is* the business rule, and a rephrased
                         # version asks something slightly different.
-                        text=None,
+                        text=landlord_offer_text(offer, session.language) if offer else None,
                         intent="AVAILABILITY_CHECK",
                         language=session.language,
                     )

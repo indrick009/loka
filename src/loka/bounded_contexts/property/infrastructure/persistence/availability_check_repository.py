@@ -9,9 +9,10 @@ can fall back on the question already in flight.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from loka.bounded_contexts.property.domain.entities.availability_check import (
     AvailabilityCheck,
     CheckStatus,
+)
+from loka.bounded_contexts.property.domain.services.negotiation import (
+    Offer,
+    OfferOutcome,
+    OfferReply,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import AvailabilityAnswer
 from loka.bounded_contexts.property.infrastructure.persistence.models import (
@@ -72,6 +78,28 @@ class SqlAlchemyAvailabilityCheckRepository:
         row = result.scalar_one_or_none()
         return _from_row(row) if row is not None else None
 
+    async def asked_since(self, property_id: Any, *, since: datetime) -> int:
+        """How many times this lodging was asked about: its demand (§8)."""
+        result = await self._session.execute(
+            select(func.count())
+            .select_from(AvailabilityCheckRow)
+            .where(
+                AvailabilityCheckRow.property_id == property_id,
+                AvailabilityCheckRow.asked_at >= since,
+            )
+        )
+        return int(result.scalar_one())
+
+    async def offers_made(self, property_id: Any) -> list[Offer]:
+        """Every offer already put about this lodging, never to be repeated."""
+        result = await self._session.execute(
+            select(AvailabilityCheckRow.offer).where(
+                AvailabilityCheckRow.property_id == property_id,
+                AvailabilityCheckRow.offer.is_not(None),
+            )
+        )
+        return [offer for raw in result.scalars() if (offer := Offer.from_dict(raw))]
+
     async def add(self, check: AvailabilityCheck) -> None:
         self._session.add(AvailabilityCheckRow(**_to_row(check)))
         try:
@@ -122,6 +150,8 @@ def _to_row(check: AvailabilityCheck) -> dict[str, Any]:
         "asked_at": check.asked_at,
         "answered_at": check.answered_at,
         "answer": check.answer.value if check.answer else None,
+        "offer": check.offer.as_dict() if check.offer else None,
+        "offer_reply": check.offer_reply.as_dict() if check.offer_reply else None,
     }
 
 
@@ -132,13 +162,28 @@ def _from_row(row: AvailabilityCheckRow) -> AvailabilityCheck:
         landlord_id=row.landlord_id,
         tenant_id=row.tenant_id,
         now=row.asked_at,
+        offer=Offer.from_dict(row.offer),
     )
     check.pull_events()
     check.status = CheckStatus(row.status)
     check.answered_at = row.answered_at
     check.answer = AvailabilityAnswer(row.answer) if row.answer else None
+    reply = row.offer_reply
+    check.offer_reply = (
+        OfferReply(
+            outcome=OfferOutcome(str(reply["outcome"])),
+            rent_xaf=_as_int(reply.get("rent_xaf")),
+            advance_months=_as_int(reply.get("advance_months")),
+        )
+        if reply
+        else None
+    )
     check.mark_persisted(row.version)
     return check
+
+
+def _as_int(value: object) -> int | None:
+    return value if isinstance(value, int) else None
 
 
 __all__ = ["SqlAlchemyAvailabilityCheckRepository"]

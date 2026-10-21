@@ -2523,11 +2523,18 @@ class FakeAvailabilityAnswers:
         self._result = result
         self._asked = asked
         self.calls: list[tuple[uuid.UUID, str]] = []
+        self.offer_replies: list[Any] = []
 
     async def record_answer(
-        self, *, landlord_id: uuid.UUID, answer: str, now: datetime
+        self,
+        *,
+        landlord_id: uuid.UUID,
+        answer: str,
+        now: datetime,
+        offer_reply: Any | None = None,
     ) -> Any | None:
         self.calls.append((landlord_id, answer))
+        self.offer_replies.append(offer_reply)
         if not self._asked:
             return None
         return self._result
@@ -3063,3 +3070,59 @@ class TestASecondListing:
         assert session.assigned_property_id is None
         assert "rent" not in session.context
         assert session.step is not FlowStep.CONFIRM_PROPERTY
+
+
+class TestTheLandlordAnswersAnOffer:
+    """§8: his yes, no or price to the tenant's terms, read by a rule."""
+
+    @pytest.mark.parametrize(
+        ("text", "outcome", "rent"),
+        [("oui ça me va", "ACCEPTED", None), ("62 mil", "COUNTERED", 62_000)],
+    )
+    async def test_his_reply_reaches_the_catalogue(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+        text: str,
+        outcome: str,
+        rent: int | None,
+    ) -> None:
+        session.start_flow(FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.PUBLISHED)
+        session.context["next_question"] = "ask.availability_offer"
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=True, lodgings_left=1, delisted=False
+            )
+        )
+        use_case, _, _, _ = build(uow, session, message_id, text=text, availability=answers)
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert answers.calls == [(session.user_id, "AVAILABILITY_STILL_AVAILABLE")]
+        assert answers.offer_replies[0]["outcome"] == outcome
+        assert answers.offer_replies[0]["rent_xaf"] == rent
+        assert "next_question" not in session.context
+
+    async def test_a_lodging_gone_is_read_as_before(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        session.start_flow(FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.PUBLISHED)
+        session.context["next_question"] = "ask.availability_offer"
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=False, lodgings_left=0, delisted=True
+            )
+        )
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="c'est déjà loué", availability=answers
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert answers.calls == [(session.user_id, "AVAILABILITY_RENTED")]
+        assert answers.offer_replies == [None]

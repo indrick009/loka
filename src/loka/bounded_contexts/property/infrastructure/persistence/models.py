@@ -225,6 +225,9 @@ class AvailabilityCheckRow(Base):
     asked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     answer: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # §8: the tenant's terms put with the question, and the landlord's reply.
+    offer: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    offer_reply: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     __table_args__ = (

@@ -30,6 +30,12 @@ from loka.bounded_contexts.property.domain.entities.availability_check import (
     CheckStatus,
 )
 from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
+from loka.bounded_contexts.property.domain.services.negotiation import (
+    Offer,
+    OfferOutcome,
+    OfferReply,
+)
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     AvailabilityAnswer,
     ChargingPolicy,
@@ -121,6 +127,20 @@ class FakeCheckRepository:
         answered.sort(key=lambda check: check.answered_at or NOW, reverse=True)
         return answered[0] if answered else None
 
+    async def asked_since(self, property_id: Any, *, since: datetime) -> int:
+        return sum(
+            1
+            for check in self.store.values()
+            if check.property_id == property_id and check.asked_at >= since
+        )
+
+    async def offers_made(self, property_id: Any) -> list[Offer]:
+        return [
+            check.offer
+            for check in self.store.values()
+            if check.property_id == property_id and check.offer is not None
+        ]
+
     async def add(self, check: AvailabilityCheck) -> None:
         self.store[check.id] = check
         self.added.append(check)
@@ -134,10 +154,19 @@ class FakeCheckRepository:
         check.mark_persisted(check.version)
 
 
+class FakeDemands:
+    def __init__(self) -> None:
+        self.demands: list[TenantDemand] = []
+
+    async def watching_for_tenant(self, tenant_id: Any) -> list[TenantDemand]:
+        return [demand for demand in self.demands if demand.tenant_id == tenant_id]
+
+
 class FakeUnitOfWork(UnitOfWork):
     def __init__(self, properties: FakePropertyRepository, checks: FakeCheckRepository) -> None:
         self.properties = properties
         self.checks = checks
+        self.demands = FakeDemands()
         self.collected: list[object] = []
         self.commits = 0
 
@@ -171,6 +200,8 @@ class FakeUnitOfWork(UnitOfWork):
             return self.properties
         if name == "availability_check":
             return self.checks
+        if name == "tenant_demand":
+            return self.demands
         raise LookupError(name)
 
 
@@ -388,3 +419,122 @@ class TestWhatPaymentIsAllowedToKnow:
         listing.mark_as_rented(now=LATER)
 
         assert not await ListingAvailabilityReader(uow).is_confirmed_available(listing.id)
+
+
+def a_demand_for(tenant_id: uuid.UUID, *, budget: int, advance: int | None) -> TenantDemand:
+    return TenantDemand(
+        demand_id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        property_type="STUDIO",
+        city="Douala",
+        neighbourhoods=("Bonapriso",),
+        max_rent=Money(budget),
+        now=NOW,
+        max_advance_months=advance,
+    )
+
+
+class TestTheTenantsTermsArePut:
+    """§8: one offer, riding on the availability question, when demand is low."""
+
+    async def _ask(self, uow: FakeUnitOfWork, listing: Property, tenant: uuid.UUID) -> Offer | None:
+        request = await RequestAvailabilityCheckUseCase(uow).execute(
+            RequestAvailabilityCheckCommand(property_id=listing.id, tenant_id=tenant), now=NOW
+        )
+        return request.offer
+
+    async def test_a_dearer_lodging_carries_his_budget_and_his_months(self) -> None:
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=55_000, advance=4))
+
+        offer = await self._ask(uow, listing, tenant)
+
+        assert offer == Offer(
+            rent_xaf=55_000, asked_rent_xaf=60_000, advance_months=4, asked_advance_months=6
+        )
+        assert uow.checks.added[0].offer == offer
+
+    async def test_a_lodging_within_his_means_is_only_asked_about(self) -> None:
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=65_000, advance=6))
+
+        assert await self._ask(uow, listing, tenant) is None
+
+    async def test_a_lodging_in_demand_is_not_negotiated(self) -> None:
+        """Four people asked this week: the price is right."""
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=55_000, advance=6))
+        for _ in range(4):
+            answered = AvailabilityCheck(
+                check_id=uuid.uuid4(),
+                property_id=listing.id,
+                landlord_id=listing.landlord_id,
+                tenant_id=uuid.uuid4(),
+                now=NOW - timedelta(days=2),
+            )
+            answered.record_answer(AvailabilityAnswer.STILL_AVAILABLE, now=NOW)
+            uow.checks.seed(answered)
+
+        assert await self._ask(uow, listing, tenant) is None
+
+    async def test_the_same_offer_is_never_made_twice(self) -> None:
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=55_000, advance=6))
+        earlier = AvailabilityCheck(
+            check_id=uuid.uuid4(),
+            property_id=listing.id,
+            landlord_id=listing.landlord_id,
+            tenant_id=uuid.uuid4(),
+            now=NOW - timedelta(days=20),
+            offer=Offer(
+                rent_xaf=55_000, asked_rent_xaf=60_000, advance_months=None,
+                asked_advance_months=None,
+            ),
+        )
+        earlier.record_answer(AvailabilityAnswer.STILL_AVAILABLE, now=NOW)
+        uow.checks.seed(earlier)
+
+        assert await self._ask(uow, listing, tenant) is None
+
+    async def test_his_counter_offer_travels_to_the_tenant(self) -> None:
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=55_000, advance=6))
+        await self._ask(uow, listing, tenant)
+
+        outcome = await AnswerAvailabilityCheckUseCase(uow).execute(
+            AnswerAvailabilityCheckCommand(
+                landlord_id=listing.landlord_id,
+                answer=AvailabilityAnswer.STILL_AVAILABLE,
+                offer_reply=OfferReply(outcome=OfferOutcome.COUNTERED, rent_xaf=58_000),
+            ),
+            now=LATER,
+        )
+
+        assert outcome is not None
+        assert outcome.confirms_availability
+        assert outcome.offer is not None and outcome.offer["rent_xaf"] == 55_000
+        assert outcome.offer_reply == {
+            "outcome": "COUNTERED", "rent_xaf": 58_000, "advance_months": None
+        }
+
+    async def test_a_lodging_gone_says_nothing_of_the_offer(self) -> None:
+        listing, tenant = a_listing(), uuid.uuid4()
+        uow = a_unit_of_work(listing)
+        uow.demands.demands.append(a_demand_for(tenant, budget=55_000, advance=6))
+        await self._ask(uow, listing, tenant)
+
+        outcome = await AnswerAvailabilityCheckUseCase(uow).execute(
+            AnswerAvailabilityCheckCommand(
+                landlord_id=listing.landlord_id,
+                answer=AvailabilityAnswer.RENTED,
+                offer_reply=OfferReply(outcome=OfferOutcome.ACCEPTED),
+            ),
+            now=LATER,
+        )
+
+        assert outcome is not None and outcome.offer_reply is None

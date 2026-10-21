@@ -15,7 +15,9 @@ taken" and "all were taken" costs a landlord a lodging.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 from loka.bounded_contexts.ai.application.ports import AvailabilityAnswerResult
 from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
@@ -24,6 +26,10 @@ from loka.bounded_contexts.property.application.use_cases.check_availability imp
     AnswerAvailabilityCheckUseCase,
     RequestAvailabilityCheckCommand,
     RequestAvailabilityCheckUseCase,
+)
+from loka.bounded_contexts.property.domain.services.negotiation import (
+    OfferOutcome,
+    OfferReply,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     AvailabilityAnswer,
@@ -50,7 +56,12 @@ class ConversationAvailabilityAnswers:
         self._landlords = landlords
 
     async def record_answer(
-        self, *, landlord_id: uuid.UUID, answer: str, now: datetime
+        self,
+        *,
+        landlord_id: uuid.UUID,
+        answer: str,
+        now: datetime,
+        offer_reply: Mapping[str, Any] | None = None,
     ) -> AvailabilityAnswerResult | None:
         domain_answer = ANSWER_BY_INTENT.get(answer)
         if domain_answer is None:
@@ -66,7 +77,9 @@ class ConversationAvailabilityAnswers:
 
         outcome = await AnswerAvailabilityCheckUseCase(self._uow).execute(
             AnswerAvailabilityCheckCommand(
-                landlord_id=profile_id, answer=domain_answer
+                landlord_id=profile_id,
+                answer=domain_answer,
+                offer_reply=_offer_reply(offer_reply),
             ),
             now=now,
         )
@@ -107,3 +120,19 @@ class ConversationAvailabilityRequests:
         except ResourceNotFound:
             return False
         return True
+
+
+def _offer_reply(raw: Mapping[str, Any] | None) -> OfferReply | None:
+    """The conversation's reading of his reply, in the catalogue's terms."""
+    if not raw:
+        return None
+    try:
+        outcome = OfferOutcome(str(raw.get("outcome")))
+    except ValueError:
+        return None
+    rent, months = raw.get("rent_xaf"), raw.get("advance_months")
+    return OfferReply(
+        outcome=outcome,
+        rent_xaf=rent if isinstance(rent, int) else None,
+        advance_months=months if isinstance(months, int) else None,
+    )

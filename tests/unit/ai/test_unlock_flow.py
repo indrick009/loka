@@ -154,6 +154,28 @@ class TestTheLandlordConfirms:
         assert "1 000 FCFA" in message.text
         assert uow.commits == 1
 
+    async def test_the_landlords_answer_to_the_offer_comes_first(self) -> None:
+        """§8: he accepted the tenant's terms; the tenant hears it before paying."""
+        session = a_tenant_waiting_on_availability()
+        uow, sessions = FakeUnitOfWork(), FakeSessions(session)
+
+        await HandleAvailabilityAnswerUseCase(uow, sessions).execute(  # type: ignore[arg-type]
+            tenant_id=session.user_id,
+            property_id=PROPERTY_ID,
+            landlord_id=LANDLORD_ID,
+            confirmed=True,
+            correlation_id="c",
+            now=NOW,
+            offer={"rent_xaf": 55_000, "asked_rent_xaf": 60_000},
+            offer_reply={"outcome": "ACCEPTED"},
+        )
+
+        [message] = uow.events.staged
+        assert message.text.startswith(
+            "Bonne nouvelle : le propriétaire accepte 55 000 FCFA par mois."
+        )
+        assert "1 000 FCFA" in message.text
+
     async def test_refusal_asks_nothing_and_returns_to_the_list(self) -> None:
         session = a_tenant_waiting_on_availability(shown=True)
         uow, sessions = FakeUnitOfWork(), FakeSessions(session)

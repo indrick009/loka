@@ -15,6 +15,11 @@ asks about the lodging, not about a particular tenant, and asking twice because
 two tenants are interested is noise the landlord did not sign up for. The
 tenant who triggered it is recorded so the answer can be carried back to
 someone.
+
+It may carry an offer (§8): the tenant's terms, when the lodging asks more than
+he said he could give and gets little demand. The landlord's reply to it —
+accepted, refused, or his own terms once — is recorded with his answer, and the
+negotiation ends there (see ``negotiation``).
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
+from loka.bounded_contexts.property.domain.services.negotiation import Offer, OfferReply
 from loka.bounded_contexts.property.domain.value_objects.enums import AvailabilityAnswer
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
@@ -51,6 +57,8 @@ class AvailabilityCheck(AggregateRoot):
         "asked_at",
         "check_id",
         "landlord_id",
+        "offer",
+        "offer_reply",
         "property_id",
         "status",
         "tenant_id",
@@ -64,6 +72,7 @@ class AvailabilityCheck(AggregateRoot):
         landlord_id: uuid.UUID,
         tenant_id: uuid.UUID | None,
         now: datetime,
+        offer: Offer | None = None,
     ) -> None:
         super().__init__(aggregate_type="AvailabilityCheck")
         self._assign_id(check_id)
@@ -75,6 +84,8 @@ class AvailabilityCheck(AggregateRoot):
         self.asked_at = ensure_utc(now)
         self.answered_at: datetime | None = None
         self.answer: AvailabilityAnswer | None = None
+        self.offer = offer
+        self.offer_reply: OfferReply | None = None
         self.record(
             "AvailabilityCheckRequested",
             occurred_at=now,
@@ -82,10 +93,17 @@ class AvailabilityCheck(AggregateRoot):
                 "check_id": str(check_id),
                 "property_id": str(property_id),
                 "landlord_id": str(landlord_id),
+                "offer": offer.as_dict() if offer else None,
             },
         )
 
-    def record_answer(self, answer: AvailabilityAnswer, *, now: datetime) -> None:
+    def record_answer(
+        self,
+        answer: AvailabilityAnswer,
+        *,
+        now: datetime,
+        offer_reply: OfferReply | None = None,
+    ) -> None:
         """What the landlord said, once.
 
         A second answer is refused rather than applied: the first one already
@@ -99,6 +117,8 @@ class AvailabilityCheck(AggregateRoot):
             )
         self.status = CheckStatus.ANSWERED
         self.answer = answer
+        # A reply to an offer only means something about a lodging still free.
+        self.offer_reply = offer_reply if self.offer and answer in CONFIRMING_ANSWERS else None
         self.answered_at = ensure_utc(now)
         self.record(
             "AvailabilityCheckAnswered",
@@ -111,6 +131,8 @@ class AvailabilityCheck(AggregateRoot):
                 "landlord_id": str(self.landlord_id),
                 "answer": answer.value,
                 "confirms_availability": self.confirms_availability,
+                "offer": self.offer.as_dict() if self.offer else None,
+                "offer_reply": self.offer_reply.as_dict() if self.offer_reply else None,
             },
         )
 

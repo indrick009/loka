@@ -13,6 +13,10 @@ listing — decremented it, or took it out of search — and replaying it would
 cost a lodging the landlord never let go, so a second answer to the same
 question is refused.
 
+The question may carry the tenant's terms (§8, see ``negotiation``): computed
+here, from his demand and the listing, so the conversation never has to know
+either.
+
 Nothing here reads a clock to decide availability. Kora never infers it: not
 from a match, not from a payment, not from elapsed time. An unanswered question
 simply never confirms, and the tenant is offered other lodgings instead.
@@ -22,16 +26,24 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Any
 
 import structlog
 
 from loka.bounded_contexts.property.domain.entities.availability_check import (
     AvailabilityCheck,
 )
+from loka.bounded_contexts.property.domain.entities.property import Property
 from loka.bounded_contexts.property.domain.repositories.property_repository import (
     AvailabilityCheckRepository,
     PropertyRepository,
+    TenantDemandRepository,
+)
+from loka.bounded_contexts.property.domain.services.negotiation import (
+    Offer,
+    OfferReply,
+    offer_for,
 )
 from loka.bounded_contexts.property.domain.value_objects.enums import (
     AvailabilityAnswer,
@@ -45,6 +57,12 @@ from loka.shared.domain.identifiers import new_id
 # the outbound copy table because the wording *is* the business rule: it says a
 # tenant wants to visit, and it asks nothing else.
 LANDLORD_QUESTION_KEY = "ask.availability_check"
+# The same question with the tenant's terms in it: his reply is read as an
+# answer to the offer too.
+LANDLORD_OFFER_KEY = "ask.availability_offer"
+
+# How far back a lodging's demand is counted.
+DEMAND_WINDOW = timedelta(days=7)
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,12 +80,14 @@ class AvailabilityRequest:
     landlord_id: uuid.UUID
     question_key: str
     already_pending: bool
+    offer: Offer | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class AnswerAvailabilityCheckCommand:
     landlord_id: uuid.UUID
     answer: AvailabilityAnswer
+    offer_reply: OfferReply | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +98,10 @@ class AvailabilityOutcome:
     confirms_availability: bool
     lodgings_left: int
     listing_status: str
+    # §8, both as plain data for the tenant's message: what was put, and what
+    # the landlord said to it.
+    offer: dict[str, Any] | None = None
+    offer_reply: dict[str, Any] | None = None
 
 
 class RequestAvailabilityCheckUseCase:
@@ -115,6 +139,7 @@ class RequestAvailabilityCheckUseCase:
             landlord_id=listing.landlord_id,
             tenant_id=command.tenant_id,
             now=now,
+            offer=await self._offer(listing, command.tenant_id, checks, now=now),
         )
         try:
             await checks.add(check)
@@ -134,6 +159,33 @@ class RequestAvailabilityCheckUseCase:
             landlord_id=str(listing.landlord_id),
         )
         return _request(check, already_pending=False)
+
+    async def _offer(
+        self,
+        listing: Property,
+        tenant_id: uuid.UUID | None,
+        checks: AvailabilityCheckRepository,
+        *,
+        now: datetime,
+    ) -> Offer | None:
+        """His terms, when the lodging asks more than he can give (§8)."""
+        if tenant_id is None:
+            return None
+        demands: TenantDemandRepository = self._uow.repository("tenant_demand")
+        watched = await demands.watching_for_tenant(tenant_id)
+        if not watched:
+            return None
+        demand = watched[-1]
+        price = listing.public_price
+        return offer_for(
+            budget_xaf=demand.max_rent.amount if demand.max_rent else None,
+            can_advance_months=demand.max_advance_months,
+            rent_xaf=listing.rent.amount if listing.rent else None,
+            public_price_xaf=price.amount if price else None,
+            advance_months=listing.advance_months.months if listing.advance_months else None,
+            asked_this_week=await checks.asked_since(listing.id, since=now - DEMAND_WINDOW),
+            already_offered=await checks.offers_made(listing.id),
+        )
 
 
 class AnswerAvailabilityCheckUseCase:
@@ -177,7 +229,7 @@ class AnswerAvailabilityCheckUseCase:
             )
 
         listing.answer_availability(command.answer, now=now)
-        check.record_answer(command.answer, now=now)
+        check.record_answer(command.answer, now=now, offer_reply=command.offer_reply)
 
         await properties.save(listing, expected_version=listing.persisted_version)
         await checks.save(check)
@@ -199,6 +251,8 @@ class AnswerAvailabilityCheckUseCase:
             confirms_availability=check.confirms_availability,
             lodgings_left=listing.lodgings,
             listing_status=listing.status.value,
+            offer=check.offer.as_dict() if check.offer else None,
+            offer_reply=check.offer_reply.as_dict() if check.offer_reply else None,
         )
 
 
@@ -234,6 +288,7 @@ def _request(check: AvailabilityCheck, *, already_pending: bool) -> Availability
         check_id=check.check_id,
         property_id=check.property_id,
         landlord_id=check.landlord_id,
-        question_key=LANDLORD_QUESTION_KEY,
+        question_key=LANDLORD_OFFER_KEY if check.offer else LANDLORD_QUESTION_KEY,
         already_pending=already_pending,
+        offer=check.offer,
     )

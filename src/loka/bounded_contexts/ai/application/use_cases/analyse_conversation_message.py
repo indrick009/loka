@@ -81,6 +81,10 @@ from loka.bounded_contexts.ai.application.services.listing_recap import (
 from loka.bounded_contexts.ai.application.services.match_proposals import (
     SHOWN_LISTINGS_KEY,
 )
+from loka.bounded_contexts.ai.application.services.negotiation_copy import (
+    OFFER_QUESTION_KEY,
+    read_offer_reply,
+)
 from loka.bounded_contexts.ai.application.services.prompts import (
     build_analysis_prompt,
     build_reply_prompt,
@@ -268,7 +272,7 @@ def _availability_reading(
     model: taken for good or for now are different answers, and only one of
     them takes the listing out of search.
     """
-    if pending != AVAILABILITY_QUESTION_KEY:
+    if pending not in (AVAILABILITY_QUESTION_KEY, OFFER_QUESTION_KEY):
         return intent, entities
     if hint is not None and is_availability_answer(hint.intent):
         return hint.intent, {**entities, **hint.entities}
@@ -1478,6 +1482,23 @@ class AnalyseConversationMessageUseCase:
         # the user was actually asked.
         question: str | None = None
 
+        # The landlord's answer to a tenant's offer (§8) is read by a rule: a
+        # "oui" commits him to a price, and a number is a price passed on.
+        if session.context.get("next_question") == OFFER_QUESTION_KEY:
+            settled = await self._settle_offer_turn(
+                session,
+                message_id=message_id,
+                text=text,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+            if settled is not None:
+                return settled
+
         # "Cherchez-vous toujours ?" is answered by a rule too: it renews or
         # ends a month of proposals. What the rule cannot settle carries on.
         if session.context.get("next_question") == STILL_SEARCHING_KEY:
@@ -1834,6 +1855,47 @@ class AnalyseConversationMessageUseCase:
             now=now,
         )
 
+    async def _settle_offer_turn(
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        text: str | None,
+        intent: str,
+        confidence: float,
+        used_llm: bool,
+        latency_ms: int,
+        cost_usd: Decimal,
+        now: datetime,
+    ) -> AnalysisReport | None:
+        """Record his yes, no or price; ``None`` for anything else ("c'est pris")."""
+        reply = read_offer_reply(text)
+        if reply is None or self._availability is None or session.user_id is None:
+            return None
+        result = await self._availability.record_answer(
+            landlord_id=session.user_id,
+            answer="AVAILABILITY_STILL_AVAILABLE",
+            now=now,
+            offer_reply=reply,
+        )
+        if result is None:
+            return None
+        return await self._close_payment_turn(
+            session,
+            next_step=session.step,
+            question_key=None,
+            reply=availability_answer_text(
+                session.language, lodgings_left=result.lodgings_left, delisted=result.delisted
+            ),
+            message_id=message_id,
+            intent="AVAILABILITY_STILL_AVAILABLE",
+            confidence=confidence,
+            used_llm=used_llm,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            now=now,
+        )
+
     async def _settle_reminder_turn(
         self,
         session: ConversationSession,
@@ -2162,7 +2224,9 @@ class AnalyseConversationMessageUseCase:
         # form he was filling. Left open, his next photo caption would have
         # been read as a second answer about a lodging already settled.
         resumed_step: FlowStep | None = None
-        if pending == AVAILABILITY_QUESTION_KEY and is_availability_answer(intent):
+        if pending in (AVAILABILITY_QUESTION_KEY, OFFER_QUESTION_KEY) and is_availability_answer(
+            intent
+        ):
             pending, resumed_step = None, session.step
 
         # Read before the flow opens, because opening it clears the context:

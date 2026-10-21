@@ -3,7 +3,8 @@
 The tenant chose a lodging and is waiting on the owner's word; this is what
 that word does to his thread.
 
-*Confirmed* — the offer of the 1 000 FCFA unlock is written, and the session is
+*Confirmed* — the offer of the 1 000 FCFA unlock is written, preceded by what
+the landlord said to the tenant's terms when they were put to him (§8), and the session is
 moved to ``CONFIRM_PAYMENT`` with the (tenant, listing) pair kept under
 ``_unlock`` so the next message is read as his answer to the offer and not as a
 fresh search.
@@ -20,13 +21,16 @@ tear up a form he is filling in.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from datetime import datetime
+from typing import Any
 
 import structlog
 
 from loka.bounded_contexts.ai.application.services.match_proposals import (
     SHOWN_LISTINGS_KEY,
 )
+from loka.bounded_contexts.ai.application.services.negotiation_copy import tenant_offer_text
 from loka.bounded_contexts.ai.application.services.unlock_copy import (
     PAYMENT_QUESTION_KEY,
     UNLOCK_KEY,
@@ -70,6 +74,8 @@ class HandleAvailabilityAnswerUseCase:
         confirmed: bool,
         correlation_id: str,
         now: datetime,
+        offer: Mapping[str, Any] | None = None,
+        offer_reply: Mapping[str, Any] | None = None,
     ) -> bool:
         """``False`` when there is no thread; ``True`` once the move is made."""
         session = await self._sessions.latest_by_user(tenant_id)
@@ -91,6 +97,7 @@ class HandleAvailabilityAnswerUseCase:
                 landlord_id=landlord_id,
                 correlation_id=correlation_id,
                 now=now,
+                negotiation=tenant_offer_text(offer, offer_reply, session.language),
             )
         else:
             await self._withdraw(session, correlation_id=correlation_id, now=now)
@@ -104,6 +111,7 @@ class HandleAvailabilityAnswerUseCase:
         landlord_id: uuid.UUID,
         correlation_id: str,
         now: datetime,
+        negotiation: str | None = None,
     ) -> None:
         observed = session.revision
         session.transition(
@@ -120,7 +128,14 @@ class HandleAvailabilityAnswerUseCase:
         await self._sessions.save(session, expected_revision=observed)
         self._stage(
             session,
-            text=unlock_text("offer", session.language, phone=session.phone.e164),
+            text="\n".join(
+                part
+                for part in (
+                    negotiation,
+                    unlock_text("offer", session.language, phone=session.phone.e164),
+                )
+                if part
+            ),
             question_key=PAYMENT_QUESTION_KEY,
             intent="UNLOCK_OFFER",
             correlation_id=correlation_id,

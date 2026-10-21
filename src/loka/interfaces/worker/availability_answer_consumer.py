@@ -73,6 +73,8 @@ class AvailabilityAnswerConsumer(ConsumerBase):
                 property_id=property_id,
                 landlord_id=landlord_id,
                 confirmed=confirmed,
+                offer=_mapping(metadata.get("offer")),
+                offer_reply=_mapping(metadata.get("offer_reply")),
                 correlation_id=str(payload.get("correlation_id") or uuid.uuid4()),
                 now=datetime.now(UTC),
             )
@@ -80,6 +82,10 @@ class AvailabilityAnswerConsumer(ConsumerBase):
             raise PermanentHandlerError(
                 f"tenant {tenant_id} has no conversation to move on this answer"
             )
+
+
+def _mapping(value: object) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
 
 
 def _metadata(payload: dict[str, Any]) -> dict[str, Any]:
