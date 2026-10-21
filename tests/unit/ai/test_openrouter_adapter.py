@@ -360,6 +360,15 @@ class TestGenerateResponse:
         with pytest.raises(ExternalServiceUnavailable):
             await model.generate_response(prompt())
 
+    async def test_a_truncated_reply_is_refused(self) -> None:
+        """Observed live: "**K" reached a landlord, cut off at the token limit."""
+        payload = chat("**K")
+        payload["choices"][0]["finish_reason"] = "length"
+        model, _ = model_for(lambda _: completion(payload))
+
+        with pytest.raises(ExternalServiceUnavailable):
+            await model.generate_response(prompt())
+
     async def test_a_missing_api_key_never_reaches_the_network(self) -> None:
         model, seen = model_for(lambda _: completion(chat("ok")), settings(api_key=""))
 

@@ -206,6 +206,12 @@ class OpenRouterIntentModel:
             raise ExternalServiceUnavailable(
                 "OpenRouter returned an empty completion", context={"model": model}
             )
+        if payload["choices"][0].get("finish_reason") == "length":
+            # Cut off at the token limit. Observed live: the fallback model spent
+            # its budget thinking and "**K" reached a landlord as the reply.
+            raise ExternalServiceUnavailable(
+                "OpenRouter returned a truncated completion", context={"model": model}
+            )
         usage = payload.get("usage")
         return content, usage if isinstance(usage, dict) else {}
 
