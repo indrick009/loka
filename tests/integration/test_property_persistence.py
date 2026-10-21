@@ -384,6 +384,34 @@ async def test_a_shared_location_finds_the_nearest_and_drops_the_far(
     ]
 
 
+async def test_the_advance_he_can_pay_filters_the_catalogue(session: AsyncSession) -> None:
+    """A landlord's advance is copied into the read model, and a tenant who can
+    pay four months is not shown the lodging that asks six."""
+    landlord_id = uuid.uuid4()
+    now = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
+    repository = SqlAlchemyPropertyRepository(session)
+    projected: list[Property] = []
+    for index, months in enumerate((3, 6)):
+        prop = _listing(landlord_id, now=now + timedelta(minutes=index))
+        prop.set_advance_months(RentMonths(months), now=now)
+        prop.publish(now=now + timedelta(minutes=index), actor_id=landlord_id)
+        await repository.add(prop)
+        projected.append(prop)
+    await session.commit()
+    await _project(session, projected)
+
+    search = PropertySearchRepository(session)
+    within = await search.search(
+        PropertySearchCriteria(city="Douala", verified_only=False, max_advance_months=4)
+    )
+    stretched = await search.search(
+        PropertySearchCriteria(city="Douala", verified_only=False, max_advance_months=6)
+    )
+
+    assert [item["advance_months"] for item in within.items] == [3]
+    assert sorted(item["advance_months"] for item in stretched.items) == [3, 6]
+
+
 async def test_the_quantity_survives_a_round_trip(session: AsyncSession) -> None:
     """A listing standing for two identical studios must still stand for two
     after a reload.

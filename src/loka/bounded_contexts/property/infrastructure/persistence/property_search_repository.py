@@ -69,6 +69,13 @@ class PropertySearchRepository:
                     PropertySearchDocumentRow.available_from <= criteria.available_before,
                 )
             )
+        if criteria.max_advance_months is not None:
+            clauses.append(
+                or_(
+                    PropertySearchDocumentRow.advance_months.is_(None),
+                    PropertySearchDocumentRow.advance_months <= criteria.max_advance_months,
+                )
+            )
         if criteria.verified_only:
             clauses.append(PropertySearchDocumentRow.is_verified.is_(True))
         return clauses
@@ -238,6 +245,7 @@ class PropertySearchRepository:
             "surface_m2": row.surface_m2,
             "minimum_duration_months": row.minimum_duration_months,
             "available_from": row.available_from.isoformat() if row.available_from else None,
+            "advance_months": row.advance_months,
             "amenities": row.amenities,
             "is_verified": row.is_verified,
             "media_object_keys": row.media_object_keys,

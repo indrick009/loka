@@ -49,6 +49,7 @@ _WORDS: dict[str, dict[str, str]] = {
             "demande au propriétaire s'il est toujours disponible."
         ),
         "over_budget": "{amount} FCFA au-dessus de votre budget",
+        "over_advance": "{months} mois d'avance de plus que prévu",
         "same_district": "dans le même quartier",
         "district_away": "à {km} km {origin}",
         "km_away": "à {km} km de l'endroit choisi",
@@ -70,6 +71,7 @@ _WORDS: dict[str, dict[str, str]] = {
             "the landlord whether it is still available."
         ),
         "over_budget": "{amount} FCFA above your budget",
+        "over_advance": "{months} more months of advance than you planned",
         "same_district": "in the same neighbourhood",
         "district_away": "{km} km {origin}",
         "km_away": "{km} km from the place you chose",
@@ -116,6 +118,9 @@ def _what_differs(
     over = gap.get("over_budget_xaf")
     if isinstance(over, int) and over > 0:
         parts.append(words["over_budget"].format(amount=f"{over:,}".replace(",", " ")))
+    advance = gap.get("over_advance_months")
+    if isinstance(advance, int) and advance > 0:
+        parts.append(words["over_advance"].format(months=advance))
     district = _district_of(proposal)
     km = gap.get("distance_km")
     if district and tenant_district and district.casefold() == tenant_district.casefold():

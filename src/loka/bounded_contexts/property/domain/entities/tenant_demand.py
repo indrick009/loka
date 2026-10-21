@@ -47,6 +47,10 @@ NEAR_RADIUS_KM = 3.0
 # match, so the tenant decides whether he can consider it.
 GAP_UPPER_TOLERANCE = 0.15
 GAP_RADIUS_KM = 6.0
+# The advance the landlord asks may exceed what the tenant said he can pay by
+# this many months and still be put to him as a gap: two months is something a
+# family can stretch to, a year against five months is not (§8).
+GAP_ADVANCE_MONTHS = 2
 
 _EARTH_RADIUS_KM = 6371.0
 
@@ -76,6 +80,7 @@ class TenantDemand(AggregateRoot):
         "answered_at",
         "city",
         "demand_id",
+        "max_advance_months",
         "max_rent",
         "near",
         "near_exact",
@@ -99,6 +104,7 @@ class TenantDemand(AggregateRoot):
         now: datetime,
         near: Point | None = None,
         near_exact: bool = True,
+        max_advance_months: int | None = None,
     ) -> None:
         super().__init__(aggregate_type="TenantDemand")
         self._assign_id(demand_id)
@@ -113,6 +119,8 @@ class TenantDemand(AggregateRoot):
         # a district's centre only measures how far a gap is.
         self.near = near
         self.near_exact = near_exact
+        # How many months of rent he can hand over up front (§3, question 3).
+        self.max_advance_months = max_advance_months
         self.status = DemandStatus.OPEN
         self.received_at = ensure_utc(now)
         self.updated_at = ensure_utc(now)
@@ -138,6 +146,7 @@ class TenantDemand(AggregateRoot):
         now: datetime,
         near: Point | None = None,
         near_exact: bool = True,
+        max_advance_months: int | None = None,
     ) -> None:
         """He sharpened what he is after; it is still the same request.
 
@@ -156,6 +165,7 @@ class TenantDemand(AggregateRoot):
         self.max_rent = max_rent
         self.near = near
         self.near_exact = near_exact
+        self.max_advance_months = max_advance_months
         self.updated_at = ensure_utc(now)
         self.record(
             "TenantDemandRestated",
@@ -212,6 +222,7 @@ class TenantDemand(AggregateRoot):
         neighbourhood: str | None,
         rent_xaf: int | None,
         point: Point | None = None,
+        advance_months: int | None = None,
     ) -> bool:
         """Whether one published lodging answers this demand.
 
@@ -224,6 +235,8 @@ class TenantDemand(AggregateRoot):
         if self.property_type and property_type != self.property_type:
             return False
         if not self.is_around(neighbourhood=neighbourhood, point=point):
+            return False
+        if not self.can_advance(advance_months):
             return False
         band = self.price_band()
         if band is None:
@@ -255,6 +268,7 @@ class TenantDemand(AggregateRoot):
         neighbourhood: str | None,
         rent_xaf: int | None,
         point: Point | None = None,
+        advance_months: int | None = None,
     ) -> bool:
         """Whether a lodging is close enough to be proposed as a gap (§8).
 
@@ -270,11 +284,29 @@ class TenantDemand(AggregateRoot):
         band = self.gap_band()
         if band is not None and (rent_xaf is None or not band[0] <= rent_xaf <= band[1]):
             return False
+        if not self.can_advance(advance_months, slack=GAP_ADVANCE_MONTHS):
+            return False
         if neighbourhood is not None and neighbourhood in self.neighbourhoods:
             return True
         if self.near is not None and point is not None:
             return distance_km(self.near, point) <= GAP_RADIUS_KM
         return not self.neighbourhoods and self.near is None
+
+    def can_advance(self, advance_months: int | None, *, slack: int = 0) -> bool:
+        """Whether he can pay the advance a lodging asks, give or take ``slack``.
+
+        A listing with no stated advance, or a tenant who gave none, is not
+        held back: nothing can be compared, so nothing is assumed.
+        """
+        if advance_months is None or self.max_advance_months is None:
+            return True
+        return advance_months <= self.max_advance_months + slack
+
+    def advance_ceiling(self, *, gap: bool = False) -> int | None:
+        """The most months of advance a lodging may ask and still be proposed."""
+        if self.max_advance_months is None:
+            return None
+        return self.max_advance_months + (GAP_ADVANCE_MONTHS if gap else 0)
 
     def gap_band(self) -> tuple[int, int] | None:
         """The rent range a gap may fall in: the usual floor, a wider ceiling."""
@@ -283,11 +315,23 @@ class TenantDemand(AggregateRoot):
             return None
         return band[0], int(self.max_rent.amount * (1 + GAP_UPPER_TOLERANCE))
 
-    def gap_with(self, *, rent_xaf: int | None, point: Point | None) -> dict[str, Any]:
+    def gap_with(
+        self,
+        *,
+        rent_xaf: int | None,
+        point: Point | None,
+        advance_months: int | None = None,
+    ) -> dict[str, Any]:
         """How a lodging differs from what he asked, in the words he will read."""
         gap: dict[str, Any] = {}
         if self.max_rent is not None and rent_xaf is not None and rent_xaf > self.max_rent.amount:
             gap["over_budget_xaf"] = rent_xaf - self.max_rent.amount
+        if (
+            self.max_advance_months is not None
+            and advance_months is not None
+            and advance_months > self.max_advance_months
+        ):
+            gap["over_advance_months"] = advance_months - self.max_advance_months
         if self.near is not None and point is not None:
             gap["distance_km"] = round(distance_km(self.near, point), 1)
         return gap

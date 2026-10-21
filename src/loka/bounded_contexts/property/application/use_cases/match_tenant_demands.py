@@ -115,6 +115,7 @@ class MatchTenantDemandsUseCase:
                 "neighbourhood": proposal["neighbourhood"],
                 "rent_xaf": proposal["rent_xaf"],
                 "point": _point(prop),
+                "advance_months": proposal["advance_months"],
             }
             if demand.accepts(**criteria):
                 offered = proposal
@@ -153,6 +154,7 @@ def _criteria(demand: TenantDemand, *, gap: bool = False) -> PropertySearchCrite
         sort="price_nearest" if band else "recent",
         near=near,
         near_radius_km=GAP_RADIUS_KM if gap else 3.0,
+        max_advance_months=demand.advance_ceiling(gap=gap),
     )
 
 
@@ -166,6 +168,7 @@ def _from_search(item: dict[str, Any]) -> dict[str, Any]:
         "rent_xaf": item.get("price_xaf"),
         "latitude": item.get("latitude"),
         "longitude": item.get("longitude"),
+        "advance_months": item.get("advance_months"),
         # The photos the listing was published with, in order, so the tenant is
         # shown the lodging and not just a line of text about it.
         "photo_object_keys": [str(key) for key in keys] if isinstance(keys, list) else [],
@@ -183,6 +186,7 @@ def _from_listing(prop: Property) -> dict[str, Any]:
         "rent_xaf": price.amount if price else None,
         "latitude": point[0] if (point := _point(prop)) else None,
         "longitude": point[1] if point else None,
+        "advance_months": prop.advance_months.months if prop.advance_months else None,
         "photo_object_keys": _photo_object_keys(prop),
     }
 
@@ -191,7 +195,12 @@ def _as_gap(demand: TenantDemand, proposal: dict[str, Any]) -> dict[str, Any]:
     """A proposal marked with how it differs from what he asked for."""
     latitude, longitude = proposal.get("latitude"), proposal.get("longitude")
     point = (latitude, longitude) if latitude is not None and longitude is not None else None
-    return {**proposal, "gap": demand.gap_with(rent_xaf=proposal.get("rent_xaf"), point=point)}
+    gap = demand.gap_with(
+        rent_xaf=proposal.get("rent_xaf"),
+        point=point,
+        advance_months=proposal.get("advance_months"),
+    )
+    return {**proposal, "gap": gap}
 
 
 def _point(prop: Property) -> tuple[float, float] | None:

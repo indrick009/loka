@@ -39,6 +39,8 @@ class RecordTenantDemandCommand:
     # centre of the district he typed when ``near_exact`` is false.
     near: tuple[float, float] | None = None
     near_exact: bool = True
+    # How many months of rent he can pay up front.
+    max_advance_months: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,6 +79,7 @@ class RecordTenantDemandUseCase:
                 now=now,
                 near=command.near,
                 near_exact=command.near_exact,
+                max_advance_months=command.max_advance_months,
             )
             await demands.save(existing)
             self._uow.collect(existing)
@@ -93,6 +96,7 @@ class RecordTenantDemandUseCase:
             now=now,
             near=command.near,
             near_exact=command.near_exact,
+            max_advance_months=command.max_advance_months,
         )
         try:
             await demands.add(demand)

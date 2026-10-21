@@ -678,6 +678,7 @@ class TestLlmFirst:
             "property_type",
             "location",
             "rent",
+            "advance_months",
         ]
 
 
@@ -1889,6 +1890,7 @@ class TestConversationSearch:
                         "city": "Yaoundé",
                         "neighbourhood": "Bastos",
                         "price": 180_000,
+                        "advance_months": 3,
                     },
                     reply="Voilà ce que j'ai trouvé.",
                 )
@@ -1911,6 +1913,7 @@ class TestConversationSearch:
                     budget_xaf=180_000,
                     near=BASTOS_CENTRE,
                     near_exact=False,
+                    advance_months=3,
                 ),
             )
         ]
@@ -1978,6 +1981,7 @@ class TestConversationSearch:
                         "city": "Yaoundé",
                         "neighbourhood": "Bastos",
                         "price": 180_000,
+                        "advance_months": 3,
                     },
                 )
             ),
@@ -1997,9 +2001,34 @@ class TestConversationSearch:
     async def test_a_bare_amount_is_acknowledged_in_the_remembered_language(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
     ) -> None:
-        """A bare "50 000" cannot tell its own language: the session's remembered
-        one — read from an earlier English message — has to carry the answer."""
+        """A bare "3" cannot tell its own language: the session's remembered
+        one — read from an earlier English message — has to carry the answer.
+        Bound to the advance by the open question, not to a rent of 3 francs."""
         session.language = "en"
+        session.start_flow(
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_ADVANCE
+        )
+        session.context["property_type"] = "STUDIO"
+        session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
+        session.context["rent"] = 50_000
+        session.context["next_question"] = "ask.search_advance"
+        demands = StubDemands()
+
+        use_case, _, _, _ = build(uow, session, message_id, text="3", demands=demands)
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert demands.recorded[0][1].budget_xaf == 50_000
+        assert demands.recorded[0][1].advance_months == 3
+        assert uow.events.staged[0].text.startswith("Your request is recorded.")
+
+    async def test_the_budget_is_followed_by_the_advance_question(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """§3 asks a tenant four things; the months he can pay up front is the
+        fourth, and no demand is recorded before it is known."""
         session.start_flow(
             FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
         )
@@ -2023,8 +2052,9 @@ class TestConversationSearch:
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
         )
 
-        assert demands.recorded[0][1].budget_xaf == 50_000
-        assert uow.events.staged[0].text.startswith("Your request is recorded.")
+        assert demands.recorded == []
+        assert session.step is FlowStep.COLLECT_ADVANCE
+        assert uow.events.staged[0].question_key == "ask.search_advance"
 
     async def test_the_tenant_form_is_what_the_model_is_given(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -2054,6 +2084,7 @@ class TestConversationSearch:
         assert [field["field"] for field in payload["required_fields"]] == [
             "location",
             "rent",
+            "advance_months",
         ]
         assert "tenant" in payload["you_are_helping"]
 
@@ -2063,21 +2094,15 @@ class TestConversationSearch:
         """Nothing was kept, so nobody can come back to him: the thread says the
         search failed and goes back to the criteria instead of acknowledging."""
         session.start_flow(
-            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_PRICE
+            FlowName.PROPERTY_SEARCH, now=NOW, first_step=FlowStep.COLLECT_ADVANCE
         )
         session.context["property_type"] = "STUDIO"
         session.context["location"] = {"city": "Yaoundé", "neighbourhood": "Odza"}
-        session.context["next_question"] = "ask.search_budget"
+        session.context["rent"] = 50_000
+        session.context["next_question"] = "ask.search_advance"
 
         use_case, _, _, _ = build(
-            uow,
-            session,
-            message_id,
-            text="50 000",
-            model=StubModel(
-                result=_model_result(intent="COLLECT_PRICE", entities={"price": 50_000})
-            ),
-            demands=StubDemands(stored=False),
+            uow, session, message_id, text="3 mois", demands=StubDemands(stored=False)
         )
 
         report = await use_case.execute(
@@ -2106,6 +2131,7 @@ class TestConversationSearch:
                         "property_type": "STUDIO",
                         "city": "Douala",
                         "price": 80_000,
+                        "advance_months": 3,
                     },
                 )
             ),
@@ -2143,18 +2169,10 @@ class TestConversationSearch:
 
         assert report.accepted is True
         assert report.used_llm is False
-        assert [query for _, query in demands.recorded] == [
-            ConversationSearchQuery(
-                city="Yaoundé",
-                neighbourhoods=("Bastos",),
-                property_types=("APARTMENT",),
-                budget_xaf=150_000,
-                near=BASTOS_CENTRE,
-                near_exact=False,
-            )
-        ]
-        assert session.step is FlowStep.AWAITING_MATCH
-        assert uow.events.staged[0].text.startswith("Votre demande est enregistrée.")
+        # Three of the four answers in one sentence: only the advance is asked.
+        assert demands.recorded == []
+        assert session.step is FlowStep.COLLECT_ADVANCE
+        assert uow.events.staged[0].question_key == "ask.search_advance"
 
     async def test_every_accepted_neighbourhood_reaches_the_demand(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -2173,6 +2191,7 @@ class TestConversationSearch:
                         "neighbourhood": "Bonamoussadi",
                         "neighbourhoods": ["Bonamoussadi", "Makepe"],
                         "price": 60_000,
+                        "advance_months": 3,
                     },
                 )
             ),
@@ -2252,6 +2271,7 @@ class TestConversationSearch:
                 "property_type": "APARTMENT",
                 "location": {"city": "Douala", "neighbourhood": "Bali"},
                 "rent": 200_000,
+                "advance_months": 3,
             }
         )
         demands = StubDemands()
@@ -2323,6 +2343,7 @@ class TestConversationSearch:
                     "neighbourhoods": ["Bonamoussadi", "Makepe"],
                 },
                 "rent": 60_000,
+                "advance_months": 3,
             }
         )
         demands = StubDemands()

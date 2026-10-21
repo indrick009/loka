@@ -142,6 +142,9 @@ class PropertySearchDocumentRow(Base):
     surface_m2: Mapped[int | None] = mapped_column(Integer, nullable=True)
     minimum_duration_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     available_from: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Months of rent the landlord asks up front, held against what a tenant
+    # said he can pay.
+    advance_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # How many are still on offer. Denormalised as a plain count, never null:
     # a search page must be able to drop an exhausted listing and to say "2
@@ -290,6 +293,7 @@ class TenantDemandRow(Base):
     longitude: Mapped[float | None] = mapped_column(nullable=True)
     near_is_exact: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     max_rent_xaf: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    max_advance_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="XAF")
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

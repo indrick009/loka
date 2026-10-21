@@ -234,6 +234,8 @@ class ConversationSearchQuery:
     # centre of the district he typed when ``near_exact`` is false.
     near: tuple[float, float] | None = None
     near_exact: bool = True
+    # How many months of rent he can pay up front.
+    advance_months: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

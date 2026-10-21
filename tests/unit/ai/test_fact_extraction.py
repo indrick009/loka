@@ -370,13 +370,15 @@ class TestTenantSearchForm:
     def test_a_complete_criteria_set_reaches_the_results(
         self, extractor: FactExtractor
     ) -> None:
-        """Type, place and rent fill the search: the landlord's confirmation —
-        and the charges, deposit and dates before it — must never appear."""
+        """Type, place, rent and advance fill the search: the landlord's
+        confirmation — and the charges, deposit and dates before it — must
+        never appear."""
         facts = extractor.validate(
             {
                 "property_type": "APARTMENT",
                 "city": "Douala",
                 "price": 150_000,
+                "advance_months": 3,
                 "standing": "MODERN",
             }
         )
@@ -388,13 +390,31 @@ class TestTenantSearchForm:
     def test_the_message_supplying_the_last_fact_completes_the_search(
         self, extractor: FactExtractor
     ) -> None:
-        """The budget arriving last must not restart the form: what the session
+        """The advance arriving last must not restart the form: what the session
         already holds counts towards the same criteria."""
-        facts = extractor.validate({"price": 150_000})
+        facts = extractor.validate({"advance_months": 4})
 
         step = extractor.next_step(
-            "COLLECT_PRICE",
+            "COLLECT_ADVANCE",
             facts,
+            flow=FlowName.PROPERTY_SEARCH,
+            known={
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+                "rent": 150_000,
+            },
+        )
+
+        assert step is FlowStep.PRESENT_RESULTS
+
+    def test_the_budget_is_followed_by_the_months_of_advance(
+        self, extractor: FactExtractor
+    ) -> None:
+        """§3: the fourth question a tenant is asked is how many months of rent
+        he can pay up front."""
+        step = extractor.next_step(
+            "COLLECT_PRICE",
+            extractor.validate({"price": 150_000}),
             flow=FlowName.PROPERTY_SEARCH,
             known={
                 "property_type": "STUDIO",
@@ -402,7 +422,8 @@ class TestTenantSearchForm:
             },
         )
 
-        assert step is FlowStep.PRESENT_RESULTS
+        assert step is FlowStep.COLLECT_ADVANCE
+        assert question_key_for(step, FlowName.PROPERTY_SEARCH) == "ask.search_advance"
 
     def test_the_search_questions_are_worded_for_a_tenant(self) -> None:
         tenant = FlowName.PROPERTY_SEARCH

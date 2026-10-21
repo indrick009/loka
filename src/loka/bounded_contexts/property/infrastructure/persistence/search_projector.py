@@ -71,6 +71,7 @@ class SqlAlchemySearchProjector:
         document.surface_m2 = source.surface_m2
         document.minimum_duration_months = source.minimum_duration_months
         document.available_from = source.available_from
+        document.advance_months = source.advance_months
         # ``source.quantity`` is null when the landlord was never asked, which
         # reads as one lodging. Not ``or 1``: that would turn an exhausted
         # listing's zero into one and keep it in search for ever.

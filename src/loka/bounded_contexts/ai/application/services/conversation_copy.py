@@ -196,6 +196,10 @@ _DEMAND_WAITING_TEXT: dict[str, str] = {
 
 _OR: dict[str, str] = {"fr": " ou ", "en": " or "}
 _MAX_RENT: dict[str, str] = {"fr": "FCFA/mois maximum", "en": "FCFA/month maximum"}
+_MAX_ADVANCE: dict[str, str] = {
+    "fr": "{months} mois d'avance maximum",
+    "en": "{months} months of advance at most",
+}
 
 
 _SEARCH_OUTRO: dict[str, str] = {
@@ -305,6 +309,7 @@ def search_query(facts: Mapping[str, Any]) -> ConversationSearchQuery | None:
         min_bedrooms=_optional_amount(bedrooms, minimum=1),
         near=_point(location),
         near_exact=not location.get("approximate"),
+        advance_months=_optional_amount(facts.get("advance_months")),
     )
 
 
@@ -343,6 +348,8 @@ def demand_waiting_text(query: ConversationSearchQuery, language: str) -> str:
     parts.append(f"{place}, {query.city}" if place else query.city)
     if query.budget_xaf is not None:
         parts.append(f"{_format_xaf(query.budget_xaf)} {_copy(_MAX_RENT, language)}")
+    if query.advance_months is not None:
+        parts.append(_copy(_MAX_ADVANCE, language).format(months=query.advance_months))
     return _copy(_DEMAND_WAITING_TEXT, language).format(summary=" - ".join(parts))
 
 

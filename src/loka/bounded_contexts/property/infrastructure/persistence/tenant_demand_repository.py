@@ -102,6 +102,7 @@ def _to_row(demand: TenantDemand) -> dict[str, Any]:
         "longitude": demand.near[1] if demand.near else None,
         "near_is_exact": demand.near_exact,
         "max_rent_xaf": demand.max_rent.amount if demand.max_rent else None,
+        "max_advance_months": demand.max_advance_months,
         "currency": demand.max_rent.currency if demand.max_rent else "XAF",
         "received_at": demand.received_at,
         "updated_at": demand.updated_at,
@@ -126,6 +127,7 @@ def _from_row(row: TenantDemandRow) -> TenantDemand:
             else None
         ),
         near_exact=row.near_is_exact,
+        max_advance_months=row.max_advance_months,
     )
     demand.pull_events()
     demand.status = DemandStatus(row.status)

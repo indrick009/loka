@@ -50,6 +50,9 @@ class PropertySearchCriteria:
     # with no position of its own stays eligible, ranked after the measured.
     near: tuple[float, float] | None = None
     near_radius_km: float = 3.0
+    # The most months of advance a lodging may ask. A listing that states none
+    # stays eligible: nothing to compare is not a mismatch.
+    max_advance_months: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

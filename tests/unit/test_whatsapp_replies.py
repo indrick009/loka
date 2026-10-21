@@ -36,6 +36,7 @@ PROPERTY_FLOW = {
     "ask.search_type",
     "ask.search_location",
     "ask.search_budget",
+    "ask.search_advance",
     "ask.search_criteria",
     "ask.search_results",
     "ask.search_choice",

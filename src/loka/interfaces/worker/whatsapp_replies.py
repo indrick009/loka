@@ -118,6 +118,10 @@ QUESTION_TEXT: dict[str, str] = {
         "quartier, par exemple : Douala, Bastos."
     ),
     "ask.search_budget": "Quel est votre budget maximum de loyer mensuel, en FCFA ?",
+    "ask.search_advance": (
+        "Combien de mois de loyer pouvez-vous payer d'avance à l'entrée ?\n"
+        "Exemple : 3 mois."
+    ),
     "ask.search_criteria": (
         "Quel critère voulez-vous modifier ?\n"
         "Par exemple : la ville, le quartier, le type de logement ou le budget."
@@ -223,6 +227,10 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "Douala, Bastos."
     ),
     "ask.search_budget": "What is your maximum monthly rent, in FCFA?",
+    "ask.search_advance": (
+        "How many months of rent can you pay up front when you move in?\n"
+        "Example: 3 months."
+    ),
     "ask.search_criteria": (
         "Which criterion would you like to change?\n"
         "For example: the city, the neighbourhood, the property type or the budget."

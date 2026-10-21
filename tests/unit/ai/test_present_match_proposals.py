@@ -252,3 +252,10 @@ class TestAGapIsSaid:
         pinned = {**JOUVENCE, "neighbourhood": None, "latitude": 3.7905, "longitude": 11.5370}
 
         assert "Studio - Odza, Yaoundé" in match_proposals_text([pinned], "fr")
+
+    def test_a_heavier_advance_is_said_in_months(self) -> None:
+        heavier = {**JOUVENCE, "gap": {"over_advance_months": 2}}
+
+        text = match_proposals_text([heavier], "fr")
+
+        assert "(2 mois d'avance de plus que prévu)" in text

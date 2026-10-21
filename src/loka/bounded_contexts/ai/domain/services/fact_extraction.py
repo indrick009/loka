@@ -88,10 +88,15 @@ PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
 #
 # The terminal step is ``PRESENT_RESULTS`` rather than a question: reaching it
 # means the criteria are complete, and the next move is to read the catalogue.
+#
+# The advance is the one entry condition a tenant *can* answer — it is about
+# his own savings, not about the lodging — and §3 asks it: in this market the
+# months handed over up front rule out more lodgings than the rent does.
 SEARCH_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
     ("location", FlowStep.COLLECT_LOCATION),
     ("rent", FlowStep.COLLECT_PRICE),
+    ("advance_months", FlowStep.COLLECT_ADVANCE),
 )
 
 # Intents that concern a listing or a search. Everything else — "merci", "c'est
@@ -216,6 +221,7 @@ SEARCH_QUESTION_BY_STEP: dict[FlowStep, str] = {
     FlowStep.COLLECT_PROPERTY_TYPE: "ask.search_type",
     FlowStep.COLLECT_LOCATION: "ask.search_location",
     FlowStep.COLLECT_PRICE: "ask.search_budget",
+    FlowStep.COLLECT_ADVANCE: "ask.search_advance",
     FlowStep.COLLECT_SEARCH_CRITERIA: "ask.search_criteria",
     FlowStep.PRESENT_RESULTS: "ask.search_results",
     FlowStep.COLLECT_PROPERTY_CHOICE: "ask.search_choice",

@@ -280,6 +280,7 @@ class TestAPublicationFindsTheDemandsWaiting:
                 "rent_xaf": 40_000,
                 "latitude": None,
                 "longitude": None,
+                "advance_months": None,
                 "photo_object_keys": [],
             }
         ]
@@ -459,3 +460,54 @@ class TestAGapIsProposedAsAGap:
         assert wider.max_price_xaf == int(45_000 * 1.15)
         gap = answered_proposals(demand)[0]["gap"]
         assert gap == {"over_budget_xaf": 5_000, "distance_km": 1.3}
+
+
+LISTING_AT_JOUVENCE: dict[str, Any] = {
+    "property_type": "STUDIO",
+    "city": "Yaoundé",
+    "neighbourhood": "Jouvence",
+    "rent_xaf": 40_000,
+}
+
+
+class TestTheAdvanceHeCanPay:
+    """§3's fourth question, held against the advance the landlord asks."""
+
+    LISTING = LISTING_AT_JOUVENCE
+
+    def _can_pay(self, months: int | None) -> TenantDemand:
+        demand = a_demand()
+        demand.max_advance_months = months
+        return demand
+
+    def test_an_advance_within_his_means_matches(self) -> None:
+        assert self._can_pay(4).accepts(**self.LISTING, advance_months=4)
+
+    def test_a_heavier_advance_is_a_gap_not_a_match(self) -> None:
+        demand = self._can_pay(4)
+
+        assert not demand.accepts(**self.LISTING, advance_months=6)
+        assert demand.tolerates(**self.LISTING, advance_months=6)
+        assert demand.gap_with(rent_xaf=40_000, point=None, advance_months=6) == {
+            "over_advance_months": 2
+        }
+
+    def test_a_year_against_five_months_is_not_put_to_him(self) -> None:
+        assert not self._can_pay(5).tolerates(**self.LISTING, advance_months=12)
+
+    @pytest.mark.parametrize(("can_pay", "asked"), [(None, 12), (3, None)])
+    def test_nothing_to_compare_holds_nothing_back(
+        self, can_pay: int | None, asked: int | None
+    ) -> None:
+        assert self._can_pay(can_pay).accepts(**self.LISTING, advance_months=asked)
+
+    async def test_the_search_is_capped_at_what_he_can_pay(self) -> None:
+        demand = self._can_pay(3)
+        search = _NothingExact([])
+        uow = FakeUnitOfWork(FakeDemands(demand), FakeProperties(), search)
+
+        await MatchTenantDemandsUseCase(uow).for_demand(demand.id, now=NOW)
+
+        exact, wider = search.calls
+        assert exact.max_advance_months == 3
+        assert wider.max_advance_months == 5

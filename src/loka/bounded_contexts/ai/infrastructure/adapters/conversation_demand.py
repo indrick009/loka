@@ -37,6 +37,7 @@ class ConversationTenantDemands:
                     max_rent_xaf=query.budget_xaf,
                     near=query.near,
                     near_exact=query.near_exact,
+                    max_advance_months=query.advance_months,
                 ),
                 now=now,
             )

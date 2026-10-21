@@ -356,6 +356,7 @@ _YES_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
 _MONTH_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
     "ask.deposit": ("COLLECT_DEPOSIT", "deposit_months"),
     "ask.advance": ("COLLECT_ADVANCE", "advance_months"),
+    "ask.search_advance": ("COLLECT_ADVANCE", "advance_months"),
 }
 
 # Questions whose answer is counted in something other than francs. A bare
@@ -365,6 +366,7 @@ _UNIT_BOUND_QUESTIONS = frozenset(
     {
         "ask.deposit",
         "ask.advance",
+        "ask.search_advance",
         "ask.quantity",
         "ask.minimum_duration",
         "ask.availability",

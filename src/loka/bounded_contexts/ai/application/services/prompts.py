@@ -207,6 +207,10 @@ QUESTION_TOPICS: dict[str, str] = {
         "is the most precise; naming the neighbourhood works too"
     ),
     "ask.search_budget": "the maximum monthly rent you are willing to pay, in XAF",
+    "ask.search_advance": (
+        "how many MONTHS of rent you can pay up front when you move in (the "
+        "advance), as a number of months, not in francs"
+    ),
     "ask.search_criteria": "which of your search criteria you want to change",
     "ask.search_results": "the list of properties matching your criteria",
     "ask.search_choice": (
@@ -320,6 +324,7 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.search_type": "property_type",
     "ask.search_location": "city and neighbourhood",
     "ask.search_budget": "price",
+    "ask.search_advance": "advance_months",
     "ask.search_choice": "property_choice",
     # No entity: the answer *is* the intent, which is why the gloss names the
     # two allowed ones. A COLLECT_ intent here would re-ask the same question.
