@@ -13,11 +13,12 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from loka.bounded_contexts.ai.application.ports import (
     ConversationTurn,
+    Exchange,
     ShadowDecision,
     TurnSummary,
     UsageEntry,
@@ -28,8 +29,55 @@ from loka.bounded_contexts.ai.infrastructure.persistence.models import (
 )
 from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
     ConversationTurnRow,
+    InboundMessageRow,
+    OutboundMessageRow,
 )
 from loka.shared.domain.clock import ensure_utc
+
+# A line of the thread is context, not a transcript: a pasted essay must not
+# turn every later prompt into a long one.
+_EXCHANGE_CHARS = 280
+
+
+class SqlAlchemyConversationExchanges:
+    """The last lines of a thread, both sides, read from what was stored.
+
+    Kora's side is what the outbound layer actually sent — templates included —
+    so the model sees the sentence the user read, not the key it came from.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def recent(
+        self, session_id: uuid.UUID, *, excluding: uuid.UUID | None = None, limit: int = 6
+    ) -> list[Exchange]:
+        inbound = select(
+            literal("user").label("speaker"),
+            InboundMessageRow.text.label("text"),
+            InboundMessageRow.received_at.label("at"),
+        ).where(
+            InboundMessageRow.session_id == session_id,
+            InboundMessageRow.text.is_not(None),
+        )
+        if excluding is not None:
+            inbound = inbound.where(InboundMessageRow.id != excluding)
+        outbound = select(
+            literal("kora").label("speaker"),
+            OutboundMessageRow.text.label("text"),
+            OutboundMessageRow.queued_at.label("at"),
+        ).where(
+            OutboundMessageRow.session_id == session_id,
+            OutboundMessageRow.text.is_not(None),
+        )
+        thread = union_all(inbound, outbound).subquery()
+        result = await self._session.execute(
+            select(thread.c.speaker, thread.c.text).order_by(thread.c.at.desc()).limit(limit)
+        )
+        return [
+            Exchange(speaker=speaker, text=str(text)[:_EXCHANGE_CHARS])
+            for speaker, text in result.all()
+        ][::-1]
 
 
 class SqlAlchemyConversationTurnRepository:

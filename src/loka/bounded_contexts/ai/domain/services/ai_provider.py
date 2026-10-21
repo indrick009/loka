@@ -72,6 +72,10 @@ class IntentResult:
     # that does not inline it leaves this empty and the pipeline falls back to a
     # second call or a stable template.
     reply: str | None = None
+    # The 'field' (from the prompt's required_fields) the inline ``reply`` asks
+    # about, or None when the writer did not say. Read back so the sentence and
+    # the question the pipeline records cannot drift apart.
+    asking: str | None = None
     # What the call cost. Optional because a provider that cannot report usage
     # must leave it empty rather than invent a price: the ledger records zero,
     # and under-reporting stays visible in the metrics instead of being hidden.
@@ -98,6 +102,7 @@ class IntentResult:
         )
         entities = _entities_of(payload.get("entities"))
         reply = payload.get("reply")
+        asking = payload.get("asking")
         return cls(
             intent=str(payload.get("intent", "UNKNOWN")),
             confidence=confidence,
@@ -106,6 +111,7 @@ class IntentResult:
             # value is only the fallback for a completion that omitted it.
             language=normalise_language(payload.get("language")) or language,
             reply=reply.strip() if isinstance(reply, str) and reply.strip() else None,
+            asking=asking.strip() if isinstance(asking, str) and asking.strip() else None,
         )
 
 

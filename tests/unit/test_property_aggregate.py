@@ -131,6 +131,53 @@ class TestPublication:
         assert prop.public_price == Money(300_000)
 
 
+class TestMediaChangedEvent:
+    """A photo added to a live listing must reach the search read model.
+
+    Observed live: a landlord published on his first picture, then sent a
+    second one; the search document kept only the first, so the tenant was shown
+    one photo of a lodging the owner had described with two.
+    """
+
+    def test_adding_media_to_a_live_listing_announces_it(self, now: datetime) -> None:
+        prop = complete_property(now)
+        prop.publish(now=now)
+        prop.pull_events()
+
+        prop.add_media(build_media(1)[0], now=now)
+
+        assert [event.event_type for event in prop.pull_events()] == [
+            "PropertyMediaChanged"
+        ]
+
+    def test_adding_media_to_a_draft_stays_silent(self, now: datetime) -> None:
+        prop = Property(property_id=uuid.uuid4(), landlord_id=uuid.uuid4(), now=now)
+
+        prop.add_media(build_media(1)[0], now=now)
+
+        assert prop.pull_events() == []
+
+    def test_removing_media_from_a_live_listing_announces_it(self, now: datetime) -> None:
+        prop = complete_property(now)
+        prop.publish(now=now)
+        prop.pull_events()
+
+        prop.remove_media(prop.media[0].media_id, now=now)
+
+        assert [event.event_type for event in prop.pull_events()] == [
+            "PropertyMediaChanged"
+        ]
+
+    def test_the_event_carries_the_property_id(self, now: datetime) -> None:
+        prop = complete_property(now)
+        prop.publish(now=now)
+        prop.pull_events()
+
+        prop.add_media(build_media(1)[0], now=now)
+
+        assert prop.pull_events()[0].metadata["property_id"] == str(prop.id)
+
+
 class TestAvailabilityLifecycle:
     def test_still_available_keeps_status_and_stamps_confirmation(
         self, now: datetime

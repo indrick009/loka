@@ -28,8 +28,10 @@ QUESTION_TEXT: dict[str, str] = {
         "Répondez : moderne, ou non."
     ),
     "ask.location": (
-        "Dans quelle ville et dans quel quartier se trouve le logement ?\n"
-        "Exemple : Douala, Bastos."
+        "Où se trouve le logement ?\n"
+        "Le plus simple : partagez votre position WhatsApp depuis le logement "
+        "même. Sinon, indiquez la ville et le quartier, par exemple : "
+        "Douala, Bastos."
     ),
     "ask.rent": "Quel est le loyer mensuel, en FCFA ?",
     "ask.features": (
@@ -108,8 +110,12 @@ QUESTION_TEXT: dict[str, str] = {
         "Exemple : appartement, studio, maison, chambre."
     ),
     "ask.search_location": (
-        "Où cherchez-vous ?\n"
-        "Indiquez une ville ou un quartier, par exemple : Douala, Bastos."
+        "Où cherchez-vous un logement ?\n"
+        "Indiquez l'endroit où vous aimeriez vivre — votre lieu de travail "
+        "par exemple — et non votre position actuelle.\n"
+        "Le plus simple : partagez votre position WhatsApp en vous trouvant "
+        "déjà dans cette zone. Vous pouvez aussi écrire une ville ou un "
+        "quartier, par exemple : Douala, Bastos."
     ),
     "ask.search_budget": "Quel est votre budget maximum de loyer mensuel, en FCFA ?",
     "ask.search_criteria": (
@@ -121,6 +127,11 @@ QUESTION_TEXT: dict[str, str] = {
         "Réessayez dans un instant."
     ),
     "ask.search_choice": "Indiquez le numéro du logement qui vous intéresse.",
+    "ask.payment_number": (
+        "Pour recevoir le contact du propriétaire, les frais Kora sont de "
+        "1 000 FCFA. Répondez OUI pour payer avec ce numéro, envoyez le numéro "
+        "Mobile Money ou Orange Money à utiliser, ou répondez NON pour annuler."
+    ),
 }
 
 # The same sentences, for a conversation the model read as English. A parallel
@@ -136,8 +147,10 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "Answer: modern, or not."
     ),
     "ask.location": (
-        "In which city and neighbourhood is the property?\n"
-        "Example: Douala, Bastos."
+        "Where is the property?\n"
+        "Easiest: share your WhatsApp location from the property itself. "
+        "Otherwise, give the city and the neighbourhood, for example: "
+        "Douala, Bastos."
     ),
     "ask.rent": "What is the monthly rent, in FCFA?",
     "ask.features": (
@@ -202,8 +215,12 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "Example: apartment, studio, house, room."
     ),
     "ask.search_location": (
-        "Where are you looking?\n"
-        "Give a city or a neighbourhood, for example: Douala, Bastos."
+        "Where are you looking for a place to live?\n"
+        "Give the area you would like to live in — your workplace, for "
+        "example — not where you are right now.\n"
+        "Easiest: share your WhatsApp location while you are already in that "
+        "area. You can also type a city or a neighbourhood, for example: "
+        "Douala, Bastos."
     ),
     "ask.search_budget": "What is your maximum monthly rent, in FCFA?",
     "ask.search_criteria": (
@@ -215,6 +232,11 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "Please try again in a moment."
     ),
     "ask.search_choice": "Give the number of the property you are interested in.",
+    "ask.payment_number": (
+        "To get the landlord's contact, Kora's fee is 1,000 FCFA. Reply YES to "
+        "pay with this number, send the Mobile Money or Orange Money number to "
+        "use, or reply NO to cancel."
+    ),
 }
 
 ACK_TEXT = (

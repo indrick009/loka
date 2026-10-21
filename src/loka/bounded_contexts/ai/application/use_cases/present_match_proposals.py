@@ -23,9 +23,12 @@ import structlog
 
 from loka.bounded_contexts.ai.application.services.match_proposals import (
     SHOWN_LISTINGS_KEY,
+    match_proposal_caption,
+    match_proposal_line,
     match_proposals_text,
 )
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
+    ConversationSession,
     FlowName,
     FlowStep,
     SessionStatus,
@@ -89,26 +92,75 @@ class PresentMatchProposalsUseCase:
                 flow=session.flow.value,
             )
 
-        self._uow.events.stage(
-            [
-                WhatsAppMessageSendRequested(
-                    aggregate_type="ConversationSession",
-                    aggregate_id=session.id,
-                    aggregate_version=session.revision,
-                    occurred_at=now,
-                    session_id=session.id,
-                    recipient_phone=session.phone.e164,
-                    reply_kind="QUESTION",
-                    question_key=CHOICE_QUESTION_KEY,
-                    text=match_proposals_text(shown, session.language),
-                    intent="DEMAND_MATCHED",
-                    language=session.language,
-                )
-            ],
-            correlation_id=correlation_id,
-        )
+        events = [
+            WhatsAppMessageSendRequested(
+                aggregate_type="ConversationSession",
+                aggregate_id=session.id,
+                aggregate_version=session.revision,
+                occurred_at=now,
+                session_id=session.id,
+                recipient_phone=session.phone.e164,
+                reply_kind="QUESTION",
+                question_key=CHOICE_QUESTION_KEY,
+                text=match_proposals_text(shown, session.language),
+                intent="DEMAND_MATCHED",
+                language=session.language,
+            )
+        ]
+        events.extend(self._photo_events(session, shown, now=now))
+        self._uow.events.stage(events, correlation_id=correlation_id)
         await self._uow.commit()
         self._logger.info(
-            "match_proposals_sent", session_id=str(session.id), proposals=len(shown)
+            "match_proposals_sent",
+            session_id=str(session.id),
+            proposals=len(shown),
+            photos=len(events) - 1,
         )
         return True
+
+    def _photo_events(
+        self,
+        session: ConversationSession,
+        shown: Sequence[Mapping[str, Any]],
+        *,
+        now: datetime,
+    ) -> list[WhatsAppMessageSendRequested]:
+        """One image per stored photo, each captioned with its lodging's number.
+
+        The list is sent first so the tenant reads what was found, then sees it.
+        Every photo travels: a landlord who attached five pictures expects five,
+        and one picture often cannot tell one lodging from another. The number
+        on the picture is the one his reply names, and the outbound layer
+        presigns the key — a URL minted here could expire before the send.
+        """
+        events: list[WhatsAppMessageSendRequested] = []
+        for number, proposal in enumerate(shown, start=1):
+            raw = proposal.get("photo_object_keys")
+            if not isinstance(raw, list):
+                continue
+            keys = [key for key in raw if isinstance(key, str) and key.strip()]
+            if not keys:
+                continue
+            line = match_proposal_line(proposal, number, session.language)
+            for index, key in enumerate(keys, start=1):
+                events.append(
+                    WhatsAppMessageSendRequested(
+                        aggregate_type="ConversationSession",
+                        aggregate_id=session.id,
+                        aggregate_version=session.revision,
+                        occurred_at=now,
+                        session_id=session.id,
+                        recipient_phone=session.phone.e164,
+                        reply_kind="ACK",
+                        text=match_proposal_caption(
+                            line,
+                            index=index,
+                            total=len(keys),
+                            language=session.language,
+                        ),
+                        media_object_key=key,
+                        intent="DEMAND_MATCHED_PHOTO",
+                        language=session.language,
+                    )
+                )
+        return events

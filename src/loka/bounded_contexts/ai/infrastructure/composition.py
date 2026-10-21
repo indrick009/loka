@@ -19,6 +19,12 @@ from loka.bounded_contexts.ai.application.services.decision_shadow import Decisi
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
+from loka.bounded_contexts.ai.application.use_cases.reveal_unlocked_contact import (
+    RevealUnlockedContactUseCase,
+)
+from loka.bounded_contexts.ai.application.use_cases.voice_platform_reply import (
+    VoicePlatformReplyUseCase,
+)
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_availability import (
     ConversationAvailabilityAnswers,
     ConversationAvailabilityRequests,
@@ -29,19 +35,28 @@ from loka.bounded_contexts.ai.infrastructure.adapters.conversation_demand import
 from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_search import (
     ConversationPropertySearch,
 )
+from loka.bounded_contexts.ai.infrastructure.adapters.conversation_unlock import (
+    ConversationUnlockedContacts,
+    ConversationUnlockPayments,
+)
 from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
+    SqlAlchemyConversationExchanges,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDecisionShadowLog,
 )
 from loka.bounded_contexts.landlord.infrastructure.composition import (
     LANDLORD_DIRECTORY,
 )
+from loka.bounded_contexts.messaging.infrastructure.composition import (
+    CONVERSATION_SESSION_REPOSITORY,
+)
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,
+    initiate_service_fee_use_case,
 )
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -128,8 +143,54 @@ def analyse_conversation_message_use_case(
         # A tenant's search is recorded, not answered in the thread: Kora
         # acknowledges and comes back once it has something worth sending.
         demands=ConversationTenantDemands(uow),
+        # The 1 000 FCFA unlock: the tenant's yes becomes a withdrawal request.
+        # The conversation depends on the act of asking, not on Payment's use
+        # case, and settlement stays out of it — only the provider's callback
+        # releases the contact.
+        unlock_payments=ConversationUnlockPayments(
+            uow, initiate=initiate_service_fee_use_case(uow, settings)
+        ),
         # The decision-model pilot: asked on every turn, stored, never shown.
         shadow=decision_shadow(uow, settings=settings),
+        # The last lines of the thread, so the model reads what was said.
+        exchanges=SqlAlchemyConversationExchanges(uow.session),
+    )
+
+
+def voice_platform_reply_use_case(
+    uow: UnitOfWork, *, settings: Settings
+) -> VoicePlatformReplyUseCase | None:
+    """The rewriter of stock copy, or ``None`` when no model may be called."""
+    if not isinstance(uow, SqlAlchemyUnitOfWork):
+        raise TypeError("voice_platform_reply_use_case requires a SqlAlchemyUnitOfWork")
+    model = intent_model(settings)
+    if model is None:
+        return None
+    return VoicePlatformReplyUseCase(
+        uow,
+        model=model,
+        exchanges=SqlAlchemyConversationExchanges(uow.session),
+        usage=SqlAlchemyAiUsageLedger(uow.session),
+        provider=settings.ai.provider,
+    )
+
+
+def reveal_unlocked_contact_use_case(uow: UnitOfWork) -> RevealUnlockedContactUseCase:
+    """The tenant's half of settlement: hand over number and location once paid.
+
+    Not part of the analysis pipeline: it runs on the provider's callback, from
+    a consumer, and its two dependencies are the session the tenant last used
+    and the adapter that assembles the contact from other contexts.
+    """
+    if not isinstance(uow, SqlAlchemyUnitOfWork):
+        raise TypeError("reveal_unlocked_contact_use_case requires a SqlAlchemyUnitOfWork")
+    sessions = uow.repository(CONVERSATION_SESSION_REPOSITORY)
+    return RevealUnlockedContactUseCase(
+        uow,
+        sessions,
+        contacts=ConversationUnlockedContacts(
+            uow, sessions=sessions, landlords=uow.repository(LANDLORD_DIRECTORY)
+        ),
     )
 
 

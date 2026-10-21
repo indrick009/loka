@@ -115,6 +115,12 @@ async def _persist(database: Any, prop: Property) -> None:
         await session.commit()
 
 
+async def _save(database: Any, prop: Property) -> None:
+    async with database.session() as session:
+        await SqlAlchemyPropertyRepository(session).save(prop)
+        await session.commit()
+
+
 def _event(property_id: uuid.UUID, *, event_type: str = "PropertyPublished") -> dict[str, Any]:
     """The envelope exactly as the outbox dispatcher serialises it."""
     return {
@@ -160,6 +166,19 @@ async def _wait_for_document(
     return None
 
 
+async def _wait_for_media(
+    database: Any, property_id: uuid.UUID, *, count: int, timeout: float = 10.0
+) -> PropertySearchDocumentRow | None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while loop.time() < deadline:
+        document = await _document(database, property_id)
+        if document is not None and len(document.media_object_keys) == count:
+            return document
+        await asyncio.sleep(0.2)
+    return None
+
+
 async def _dlq_message(broker: Any, settings: Any) -> Any:
     queue = f"{SEARCH_PROJECTION_QUEUE}{settings.broker.dlq_suffix}"
     return await (await broker.channel.get_queue(queue)).get(timeout=5, fail=False)
@@ -181,6 +200,43 @@ async def test_a_published_property_reaches_the_read_model(
     assert document.city == "Douala"
     assert document.is_verified is True
     assert document.public_price_xaf == 175_000
+
+
+async def test_a_photo_added_after_publication_reaches_the_read_model(
+    consumer: Any, broker: Any, database: Any
+) -> None:
+    """A landlord keeps sending pictures after his listing has gone live.
+
+    Observed live: the search document was built at publication from the single
+    photo that triggered it, and the second photo — sent a second later — never
+    appeared, so the tenant was shown one picture of a lodging described with
+    two.
+    """
+    prop = _listing()
+    prop.publish(now=NOW, actor_id=prop.landlord_id)
+    await _persist(database, prop)
+
+    await _publish(broker, _event(prop.id))
+    document = await _wait_for_document(database, prop.id)
+    assert document is not None
+    assert len(document.media_object_keys) == 1
+
+    prop.add_media(
+        PropertyMedia(
+            media_id=uuid.uuid4(),
+            kind=MediaKind.PHOTO,
+            object_key=f"landlords/{prop.landlord_id}/{prop.id}/2.jpg",
+            status=MediaStatus.UPLOADED,
+        ),
+        now=NOW,
+    )
+    await _save(database, prop)
+
+    await _publish(broker, _event(prop.id, event_type="PropertyMediaChanged"))
+
+    document = await _wait_for_media(database, prop.id, count=2)
+    assert document is not None
+    assert len(document.media_object_keys) == 2
 
 
 async def test_a_rented_property_leaves_search(

@@ -35,6 +35,10 @@ from loka.bounded_contexts.property.application.queries.search_properties import
     PropertySearchCriteria,
 )
 from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.bounded_contexts.property.domain.entities.property_media import (
+    MediaKind,
+    MediaStatus,
+)
 from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
 from loka.bounded_contexts.property.domain.repositories.property_repository import (
     TenantDemandRepository,
@@ -135,12 +139,16 @@ def _criteria(demand: TenantDemand) -> PropertySearchCriteria:
 
 
 def _from_search(item: dict[str, Any]) -> dict[str, Any]:
+    keys = item.get("media_object_keys")
     return {
         "property_id": str(item.get("property_id") or ""),
         "property_type": item.get("type"),
         "city": item.get("city"),
         "neighbourhood": item.get("neighbourhood") or None,
         "rent_xaf": item.get("price_xaf"),
+        # The photos the listing was published with, in order, so the tenant is
+        # shown the lodging and not just a line of text about it.
+        "photo_object_keys": [str(key) for key in keys] if isinstance(keys, list) else [],
     }
 
 
@@ -153,4 +161,18 @@ def _from_listing(prop: Property) -> dict[str, Any]:
         "city": location.city if location else None,
         "neighbourhood": (location.neighbourhood or None) if location else None,
         "rent_xaf": price.amount if price else None,
+        "photo_object_keys": _photo_object_keys(prop),
     }
+
+
+def _photo_object_keys(prop: Property) -> list[str]:
+    """Uploaded photos, in the order the landlord attached them.
+
+    Only photos: a floor plan or an identity document is not what a tenant is
+    shown, and a quarantined or rejected item has no place in a message.
+    """
+    return [
+        media.object_key
+        for media in sorted(prop.media, key=lambda media: media.position)
+        if media.kind is MediaKind.PHOTO and media.status is MediaStatus.UPLOADED
+    ]

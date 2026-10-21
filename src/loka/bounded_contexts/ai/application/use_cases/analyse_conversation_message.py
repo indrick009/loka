@@ -32,14 +32,18 @@ from loka.bounded_contexts.ai.application.ports import (
     AvailabilityRequests,
     BudgetDecision,
     BudgetPolicy,
+    ConversationExchanges,
     ConversationTurn,
     ConversationTurnRepository,
+    Exchange,
     IntentModel,
     PropertyListing,
     PropertySearchGateway,
     ResponseModel,
     TenantDemands,
     TurnSummary,
+    UnlockPayments,
+    UnlockRequestOutcome,
     UsageEntry,
 )
 from loka.bounded_contexts.ai.application.services.conversation_copy import (
@@ -71,6 +75,13 @@ from loka.bounded_contexts.ai.application.services.prompts import (
     build_analysis_prompt,
     build_reply_prompt,
     collapse_repeats,
+)
+from loka.bounded_contexts.ai.application.services.unlock_copy import (
+    PAYMENT_QUESTION_KEY,
+    UNLOCK_KEY,
+    PaymentAnswer,
+    read_payment_answer,
+    unlock_text,
 )
 from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import (
@@ -277,8 +288,26 @@ def _is_search(flow: FlowName) -> bool:
 _STEPS_THE_WRITER_MAY_REACH = frozenset({FlowStep.CONFIRM_PROPERTY, FlowStep.PRESENT_RESULTS})
 
 
+def _field_for_step(step: FlowStep, flow: FlowName) -> str | None:
+    """The form field name a step collects, in this flow's form.
+
+    The name is what the writer is handed in ``required_fields`` and reports
+    back as ``asking``; ``None`` means the step is outside the form, so its
+    question is not one the writer is ever asked to phrase.
+    """
+    form = SEARCH_REQUIREMENTS if _is_search(flow) else PROPERTY_REQUIREMENTS
+    for name, form_step in form:
+        if form_step is step:
+            return name
+    return None
+
+
 def _inline_reply_fits(
-    prompt_flow: FlowName, *, session: ConversationSession, verdict: _Verdict
+    prompt_flow: FlowName,
+    *,
+    session: ConversationSession,
+    verdict: _Verdict,
+    asking: str | None = None,
 ) -> bool:
     """Whether the sentence written with the analysis asks what was decided.
 
@@ -298,6 +327,15 @@ def _inline_reply_fits(
     confidence, the turn was refused and the quantity kept open, yet its
     sentence had already moved on to the rent. The landlord's next number
     would have been filed against a question he no longer thought was open.
+
+    A turn that recorded no field of an open form question is a fourth: the
+    writer answered as if the fact had been handed over, so its sentence asks
+    the *following* question while the session still waits for the current one.
+
+    A fifth is the same drift with a field recorded: the writer moved past a
+    field it did not fill. The writer now names the field it asks about
+    (``asking``); when that name is not the field the backend kept open, the
+    sentence asked the wrong question and is written again.
     """
     if not verdict.accepted:
         return False
@@ -307,8 +345,26 @@ def _inline_reply_fits(
     step = verdict.next_step
     if step is None or step in _STEPS_THE_WRITER_MAY_REACH:
         return True
-    form = SEARCH_REQUIREMENTS if _is_search(target) else PROPERTY_REQUIREMENTS
-    return any(step is form_step for _, form_step in form)
+    field = _field_for_step(step, target)
+    if field is None:
+        return False
+    # A form step, and the turn recorded nothing: the inline writer only ever
+    # saw the message, so it may have *read* a fact it failed to hand over and
+    # written the question *after* the one the backend kept open. Observed live:
+    # a landlord's "elle sont inclus" produced no charges fact, the writer moved
+    # on to the deposit, and the session stayed on the charges — so his later
+    # "aucune", meant for the minimum duration, was filed as "no charges" and
+    # the published listing said the water was charged separately. With nothing
+    # recorded there is nothing to phrase an answer around, so the question the
+    # backend decided is the one asked again.
+    if not verdict.facts.facts:
+        return False
+    # The writer that said which field its sentence asks about is held to it:
+    # a name other than the open field means the sentence moved on, and the
+    # record and the sentence would describe two different questions. A writer
+    # that stayed silent keeps today's behaviour — the sentence is used, as the
+    # guard cannot contradict it.
+    return asking is None or asking == field
 
 
 def _while_waiting(
@@ -343,6 +399,20 @@ def _nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
         return None
     try:
         return uuid.UUID(str(shown[choice - 1]))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def _as_uuid(value: Any) -> uuid.UUID | None:
+    """A stored id read back out of a JSON column, or ``None`` if unusable.
+
+    Defensive like :func:`_nth_listing`: a malformed booking must leave the
+    tenant with a question, never start a withdrawal against a garbage id.
+    """
+    if not isinstance(value, str):
+        return None
+    try:
+        return uuid.UUID(value)
     except (ValueError, AttributeError, TypeError):
         return None
 
@@ -416,11 +486,14 @@ class AnalyseConversationMessageUseCase:
         listing: PropertyListing | None = None,
         availability: AvailabilityAnswers | None = None,
         availability_requests: AvailabilityRequests | None = None,
+        unlock_payments: UnlockPayments | None = None,
         demands: TenantDemands | None = None,
         search: PropertySearchGateway | None = None,
         shadow: DecisionShadow | None = None,
+        exchanges: ConversationExchanges | None = None,
     ) -> None:
         self._uow = uow
+        self._exchanges = exchanges
         self._inbound = inbound
         self._sessions = sessions
         self._turns = turns
@@ -434,6 +507,7 @@ class AnalyseConversationMessageUseCase:
         self._listing = listing
         self._availability = availability
         self._availability_requests = availability_requests
+        self._unlock_payments = unlock_payments
         self._demands = demands
         self._search = search
         self._shadow = shadow
@@ -459,6 +533,12 @@ class AnalyseConversationMessageUseCase:
             )
 
         history = await self._turns.recent(session.id, limit=5)
+        # The words, not only the labels: what the user and Kora actually said.
+        thread = (
+            await self._exchanges.recent(session.id, excluding=command.message_id)
+            if self._exchanges is not None
+            else []
+        )
 
         # Nothing has been written yet, so releasing the transaction costs
         # nothing and the model call never holds a database connection.
@@ -475,7 +555,7 @@ class AnalyseConversationMessageUseCase:
             else None
         )
         try:
-            report = await self._analyse(command, message, session, history, moment)
+            report = await self._analyse(command, message, session, history, thread, moment)
         except BaseException:
             if shadow is not None:
                 DecisionShadow.cancel(shadow)
@@ -497,6 +577,7 @@ class AnalyseConversationMessageUseCase:
         message: StoredInboundMessage,
         session: ConversationSession,
         history: list[TurnSummary],
+        thread: list[Exchange],
         moment: datetime,
     ) -> AnalysisReport:
         """Read one loaded message and answer it."""
@@ -539,16 +620,23 @@ class AnalyseConversationMessageUseCase:
         shortcut = self._classifier.shortcut(text, pending=pending_key)
         if shortcut is not None:
             ai_bypass_total.labels(stage="regex").inc()
+            intent, entities = self._read_open_question(
+                pending_key=pending_key,
+                hint=shortcut,
+                intent=shortcut.intent,
+                entities=dict(shortcut.entities),
+            )
             return await self._finish(
                 session=session,
                 message_id=command.message_id,
-                intent=shortcut.intent,
+                intent=intent,
                 confidence=shortcut.confidence,
-                entities=dict(shortcut.entities),
+                entities=entities,
                 used_llm=False,
                 latency_ms=0,
                 cost_usd=Decimal("0"),
                 now=moment,
+                text=text,
             )
 
         decision = await self._budget_decision(session.user_id, moment)
@@ -565,6 +653,7 @@ class AnalyseConversationMessageUseCase:
                 cost_usd=Decimal("0"),
                 now=moment,
                 reason=decision.reason,
+                text=text,
             )
 
         ai_bypass_total.labels(stage="llm").inc()
@@ -583,6 +672,7 @@ class AnalyseConversationMessageUseCase:
             step=session.step,
             pending_question=pending_key,
             known_facts=dict(session.context),
+            exchanges=thread,
         )
         try:
             result = await self._model.understand_intent(prompt)
@@ -628,17 +718,9 @@ class AnalyseConversationMessageUseCase:
         if shorthand is not None:
             entities["price"] = shorthand
         intent = result.intent
-        # A "non" the model read as the bare dialogue act still answers the
-        # open question when that question has exactly one "no": no caution,
-        # neither guard nor parking, a single lodging. Observed live: "Non, ni
-        # gardien ni parking" came back NEGATIVE, nothing was recorded, and the
-        # landlord was asked about "other equipment" until he gave up.
-        denial = (
-            self._classifier.denial_answer(pending_key) if intent == "NEGATIVE" else None
+        intent, entities = self._read_open_question(
+            pending_key=pending_key, hint=hint, intent=intent, entities=entities
         )
-        if denial is not None:
-            intent, entities = denial.intent, {**denial.entities, **entities}
-        intent, entities = _availability_reading(pending_key, hint, intent, entities)
         verdict = self._verdict(
             session=session,
             intent=intent,
@@ -656,7 +738,9 @@ class AnalyseConversationMessageUseCase:
         # ``reply`` empty pays for a second call; a deployment that never asks
         # for an inline reply degrades to the same behaviour as before.
         reply_text: str | None = result.reply
-        if not _inline_reply_fits(prompt_flow, session=session, verdict=verdict):
+        if not _inline_reply_fits(
+            prompt_flow, session=session, verdict=verdict, asking=result.asking
+        ):
             reply_text = None
         reply_usage: LlmUsage | None = None
         if reply_text is None:
@@ -665,6 +749,7 @@ class AnalyseConversationMessageUseCase:
                 text=text,
                 session=session,
                 history=history,
+                thread=thread,
                 now=moment,
             )
 
@@ -708,6 +793,7 @@ class AnalyseConversationMessageUseCase:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             reply_text=reply_text,
+            text=text,
         )
 
     async def _from_shared_location(
@@ -823,6 +909,7 @@ class AnalyseConversationMessageUseCase:
             now=now,
             reason=reason,
             reply_text=reply_text,
+            text=text,
         )
 
     async def _without_a_model(
@@ -853,6 +940,7 @@ class AnalyseConversationMessageUseCase:
                 latency_ms=0,
                 cost_usd=Decimal("0"),
                 now=now,
+                text=text,
             )
 
         ai_bypass_total.labels(stage="budget").inc()
@@ -867,6 +955,7 @@ class AnalyseConversationMessageUseCase:
             cost_usd=Decimal("0"),
             now=now,
             reason="no_model_configured",
+            text=text,
         )
 
     async def _finish(
@@ -883,15 +972,19 @@ class AnalyseConversationMessageUseCase:
         now: datetime,
         reason: str | None = None,
         reply_text: str | None = None,
+        text: str | None = None,
     ) -> AnalysisReport:
         """Close a call that did not reach the model.
 
         No model writes the reply; ``reply_text`` is platform text when the
         turn has a fact of its own to report, such as a photo just received.
+        ``text`` is the raw message, handed on so a step that is read by a rule
+        alone — the 1 000 FCFA answer — can be decided without a model.
         """
         return await self._apply(
             session=session,
             message_id=message_id,
+            text=text,
             verdict=self._verdict(
                 session=session,
                 intent=intent,
@@ -906,6 +999,35 @@ class AnalyseConversationMessageUseCase:
             now=now,
             reply_text=reply_text,
         )
+
+    def _read_open_question(
+        self,
+        *,
+        pending_key: str | None,
+        hint: DeterministicMatch | None,
+        intent: str,
+        entities: dict[str, Any],
+    ) -> tuple[str, dict[str, Any]]:
+        """Apply the rules that only mean something while a question is open.
+
+        Both lanes end here — the fast regex lane and the model lane — so a bare
+        "oui" answers "le logement est encore disponible ?" whichever one read
+        it. Observed live: the regex lane returned AFFIRMATIVE for a landlord's
+        "oui", skipped this reading, and the tenant waiting on his answer stayed
+        blocked until the landlord rephrased as "oui c'est disponible".
+
+        A "non" the model read as the bare dialogue act still answers the open
+        question when that question has exactly one "no": no caution, neither
+        guard nor parking, a single lodging. Observed live: "Non, ni gardien ni
+        parking" came back NEGATIVE, nothing was recorded, and the landlord was
+        asked about "other equipment" until he gave up.
+        """
+        denial = (
+            self._classifier.denial_answer(pending_key) if intent == "NEGATIVE" else None
+        )
+        if denial is not None:
+            intent, entities = denial.intent, {**denial.entities, **entities}
+        return _availability_reading(pending_key, hint, intent, entities)
 
     def _verdict(
         self,
@@ -957,6 +1079,7 @@ class AnalyseConversationMessageUseCase:
         session: ConversationSession,
         history: list[TurnSummary],
         now: datetime,
+        thread: list[Exchange] | None = None,
     ) -> tuple[str | None, LlmUsage | None]:
         """Let the model phrase the answer, or return ``(None, None)``.
 
@@ -1009,6 +1132,7 @@ class AnalyseConversationMessageUseCase:
             # nobody had asked him, and his "moderne" was lost.
             flow=_target_flow(session, verdict.intent),
             known_facts=dict(session.context),
+            exchanges=thread,
         )
         model_name = str(getattr(self._response_model, "model", "unknown"))
         try:
@@ -1055,6 +1179,7 @@ class AnalyseConversationMessageUseCase:
         input_tokens: int = 0,
         output_tokens: int = 0,
         reply_text: str | None = None,
+        text: str | None = None,
     ) -> AnalysisReport:
         """Record the turn, move the conversation, and stage the answer.
 
@@ -1107,6 +1232,22 @@ class AnalyseConversationMessageUseCase:
         # the user was actually asked.
         question: str | None = None
 
+        # The 1 000 FCFA answer is read by a rule and never by the model: a
+        # misread charges the wrong number, or charges twice. It is settled here,
+        # before the ordinary flow, and closes the turn on its own.
+        if session.step in (FlowStep.CONFIRM_PAYMENT, FlowStep.AWAITING_PAYMENT):
+            return await self._settle_payment_turn(
+                session,
+                message_id=message_id,
+                text=text,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+
         if accepted:
             availability_text = await self._record_availability_answer(
                 session, intent=intent, now=now
@@ -1118,7 +1259,7 @@ class AnalyseConversationMessageUseCase:
                 session, intent=intent, facts=facts, next_step=next_step, now=now
             )
             choice_text, next_step = await self._choose_listing(
-                session, facts=facts, next_step=next_step, now=now
+                session, intent=intent, facts=facts, next_step=next_step, now=now
             )
             # The values the landlord is asked to confirm, as stored. Rebuilt
             # on every turn that lands here, so a correction shows at once.
@@ -1143,23 +1284,17 @@ class AnalyseConversationMessageUseCase:
             # The catalogue's numbers are data, not prose: they win over both
             # the model's sentence and the listing summary, which cannot apply
             # to the same turn.
-            reply_text = (
-                availability_text
-                or search_text
-                or waiting_text
-                or choice_text
-                or listing_text
-                or recap_text
-                or reply_text
+            platform_text = (
+                availability_text or search_text or waiting_text or choice_text or listing_text
             )
+            reply_text = platform_text or recap_text or reply_text
         else:
             # Not understood, but nothing he says now can be misfiled: the
             # demand is kept and no question is open. Observed live with the
             # model timing out: "tu me reviens quand ?" reached the rules alone
             # and was told to rephrase. His criteria and the truth beat that.
-            reply_text = (
-                _while_waiting(session, intent=intent, next_step=None) or reply_text
-            )
+            platform_text = _while_waiting(session, intent=intent, next_step=None)
+            reply_text = platform_text or reply_text
 
         # Committed with the turn: an analysis the platform understood but never
         # answered is a landlord staring at a silent thread, and no retry can
@@ -1171,6 +1306,9 @@ class AnalyseConversationMessageUseCase:
             question_key=question,
             text=reply_text,
             now=now,
+            # Stock copy goes out in the user's voice; a recap to confirm and
+            # the model's own sentence go out as they are.
+            answering=text if platform_text and reply_text == platform_text else None,
         )
 
         await self._uow.commit()
@@ -1198,6 +1336,7 @@ class AnalyseConversationMessageUseCase:
         question_key: str | None,
         now: datetime,
         text: str | None = None,
+        answering: str | None = None,
     ) -> None:
         """Request the one reply this turn owes the user.
 
@@ -1213,6 +1352,7 @@ class AnalyseConversationMessageUseCase:
                     aggregate_id=session.id,
                     aggregate_version=session.revision,
                     occurred_at=now,
+                    actor_id=session.user_id,
                     session_id=session.id,
                     recipient_phone=session.phone.e164,
                     reply_kind=reply_kind(reason=reason, question_key=question_key),
@@ -1220,9 +1360,246 @@ class AnalyseConversationMessageUseCase:
                     intent=intent,
                     text=text,
                     language=session.language,
+                    answering=answering or None,
                 )
             ],
             correlation_id=current_context().get("correlation_id") or "unknown",
+        )
+
+    async def _settle_payment_turn(
+        self,
+        session: ConversationSession,
+        *,
+        message_id: uuid.UUID,
+        text: str | None,
+        intent: str,
+        confidence: float,
+        used_llm: bool,
+        latency_ms: int,
+        cost_usd: Decimal,
+        now: datetime,
+    ) -> AnalysisReport:
+        """Read the tenant's answer to the 1 000 FCFA offer.
+
+        Platform text and one rule, never the model: "oui" must mean pay with
+        the number shown, a number must mean that number, and nothing else may
+        start a withdrawal. Only reached on the payment steps, and it always
+        returns a finished report.
+        """
+        language = session.language
+        phone = session.phone.e164
+
+        if session.step is FlowStep.AWAITING_PAYMENT:
+            # The withdrawal is on his phone; only the provider's callback moves
+            # him on, never his word that he paid.
+            return await self._close_payment_turn(
+                session,
+                next_step=FlowStep.AWAITING_PAYMENT,
+                question_key=PAYMENT_QUESTION_KEY,
+                reply=unlock_text("waiting", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+
+        booking = session.context.get(UNLOCK_KEY)
+        property_id = landlord_id = None
+        if isinstance(booking, dict):
+            property_id = _as_uuid(booking.get("property_id"))
+            landlord_id = _as_uuid(booking.get("landlord_id"))
+        if property_id is None or landlord_id is None or session.user_id is None:
+            # Nothing to unlock: the booking is gone or never existed. Re-asking
+            # is honest; inventing a listing to charge for is not.
+            return await self._close_payment_turn(
+                session,
+                next_step=FlowStep.CONFIRM_PAYMENT,
+                question_key=PAYMENT_QUESTION_KEY,
+                reply=unlock_text("not_started", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+
+        def back_to_his_list() -> FlowStep:
+            """Where a tenant goes when the listing he picked falls through.
+
+            His results when he still has a list to choose from — otherwise
+            waiting for a match — so a dead end never becomes a dead thread.
+            """
+            shown = session.context.get(_SHOWN_LISTINGS)
+            return (
+                FlowStep.COLLECT_PROPERTY_CHOICE
+                if isinstance(shown, list) and shown
+                else FlowStep.AWAITING_MATCH
+            )
+
+        answer, other_number = read_payment_answer(text or "")
+        if answer is PaymentAnswer.CANCEL:
+            # Nothing is charged. He is sent back to his results when there are
+            # any left, and to waiting otherwise — never left with no way out.
+            return await self._close_payment_turn(
+                session,
+                next_step=back_to_his_list(),
+                question_key=None,
+                reply=unlock_text("cancelled", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+                clear_unlock=True,
+            )
+        if answer is PaymentAnswer.UNCLEAR or self._unlock_payments is None:
+            return await self._close_payment_turn(
+                session,
+                next_step=FlowStep.CONFIRM_PAYMENT,
+                question_key=PAYMENT_QUESTION_KEY,
+                reply=unlock_text("unclear", language, phone=phone)
+                if answer is PaymentAnswer.UNCLEAR
+                else unlock_text("not_started", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+
+        # ``read_payment_answer`` only returns a number on OTHER_NUMBER, but the
+        # type is optional; falling back to the thread's own number keeps the
+        # request well-formed rather than crashing the turn.
+        payer_phone = (
+            other_number
+            if answer is PaymentAnswer.OTHER_NUMBER and other_number
+            else phone
+        )
+        outcome = await self._unlock_payments.request(
+            tenant_id=session.user_id,
+            property_id=property_id,
+            landlord_id=landlord_id,
+            payer_phone=payer_phone,
+            now=now,
+        )
+        if outcome is UnlockRequestOutcome.REQUESTED:
+            return await self._close_payment_turn(
+                session,
+                next_step=FlowStep.AWAITING_PAYMENT,
+                question_key=PAYMENT_QUESTION_KEY,
+                reply=unlock_text("requested", language, phone=payer_phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+            )
+        if outcome is UnlockRequestOutcome.ALREADY_UNLOCKED:
+            return await self._close_payment_turn(
+                session,
+                next_step=FlowStep.DONE,
+                question_key=None,
+                reply=unlock_text("already", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+                clear_unlock=True,
+            )
+        if outcome is UnlockRequestOutcome.NOT_CONFIRMED:
+            # The confirmation was stale — the listing went between the offer
+            # and his yes. Nothing is charged, and he is put back on his list.
+            return await self._close_payment_turn(
+                session,
+                next_step=back_to_his_list(),
+                question_key=None,
+                reply=unlock_text("not_confirmed", language, phone=phone),
+                message_id=message_id,
+                intent=intent,
+                confidence=confidence,
+                used_llm=used_llm,
+                latency_ms=latency_ms,
+                cost_usd=cost_usd,
+                now=now,
+                clear_unlock=True,
+            )
+        # FAILED: nothing was recorded as owed, so another attempt is honest.
+        return await self._close_payment_turn(
+            session,
+            next_step=FlowStep.CONFIRM_PAYMENT,
+            question_key=PAYMENT_QUESTION_KEY,
+            reply=unlock_text("failed", language, phone=payer_phone),
+            message_id=message_id,
+            intent=intent,
+            confidence=confidence,
+            used_llm=used_llm,
+            latency_ms=latency_ms,
+            cost_usd=cost_usd,
+            now=now,
+        )
+
+    async def _close_payment_turn(
+        self,
+        session: ConversationSession,
+        *,
+        next_step: FlowStep,
+        question_key: str | None,
+        reply: str,
+        message_id: uuid.UUID,
+        intent: str,
+        confidence: float,
+        used_llm: bool,
+        latency_ms: int,
+        cost_usd: Decimal,
+        now: datetime,
+        clear_unlock: bool = False,
+    ) -> AnalysisReport:
+        """Move the payment step, stage its one sentence, and commit.
+
+        The turn was already recorded by ``_apply``; this closes it exactly like
+        the ordinary path would, so the session state and the sentence cannot
+        describe different steps.
+        """
+        observed = session.revision
+        session.transition(next_step, now=now, expected_revision=observed)
+        session.record_pending_question(question_key)
+        if clear_unlock:
+            session.context.pop(UNLOCK_KEY, None)
+        await self._sessions.save(session, expected_revision=observed)
+        await self._stage_reply(
+            session,
+            intent=intent,
+            reason=None,
+            question_key=question_key,
+            text=reply,
+            now=now,
+        )
+        await self._uow.commit()
+        return AnalysisReport(
+            session_id=session.id,
+            message_id=message_id,
+            intent=intent,
+            confidence=confidence,
+            used_llm=used_llm,
+            accepted=True,
+            reason=None,
+            next_step=next_step.value,
+            question_key=question_key,
+            cost_usd=cost_usd,
         )
 
     async def _record_availability_answer(
@@ -1303,6 +1680,7 @@ class AnalyseConversationMessageUseCase:
         self,
         session: ConversationSession,
         *,
+        intent: str,
         facts: ExtractedFacts,
         next_step: FlowStep | None,
         now: datetime,
@@ -1317,15 +1695,10 @@ class AnalyseConversationMessageUseCase:
 
         A number naming nothing is re-asked rather than resolved to the nearest
         listing: charging 1 000 FCFA for a lodging the tenant never saw is
-        worse than one more question.
-
-        **Dormant for now, and deliberately kept.** Nothing writes
-        ``_shown_listings`` any more: the thread no longer prints a result list,
-        it records the demand and acknowledges it. The list will be printed by
-        the message Kora sends back once it has prepared an answer, and that
-        message is the thing still to build — it is what will fill
-        ``_shown_listings`` and bring this step back to life. ``self._search``
-        is injected and unused for the same reason.
+        worse than one more question. The one exception is a *single* result —
+        there, "je prends" names the only lodging there is, and re-asking for a
+        number the tenant has nothing to choose between is the same dead end
+        one turn later.
         """
         # Keyed on where the session *is*, not on where the form recompute
         # would go: ``next_step`` walks the tenant's criteria again and would
@@ -1335,7 +1708,11 @@ class AnalyseConversationMessageUseCase:
             return None, next_step
         choice = facts.get("property_choice")
         if not isinstance(choice, int) or isinstance(choice, bool):
-            return None, FlowStep.COLLECT_PROPERTY_CHOICE
+            shown = session.context.get(_SHOWN_LISTINGS)
+            if intent == "AFFIRMATIVE" and isinstance(shown, list) and len(shown) == 1:
+                choice = 1
+            else:
+                return None, FlowStep.COLLECT_PROPERTY_CHOICE
         if self._availability_requests is None:
             return None, FlowStep.COLLECT_PROPERTY_CHOICE
 

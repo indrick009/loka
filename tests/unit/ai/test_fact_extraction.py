@@ -555,6 +555,48 @@ class TestPendingAnswerBinding:
         assert match.intent == "COLLECT_ADVANCE"
         assert match.entities == {"advance_months": 6}
 
+    def test_non_to_the_charges_question_means_they_are_not_included(self) -> None:
+        """Observed live: a landlord answered "non" to "l'eau et l'électricité
+        sont-elles incluses ?", the refusal produced no step, and the whole
+        question came back until he spelled the answer out by hand."""
+        classifier = DeterministicClassifier()
+
+        for text in ("non", "aucun", "aucune"):
+            match = classifier.classify(text, pending="ask.charges")
+
+            assert match is not None, text
+            assert match.intent == "COLLECT_CHARGES", text
+            assert match.entities == {"charging_policy": "EXTRA"}, text
+
+    def test_oui_to_the_charges_question_means_they_are_included(self) -> None:
+        """Observed live: a landlord answered "oui" to "l'eau et l'électricité
+        sont-elles incluses ?", it was read as a bare dialogue act and produced
+        no step, and — because the single-call writer still named the next
+        question — the "2" meant for the caution was filed as the charges."""
+        classifier = DeterministicClassifier()
+
+        for text in ("oui", "Oui", "OUI"):
+            shortcut = classifier.shortcut(text, pending="ask.charges")
+
+            assert shortcut is not None, text
+            assert shortcut.intent == "COLLECT_CHARGES", text
+            assert shortcut.entities == {"charging_policy": "INCLUDED"}, text
+
+            match = classifier.classify(text, pending="ask.charges")
+
+            assert match is not None, text
+            assert match.entities == {"charging_policy": "INCLUDED"}, text
+
+    def test_oui_to_a_question_that_names_two_things_goes_to_the_model(self) -> None:
+        """A bare "oui" to "gardien ? parking ?" — or to a question that wants a
+        count — says neither which of the two nor how many, so it still needs the
+        model to ask for the missing half."""
+        classifier = DeterministicClassifier()
+
+        for pending in ("ask.security", "ask.deposit", "ask.advance"):
+            assert classifier.shortcut("oui", pending=pending) is None, pending
+            assert classifier.classify("oui", pending=pending) is None, pending
+
     def test_a_franc_amount_under_a_months_question_goes_to_the_model(self) -> None:
         """Handed back rather than stored: 250 000 months is a typo, and the
         landlord has to be asked again instead of having it recorded."""

@@ -43,6 +43,7 @@ def test_the_property_id_is_extracted() -> None:
 def test_the_queue_is_declared_and_bound() -> None:
     spec = next(item for item in QUEUES if item.name == SEARCH_PROJECTION_QUEUE)
     assert "PropertyPublished" in spec.routing_keys
+    assert "PropertyMediaChanged" in spec.routing_keys
     assert "PropertyRented" in spec.routing_keys
     assert "PropertyMarkedUnavailable" in spec.routing_keys
 

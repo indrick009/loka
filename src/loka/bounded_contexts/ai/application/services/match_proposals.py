@@ -30,6 +30,7 @@ _WORDS: dict[str, dict[str, str]] = {
         ),
         "lodging": "Logement",
         "rent": "{amount} FCFA/mois",
+        "photo": "(photo {index}/{total})",
         "outro": (
             "Répondez avec le numéro du logement qui vous intéresse : je demande "
             "au propriétaire s'il est toujours disponible."
@@ -40,6 +41,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "many": "Good news: I found {count} places that match your search.",
         "lodging": "Place",
         "rent": "{amount} FCFA/month",
+        "photo": "(photo {index}/{total})",
         "outro": (
             "Reply with the number of the place you are interested in: I will ask "
             "the landlord whether it is still available."
@@ -54,9 +56,36 @@ def match_proposals_text(proposals: Sequence[Mapping[str, Any]], language: str) 
     count = len(proposals)
     lines = [words["one"] if count == 1 else words["many"].format(count=count)]
     for number, proposal in enumerate(proposals, start=1):
-        lines.append(f"{number}. {_line(proposal, language, words)}")
+        lines.append(match_proposal_line(proposal, number, language))
     lines.append(words["outro"])
     return "\n".join(lines)
+
+
+def match_proposal_line(
+    proposal: Mapping[str, Any], number: int, language: str
+) -> str:
+    """The numbered line for one lodging — the one his reply names.
+
+    Doubles as the caption of that lodging's photos: the number a tenant sees
+    on the picture is the number he answers with.
+    """
+    words = _WORDS.get(language, _WORDS["fr"])
+    return f"{number}. {_line(proposal, language, words)}"
+
+
+def match_proposal_caption(
+    line: str, *, index: int, total: int, language: str
+) -> str:
+    """The line, plus ``(2/3)`` when a lodging carries more than one photo.
+
+    Without it a tenant receiving three pictures captioned ``1. Studio …``
+    cannot tell whether he is looking at one lodging three times or three
+    lodgings, and the number he replies with stops being obvious.
+    """
+    if total <= 1:
+        return line
+    words = _WORDS.get(language, _WORDS["fr"])
+    return f"{line} {words['photo'].format(index=index, total=total)}"
 
 
 def _line(proposal: Mapping[str, Any], language: str, words: Mapping[str, str]) -> str:

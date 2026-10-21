@@ -83,8 +83,18 @@ class WhatsAppMessageSendRequested(DomainEvent):
     configured — without ever leaving the landlord waiting for a question
     nobody will send.
 
+    ``media_object_key`` optionally names one stored object to send as an
+    image, with ``text`` then read as its caption. Only the reference travels;
+    the outbound layer presigns it, because a URL that expires must be minted
+    as close to the send as possible, and the object key is what the domain
+    knows.
+
     The recipient is carried rather than resolved by the consumer: the session
     that owns the conversation is the only authority on who is being written to.
+
+    ``answering`` carries the user's message when ``text`` is the platform's
+    own sentence: the outbound layer may then have it rewritten in the user's
+    voice, keeping its facts. Absent, ``text`` is sent as it is.
     """
 
     event_type: str = "WhatsAppMessageSendRequested"
@@ -93,18 +103,22 @@ class WhatsAppMessageSendRequested(DomainEvent):
     reply_kind: str = "ACK"
     question_key: str | None = None
     text: str | None = None
+    media_object_key: str | None = None
     intent: str | None = None
     language: str = "fr"
+    answering: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload = DomainEvent.to_payload(self)
         payload["metadata"] = {
             **payload["metadata"],
             "session_id": str(self.session_id) if self.session_id else None,
+            "answering": self.answering,
             "recipient_phone": self.recipient_phone,
             "reply_kind": self.reply_kind,
             "question_key": self.question_key,
             "text": self.text,
+            "media_object_key": self.media_object_key,
             "intent": self.intent,
             "language": self.language,
         }

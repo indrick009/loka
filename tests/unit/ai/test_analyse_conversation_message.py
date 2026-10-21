@@ -250,6 +250,7 @@ def _model_result(
     entities: dict[str, Any] | None = None,
     cost: float = 0.0002,
     reply: str | None = None,
+    asking: str | None = None,
     language: str = "fr",
 ) -> IntentResult:
     return IntentResult(
@@ -258,6 +259,7 @@ def _model_result(
         entities=entities if entities is not None else {"property_type": "APARTMENT"},
         language=language,
         reply=reply,
+        asking=asking,
         usage=LlmUsage(
             input_tokens=100,
             output_tokens=40,
@@ -417,6 +419,45 @@ class TestDeterministicShortCircuit:
         assert session.context["standing"] == "NON_MODERN"
         # Step 3 of the form, which the standing answer unblocks.
         assert report.next_step == "COLLECT_QUANTITY"
+
+    async def test_a_bare_oui_answers_the_charges_question(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: a bare "oui" to "l'eau et l'électricité sont-elles
+        incluses ?" was read as a dialogue act that carried no value, produced no
+        step, and the sentence the writer sent named the caution instead — so the
+        landlord's next "2" was filed as the charges. The fast lane reads it here
+        as the value of the open question, off the model entirely."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_CHARGES
+        )
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "standing": "MODERN",
+                "quantity": 1,
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+                "rent": 70_000,
+                "next_question": "ask.charges",
+            }
+        )
+        model = StubModel(result=_model_result())
+
+        use_case, turns, _, _ = build(uow, session, message_id, text="Oui", model=model)
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert turns.turns[0].used_llm is False
+        assert session.context["charging_policy"] == "INCLUDED"
+        # The deposit is the next open field once the charges are answered.
+        assert report.next_step == "COLLECT_DEPOSIT"
+        assert report.question_key == "ask.deposit"
 
     async def test_a_bare_greeting_costs_no_model_call(
         self,
@@ -774,6 +815,8 @@ class TestModelWrittenReply:
             uow.events.staged[0].text
             == "Le loyer est de 50 000 FCFA en sus en plus du loyer."
         )
+        # Already the model's own sentence: nothing to say again.
+        assert uow.events.staged[0].answering is None
 
     async def test_the_reply_prompt_is_told_what_to_ask(
         self,
@@ -1565,6 +1608,155 @@ class TestSingleCallReply:
 
         assert responder.calls == 1
 
+    async def test_an_inline_reply_that_moved_past_the_open_step_is_rewritten(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: a landlord's "elle sont inclus" was understood but
+        produced no charges fact, so the session kept the charges question open
+        while the inline writer asked the deposit. His next "aucune", meant for
+        the minimum duration, was then filed as "no charges"."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_CHARGES
+        )
+        session.context.update(
+            {
+                "property_type": "ROOM",
+                "standing": "MODERN",
+                "quantity": 1,
+                "location": {"city": "Douala", "neighbourhood": "Mvan"},
+                "rent": 30_000,
+                "next_question": "ask.charges",
+            }
+        )
+        inline = (
+            "D'accord, les charges sont incluses. Combien de mois de caution "
+            "remboursable demandez-vous ?"
+        )
+        responder = StubResponseModel(
+            text="L'eau et l'électricité sont-elles incluses dans le loyer ?"
+        )
+        use_case, turns, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="elle sont inclus",
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_CHARGES", entities={}, reply=inline
+                )
+            ),
+            response_model=responder,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        # The decided question wins, not the sentence the writer moved on to.
+        assert report.question_key == "ask.charges"
+        assert session.context["next_question"] == "ask.charges"
+        assert responder.calls == 1
+        assert uow.events.staged[0].text == responder.text
+        assert uow.events.staged[0].text != inline
+        assert turns.turns[0].used_llm is True
+
+    async def test_an_inline_reply_is_kept_when_the_turn_recorded_a_field(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The guard is the *absence* of a recorded field, not the step: a turn
+        that really advanced keeps the model's sentence and its second call."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_CHARGES
+        )
+        session.context.update(
+            {
+                "property_type": "ROOM",
+                "standing": "MODERN",
+                "quantity": 1,
+                "location": {"city": "Douala", "neighbourhood": "Mvan"},
+                "rent": 30_000,
+                "next_question": "ask.charges",
+            }
+        )
+        responder = StubResponseModel()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="eau et électricité incluses",
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_CHARGES",
+                    entities={"charges_included": True},
+                    reply="Parfait, charges incluses. Combien de mois de caution ?",
+                )
+            ),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert responder.calls == 0
+        assert uow.events.staged[0].text == (
+            "Parfait, charges incluses. Combien de mois de caution ?"
+        )
+
+    async def test_an_inline_reply_asking_another_field_is_rewritten(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """The writer names the field it asked about. Here it moved past the rent
+        to the charges while the session kept the rent open, so its sentence is
+        written again against the rent the backend decided on."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_PRICE
+        )
+        session.context.update(
+            {
+                "property_type": "ROOM",
+                "standing": "MODERN",
+                "quantity": 1,
+                "location": {"city": "Douala", "neighbourhood": "Mvan"},
+                "next_question": "ask.rent",
+            }
+        )
+        inline = "Très bien. Les charges sont-elles incluses dans le loyer ?"
+        responder = StubResponseModel(text="Quel loyer mensuel demandez-vous ?")
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="c'est une chambre",
+            model=StubModel(
+                result=_model_result(
+                    intent="COLLECT_PRICE",
+                    entities={"property_type": "ROOM"},
+                    reply=inline,
+                    asking="charges",
+                )
+            ),
+            response_model=responder,
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.question_key == "ask.rent"
+        assert responder.calls == 1
+        assert uow.events.staged[0].text == responder.text
+        assert uow.events.staged[0].text != inline
+
     async def test_the_analysis_prompt_carries_the_form_and_price_context(
         self,
         uow: FakeUnitOfWork,
@@ -2029,6 +2221,8 @@ class TestConversationSearch:
             "Vous pouvez aussi changer un critère : quartier, budget ou type de "
             "logement."
         )
+        # Stock copy: the outbound layer may say it in his voice.
+        assert staged.answering == "Mais tu me reviens quand ?"
 
     async def test_a_follow_up_the_rules_cannot_read_still_gets_the_criteria(
         self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
@@ -2332,6 +2526,40 @@ class TestTheLandlordsAvailabilityAnswerIsActedOn:
         # Answered, it is closed: he is back on the question of his own form.
         assert session.context["next_question"] == "ask.media"
 
+    async def test_a_bare_oui_read_by_the_fast_lane_still_answers(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: the landlord's bare "oui" was read by the regex lane,
+        which skipped the open-question reading, so his answer was taken for
+        small talk and the tenant was never released until he rephrased as
+        "oui c'est disponible"."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_MEDIA
+        )
+        session.context["next_question"] = "ask.availability_check"
+        answers = FakeAvailabilityAnswers(
+            result=AvailabilityAnswerResult(
+                confirms_availability=True, lodgings_left=1, delisted=False
+            )
+        )
+        model = StubModel(result=_model_result(intent="AFFIRMATIVE", entities={}))
+        use_case, turns, _, _ = build(
+            uow, session, message_id, text="Oui", model=model, availability=answers
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert turns.turns[0].used_llm is False
+        assert answers.calls == [(session.user_id, "AVAILABILITY_STILL_AVAILABLE")]
+        # Answered, it is closed: he is back on the question of his own form.
+        assert session.context["next_question"] == "ask.media"
+
     async def test_the_landlord_is_told_the_listing_left_the_catalogue(
         self,
         uow: FakeUnitOfWork,
@@ -2511,6 +2739,59 @@ class TestTheTenantsChoiceReachesTheLandlord:
         assert "demande au bailleur" in text
         assert "réserv" not in text
         assert session.step is FlowStep.AWAITING_AVAILABILITY
+
+    async def test_a_lone_result_is_taken_on_a_bare_acceptance(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: one lodging was shown and the tenant answered "je
+        prends"; he was asked for a number he had nothing to choose between."""
+        listing = str(uuid.uuid4())
+        self.waiting_for_a_choice(session, shown=[listing])
+        requests = FakeAvailabilityRequests()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="je prends",
+            model=StubModel(result=_model_result(intent="AFFIRMATIVE", entities={})),
+            availability_requests=requests,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert requests.calls == [(uuid.UUID(listing), session.user_id)]
+        assert session.step is FlowStep.AWAITING_AVAILABILITY
+
+    async def test_an_acceptance_against_a_list_is_still_asked_again(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """With several lodgings shown, "je prends" names none of them: resolving
+        it to the first would charge him for one he did not pick."""
+        self.waiting_for_a_choice(session, shown=[str(uuid.uuid4()), str(uuid.uuid4())])
+        requests = FakeAvailabilityRequests()
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="je prends",
+            model=StubModel(result=_model_result(intent="AFFIRMATIVE", entities={})),
+            availability_requests=requests,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert requests.calls == []
+        assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
 
     async def test_a_number_naming_nothing_is_asked_again(
         self,

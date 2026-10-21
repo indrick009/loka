@@ -54,11 +54,18 @@ TURN_QUESTIONS: dict[str, ChoiceQuestion] = {
             "slot_answer": "answers the question Kora is waiting for",
             "correction": "changes or adds to something he already said",
             "follow_up": "asks about progress, a delay, availability or a visit",
+            "question": (
+                "asks Kora something: a price, a condition, how it works, what "
+                "he said earlier, whether Kora understood"
+            ),
             "confirmation": "agrees to what Kora proposed",
             "refusal": "declines or cancels what Kora proposed",
             "social": "greeting, thanks or small talk only",
             "topic_switch": "now wants something else than the active task",
-            "out_of_scope": "nothing Kora handles",
+            "out_of_scope": (
+                "talks about something Kora does not handle: football, news, a "
+                "joke, politics"
+            ),
         },
     ),
     "role": ChoiceQuestion(

@@ -153,6 +153,35 @@ class UnlockPayments(Protocol):
     ) -> UnlockRequestOutcome: ...
 
 
+@dataclass(frozen=True, slots=True)
+class UnlockedContact:
+    """What the 1 000 FCFA buys, once it is settled: a number and a place.
+
+    The landlord's number, read aloud on the phone; a label for the lodging as
+    the tenant already saw it; and the point when the listing has one. All three
+    come from other contexts, so the pipeline holds them as plain values and
+    never learns a landlord profile id or a listing row.
+    """
+
+    landlord_phone: str
+    lodging: str
+    point: dict[str, float] | None = None
+
+
+class UnlockedContactDetails(Protocol):
+    """Resolves the contact a settled unlock releases.
+
+    ``None`` means the pieces could not all be found — a landlord with no
+    account or no thread, a listing that has vanished. A paid unlock whose
+    contact cannot be assembled is a real failure and must be surfaced, never
+    answered with a partial number.
+    """
+
+    async def for_listing(
+        self, *, property_id: uuid.UUID, landlord_id: uuid.UUID, language: str
+    ) -> UnlockedContact | None: ...
+
+
 class AvailabilityAnswers(Protocol):
     """Carries a landlord's "le logement est encore disponible ?" answer home.
 
@@ -262,6 +291,26 @@ class TurnSummary:
     intent: str
     confidence: float
     used_llm: bool
+
+
+@dataclass(frozen=True, slots=True)
+class Exchange:
+    """One line of the thread as the user saw it: who spoke, and what was said.
+
+    The labels in ``TurnSummary`` say *that* a turn happened; this says *what*
+    was said. Without it "le premier là", "comme je t'ai dit" or "rappelle-moi
+    mon budget" point at nothing, and the assistant answers like a form.
+    """
+
+    speaker: str  # "user" or "kora"
+    text: str
+
+
+class ConversationExchanges(Protocol):
+    async def recent(
+        self, session_id: uuid.UUID, *, excluding: uuid.UUID | None = None, limit: int = 6
+    ) -> list[Exchange]:
+        """Oldest-first, without ``excluding`` — the message being answered."""
 
 
 class ConversationTurnRepository(Protocol):

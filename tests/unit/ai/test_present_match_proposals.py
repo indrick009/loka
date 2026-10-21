@@ -161,6 +161,50 @@ class TestTheTenantIsWrittenTo:
         assert uow.events.staged == []
 
 
+class TestThePhotos:
+    async def test_every_stored_photo_is_sent_after_the_list(self) -> None:
+        session = a_tenant_waiting()
+        lodging = {**JOUVENCE, "photo_object_keys": ["p/1/a.jpg", "p/1/b.jpg"]}
+
+        sent, uow, _ = await present(session, [lodging])
+
+        assert sent is True
+        text, first, second = uow.events.staged
+        assert text.media_object_key is None
+        assert first.media_object_key == "p/1/a.jpg"
+        assert second.media_object_key == "p/1/b.jpg"
+
+    async def test_the_caption_is_the_numbered_line_the_reply_names(self) -> None:
+        session = a_tenant_waiting()
+        lodging = {**JOUVENCE, "photo_object_keys": ["p/1/a.jpg", "p/1/b.jpg"]}
+
+        _, uow, _ = await present(session, [lodging])
+
+        line = "1. Studio - Jouvence, Yaoundé - 40 000 FCFA/mois"
+        assert uow.events.staged[1].text == f"{line} (photo 1/2)"
+        assert uow.events.staged[2].text == f"{line} (photo 2/2)"
+
+    async def test_a_lodging_with_no_photo_adds_no_message(self) -> None:
+        session = a_tenant_waiting()
+
+        _, uow, _ = await present(session, [JOUVENCE])
+
+        assert len(uow.events.staged) == 1
+        assert uow.events.staged[0].media_object_key is None
+
+    async def test_each_lodging_keeps_its_own_number(self) -> None:
+        session = a_tenant_waiting()
+        first = {**JOUVENCE, "photo_object_keys": ["p/1/a.jpg"]}
+        second = {**BIYEM_ASSI, "photo_object_keys": ["p/2/a.jpg"]}
+
+        _, uow, _ = await present(session, [first, second])
+
+        assert uow.events.staged[1].media_object_key == "p/1/a.jpg"
+        assert uow.events.staged[1].text.startswith("1. Studio - Jouvence")
+        assert uow.events.staged[2].media_object_key == "p/2/a.jpg"
+        assert uow.events.staged[2].text.startswith("2. Studio - Biyem-Assi")
+
+
 class TestTheMessage:
     def test_one_lodging_is_announced_as_one(self) -> None:
         text = match_proposals_text([JOUVENCE], "fr")

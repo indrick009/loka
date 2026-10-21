@@ -18,7 +18,7 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
-from loka.bounded_contexts.ai.application.ports import TurnSummary
+from loka.bounded_contexts.ai.application.ports import Exchange, TurnSummary
 from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.services.ai_provider import (
     SUPPORTED_LANGUAGES,
@@ -38,7 +38,36 @@ from loka.bounded_contexts.messaging.domain.entities.conversation_session import
 # Both prompts below can write the sentence a user reads, so the identity lives
 # in one place. When only one of them carried a name, the assistant introduced
 # itself as "Loka" on one turn and "Kasa" on another, from an account called Kora.
-PERSONA = "You are Kora, a warm WhatsApp assistant for a Cameroonian services platform."
+PERSONA = (
+    "You are Kora, a warm WhatsApp assistant for a Cameroonian services platform. "
+    "You talk like a helpful person from Douala or Yaoundé, never like an "
+    "administration. Mirror the user's register: when they write casually ('tu', "
+    "'mola', 'mon frère', 'on dit quoi', 'c'est comment'), answer with 'tu' in the "
+    "same easy Cameroonian French ('Ah d'accord', 'pas de souci', 'c'est noté', "
+    "'on est ensemble'); when they write formally with 'vous', stay courteous with "
+    "'vous'; when they write Cameroonian Pidgin, answer in simple Pidgin. Never "
+    "caricature: at most one local expression per message, and amounts always "
+    "written plainly (50 000 FCFA). You are an AI assistant: say so plainly if asked."
+)
+
+# What turns a form into a conversation. Shared by every prompt that writes a
+# sentence: observed live, "c'est combien d'avance ?", "tu me comprends même ?"
+# and "rappelle-moi mon budget" all got the same stock sentence, because only
+# a slot answer had a next step.
+DIGRESSION_RULE = (
+    "When the user's message asks something or drifts off topic (football, news, "
+    "a joke, 'are you a robot?'), first react to it in one short sentence, then "
+    "come back to where the conversation is. Answer only from known_facts and the "
+    "recent messages; when you do not know, say so honestly (details of a lodging "
+    "are confirmed by its owner, for example). You have no access to sport, news "
+    "or any live event: asked about a match, say plainly that you do not follow "
+    "the results, and never say or guess who won, a score, or how it went "
+    "('on a gagné', 'c'était chaud' are inventions). A digression never changes "
+    "a fact. React only to the current message: when it simply answers, "
+    "acknowledge the answer and go on to the question — never bring back an "
+    "earlier digression, never repeat a sentence Kora already sent in "
+    "recent_messages, and never end without the question still open."
+)
 
 # A reference band anchors the model's own sense of magnitude — a studio at "50"
 # means 50 000 francs. It is sourced, wide and partly unconfirmed, so it is not a
@@ -82,7 +111,12 @@ SYSTEM_PROMPT = (
     "message — never ask back for what the user just told you; if none is "
     "missing, confirm the summary. Return the greeting the user used ('bonsoir' "
     "gets 'bonsoir', not 'bonjour'). If the message was not understood, ask the user to "
-    "rephrase instead of posing a question."
+    "rephrase instead of posing a question. "
+    f"{DIGRESSION_RULE}"
+    " Set 'asking' to the exact 'field' value from 'required_fields' (or the "
+    "still-open question's field) that your 'reply' asks about, and to null only "
+    "when the reply asks no question: it is how the platform checks the sentence "
+    "asks the question it decided on."
     f" {PRICE_REFERENCE_RULE}"
 )
 
@@ -105,7 +139,8 @@ REPLY_SYSTEM_PROMPT = (
     "owner ask\". A landlord addressed in the third person reads it as being "
     "taken for a tenant enquiring about somebody else's lodging. "
     "Never invent a listing, a price or a fact that is not in the context, and "
-    f"never promise anything the platform did not confirm. {PRICE_REFERENCE_RULE}"
+    f"never promise anything the platform did not confirm. {PRICE_REFERENCE_RULE} "
+    f"{DIGRESSION_RULE}"
 )
 
 # A short, provider-neutral gloss for each question, so the reply model knows
@@ -145,7 +180,10 @@ QUESTION_TOPICS: dict[str, str] = {
     # user described in the third person reads it as being mistaken for
     # somebody else.
     "ask.search_type": "the type of property you are looking for",
-    "ask.search_location": "the city and neighbourhood you want",
+    "ask.search_location": (
+        "the area where you want to look for a place to live — your "
+        "workplace, for example — and not where you are right now"
+    ),
     "ask.search_budget": "the maximum monthly rent you are willing to pay, in XAF",
     "ask.search_criteria": "which of your search criteria you want to change",
     "ask.search_results": "the list of properties matching your criteria",
@@ -207,7 +245,10 @@ _LANDLORD_TOPICS: dict[str, str] = {
 _TENANT_TOPICS: dict[str, str] = {
     "ask.property_type": "the type of property you are looking for",
     "ask.standing": "whether you want a modern property or not",
-    "ask.location": "the city and neighbourhood you want",
+    "ask.location": (
+        "the area you want to live in, near your workplace for example — not "
+        "where you are right now"
+    ),
     "ask.rent": "the maximum monthly rent you are willing to pay, in XAF",
 }
 _FLOW_TOPICS: dict[FlowName, dict[str, str]] = {
@@ -265,6 +306,11 @@ RESPONSE_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
         "language": {"type": "string"},
         "reply": {"type": "string"},
+        # The 'field' (from required_fields) the inline 'reply' asks about, or
+        # null. Read back so the sentence and the recorded question cannot drift
+        # apart: the writer names its question, the code checks it is the one it
+        # decided on.
+        "asking": {"type": "string"},
         "entities": {
             "type": "object",
             "properties": {
@@ -373,6 +419,7 @@ def build_analysis_prompt(
     step: FlowStep,
     pending_question: str | None,
     known_facts: dict[str, Any],
+    exchanges: list[Exchange] | None = None,
 ) -> Prompt:
     """Assemble the request, with the state of the conversation as context.
 
@@ -383,7 +430,7 @@ def build_analysis_prompt(
     The phone number is never part of the prompt: the model has no business
     knowing who it is talking to, and prompts end up in vendor logs.
     """
-    public_known = _public_known_facts(known_facts)
+    public_known = public_known_facts(known_facts)
     payload: dict[str, Any] = {
         "message": text or "",
         # The language of the *message* is the model's to read; this is only the
@@ -416,6 +463,8 @@ def build_analysis_prompt(
     turns = _turns_as_json(history)
     if turns:
         payload["recent_turns"] = turns
+    if exchanges:
+        payload["recent_messages"] = exchanges_as_json(exchanges)
     return Prompt(
         system=SYSTEM_PROMPT,
         user=json.dumps(payload, ensure_ascii=False),
@@ -429,7 +478,7 @@ def build_analysis_prompt(
 _PROMPT_INTERNAL_KEYS = frozenset({"next_question", "abort_reason"})
 
 
-def _public_known_facts(known_facts: dict[str, Any]) -> dict[str, Any]:
+def public_known_facts(known_facts: dict[str, Any]) -> dict[str, Any]:
     return {
         name: value
         for name, value in known_facts.items()
@@ -470,6 +519,7 @@ def build_reply_prompt(
     history: list[TurnSummary],
     flow: FlowName,
     known_facts: dict[str, Any],
+    exchanges: list[Exchange] | None = None,
 ) -> Prompt:
     """Ask the model to write the sentence this turn sends back.
 
@@ -501,7 +551,7 @@ def build_reply_prompt(
                     # answered three turns ago. This turn's facts win, because a
                     # correction is the one case where they disagree.
                     "known_facts": {
-                        **_public_known_facts(known_facts),
+                        **public_known_facts(known_facts),
                         **(dict(accepted_facts) if accepted else {}),
                     },
                 },
@@ -509,6 +559,7 @@ def build_reply_prompt(
                 # rather than posing a question the platform never reached.
                 "ask_about": question_topic(next_key, flow),
                 "recent_turns": _turns_as_json(history),
+                "recent_messages": exchanges_as_json(exchanges or []),
             },
             ensure_ascii=False,
         ),
@@ -527,3 +578,8 @@ def _turns_as_json(history: list[TurnSummary]) -> list[dict[str, Any]]:
         }
         for turn in history
     ]
+
+
+def exchanges_as_json(exchanges: list[Exchange]) -> list[dict[str, str]]:
+    """The thread as the model reads it: who said what, oldest first."""
+    return [{"from": line.speaker, "text": line.text} for line in exchanges]

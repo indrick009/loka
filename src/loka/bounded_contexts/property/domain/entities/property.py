@@ -386,12 +386,32 @@ class Property(AggregateRoot):
         self.pending_draft_steps.discard(PropertyDraftData.MEDIA)
         self.data_quality_issues.discard(DataQualityIssue.MISSING_PHOTOS)
         self._touch(now)
+        self._record_media_changed(now=now)
 
     def remove_media(self, media_id: uuid.UUID, *, now: datetime) -> None:
         self.media = [m for m in self.media if m.media_id != media_id]
         for position, item in enumerate(self.media):
             item.position = position
         self._touch(now)
+        self._record_media_changed(now=now)
+
+    def _record_media_changed(self, *, now: datetime) -> None:
+        """Announce a media change so the search read model follows.
+
+        The first photo is usually what publishes the listing, but a landlord
+        keeps sending pictures afterwards. Those later photos are invisible to a
+        search document that is only built at publication: without this fact the
+        tenant is shown one picture of a lodging the owner described with five.
+        Only a published listing has a document to refresh, so a draft stays
+        silent.
+        """
+        if self.status is not PropertyStatus.AVAILABLE:
+            return
+        self.record(
+            "PropertyMediaChanged",
+            occurred_at=now,
+            payload={"property_id": str(self.id), "landlord_id": str(self.landlord_id)},
+        )
 
     def _assert_editable(self) -> None:
         if self.status in (PropertyStatus.RENTED, PropertyStatus.ARCHIVED):

@@ -182,6 +182,14 @@ class SqlAlchemyAccessGrantRepository:
     async def add(self, grant: ServiceAccessGrant) -> None:
         self._session.add(ServiceAccessGrantRow(**grant_to_row(grant)))
 
+    async def save(self, grant: ServiceAccessGrant) -> None:
+        row = await self._session.get(ServiceAccessGrantRow, grant.id)
+        if row is None:
+            await self.add(grant)
+            return
+        for field, value in grant_to_row(grant).items():
+            setattr(row, field, value)
+
 
 class SqlAlchemyPaymentCallbackRepository:
     def __init__(self, session: AsyncSession) -> None:

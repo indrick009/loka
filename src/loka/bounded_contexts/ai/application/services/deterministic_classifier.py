@@ -327,11 +327,30 @@ _ONE_ONLY = frozenset(
 _NO_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
     "ask.deposit": ("COLLECT_DEPOSIT", {"deposit_months": 0}),
     "ask.advance": ("COLLECT_ADVANCE", {"advance_months": 0}),
+    # "L'eau et l'électricité sont-elles incluses dans le loyer ?" answered "non"
+    # means they are charged on top, not that there are none. Without this the
+    # refusal was read as a bare dialogue act, produced no step, and the whole
+    # question came back — observed live on a landlord whose next turn had to
+    # spell the answer out before the form moved on.
+    "ask.charges": ("COLLECT_CHARGES", {"charging_policy": "EXTRA"}),
     "ask.security": (
         "COLLECT_SECURITY",
         {"amenities": {"security": False, "parking": False}},
     ),
     "ask.quantity": ("COLLECT_QUANTITY", {"quantity": 1}),
+}
+
+# What an affirmation means for each question, where it means exactly one thing.
+# The counterpart of ``_NO_MEANS``: a bare "oui" is a dialogue act that carries
+# no value, so on a question whose yes does have one it must be bound here rather
+# than left to the model. Observed live: "oui" to "l'eau et l'électricité
+# sont-elles incluses ?" was read as a bare AFFIRMATIVE, produced no step, and
+# because the single-call writer still put the next question in its sentence the
+# following "2" was filed as the charges instead of the caution. Only questions
+# where "oui" names one thing belong here: "gardien ? parking ?" and "combien de
+# mois ?" still go to the model, which can ask for the missing half.
+_YES_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
+    "ask.charges": ("COLLECT_CHARGES", {"charging_policy": "INCLUDED"}),
 }
 
 _MONTH_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
@@ -493,6 +512,9 @@ class DeterministicClassifier:
             )
 
         if normalized in AFFIRMATIVE:
+            yes = self._yes_to_a_form_question(normalized, pending)
+            if yes is not None:
+                return yes
             if pending in _NO_MEANS:
                 # Same reason as in the fast lane: a bare "oui" to a question
                 # that wants a number or names two things says neither.
@@ -533,6 +555,9 @@ class DeterministicClassifier:
         if answer is not None:
             return answer
         if normalized in AFFIRMATIVE:
+            yes = self._yes_to_a_form_question(normalized, pending)
+            if yes is not None:
+                return yes
             if pending in _NO_MEANS:
                 # "Oui" to "y a-t-il une caution ?" or to "gardien ? parking ?"
                 # says there is one without saying how many months or which of
@@ -593,6 +618,30 @@ class DeterministicClassifier:
         if normalized not in _DENIALS and not (
             pending == "ask.quantity" and normalized in _ONE_ONLY
         ):
+            return None
+        intent, entities = meaning
+        return DeterministicMatch(intent=intent, confidence=0.95, entities=dict(entities))
+
+    @staticmethod
+    def _yes_to_a_form_question(
+        normalized: str, pending: str | None
+    ) -> DeterministicMatch | None:
+        """Read "oui" as the value of the open question, where it means one thing.
+
+        The counterpart of :meth:`_no_to_a_form_question`, for the questions
+        whose "yes" is not ambiguous: "l'eau et l'électricité sont-elles
+        incluses ?" answered "oui" means the rent covers them. Left to the model
+        it was read as a bare dialogue act and produced no step, and because the
+        single-call writer still named the next question in its sentence the
+        "2" that answered the caution was filed as the charges. A question that
+        names two things (gardien ? parking ?) or wants a count (combien de
+        mois ?) is not bound here — its "oui" says neither, so it stays a model
+        job that can ask for the missing half.
+        """
+        meaning = _YES_MEANS.get(pending or "")
+        if meaning is None:
+            return None
+        if normalized not in AFFIRMATIVE:
             return None
         intent, entities = meaning
         return DeterministicMatch(intent=intent, confidence=0.95, entities=dict(entities))

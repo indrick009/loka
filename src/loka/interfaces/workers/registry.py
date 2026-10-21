@@ -11,6 +11,10 @@ binding a broker queue to a use case is a composition decision, and
 
 from __future__ import annotations
 
+from loka.interfaces.worker.availability_answer_consumer import (
+    AVAILABILITY_ANSWER_QUEUE,
+    AvailabilityAnswerConsumer,
+)
 from loka.interfaces.worker.availability_question_consumer import (
     AVAILABILITY_QUESTION_QUEUE,
     AvailabilityQuestionConsumer,
@@ -34,6 +38,10 @@ from loka.interfaces.worker.fraud_consumer import (
 from loka.interfaces.worker.landlord_verification_consumer import (
     LANDLORD_VERIFICATION_QUEUE,
     LandlordVerificationConsumer,
+)
+from loka.interfaces.worker.payment_unlock_consumer import (
+    PAYMENT_UNLOCK_QUEUE,
+    PaymentUnlockConsumer,
 )
 from loka.interfaces.worker.search_projection_consumer import (
     SEARCH_PROJECTION_QUEUE,
@@ -68,6 +76,8 @@ def handler_registry() -> dict[str, ConsumerFactory]:
         SEARCH_PROJECTION_QUEUE: SearchProjectionConsumer,
         LANDLORD_VERIFICATION_QUEUE: LandlordVerificationConsumer,
         AVAILABILITY_QUESTION_QUEUE: AvailabilityQuestionConsumer,
+        AVAILABILITY_ANSWER_QUEUE: AvailabilityAnswerConsumer,
+        PAYMENT_UNLOCK_QUEUE: PaymentUnlockConsumer,
         DEMAND_MATCHING_QUEUE: DemandMatchingConsumer,
         DEMAND_PROPOSALS_QUEUE: DemandProposalConsumer,
     }

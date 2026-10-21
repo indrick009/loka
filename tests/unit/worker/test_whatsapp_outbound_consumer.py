@@ -32,6 +32,7 @@ from loka.shared.infrastructure.broker.consumer import (
 from loka.shared.infrastructure.broker.topology import QUEUES, Broker, QueueSpec
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
+from loka.shared.infrastructure.object_storage.media import MediaStoreError
 
 pytestmark = pytest.mark.unit
 
@@ -190,6 +191,62 @@ class TestTheSentence:
         await build(settings, handler).handle(outbound(reply_kind="ACK"))
 
         assert seen == ["gateway-key"]
+
+
+class _Media:
+    def __init__(self, url: str = "", error: Exception | None = None) -> None:
+        self.url = url
+        self.error = error
+        self.seen: list[tuple[str, int]] = []
+
+    async def presigned_download_url(self, object_key: str, *, ttl_seconds: int) -> str:
+        self.seen.append((object_key, ttl_seconds))
+        if self.error is not None:
+            raise self.error
+        return self.url
+
+
+class TestThePhoto:
+    async def test_a_named_object_is_sent_as_an_image_with_the_text_as_caption(
+        self, settings: Settings
+    ) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+        media = _Media("http://minio:9000/loka-media/p/1/a.jpg?sig=1")
+        consumer._media = media  # type: ignore[attr-defined]
+
+        await consumer.handle(
+            outbound(reply_kind="ACK", text="1. Studio", media_object_key="p/1/a.jpg")
+        )
+
+        assert captured == {
+            "to": RECIPIENT,
+            "image": "http://minio:9000/loka-media/p/1/a.jpg?sig=1",
+            "caption": "1. Studio",
+        }
+        assert media.seen == [("p/1/a.jpg", settings.object_storage.presigned_url_ttl_seconds)]
+
+    async def test_a_message_without_a_photo_stays_text(self, settings: Settings) -> None:
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+
+        await consumer.handle(outbound(reply_kind="ACK", text="bonjour"))
+
+        assert captured == {"to": RECIPIENT, "text": "bonjour"}
+
+    async def test_a_failed_presign_still_sends_the_sentence(
+        self, settings: Settings
+    ) -> None:
+        # Object storage being down must not cost the tenant what was found.
+        captured: dict[str, Any] = {}
+        consumer = build(settings, recording(captured))
+        consumer._media = _Media(error=MediaStoreError("storage down"))  # type: ignore[attr-defined]
+
+        await consumer.handle(
+            outbound(reply_kind="ACK", text="1. Studio", media_object_key="p/1/a.jpg")
+        )
+
+        assert captured == {"to": RECIPIENT, "text": "1. Studio"}
 
 
 class TestRetryable:

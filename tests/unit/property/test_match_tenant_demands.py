@@ -22,6 +22,11 @@ from loka.bounded_contexts.property.application.use_cases.match_tenant_demands i
     MatchTenantDemandsUseCase,
 )
 from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.bounded_contexts.property.domain.entities.property_media import (
+    MediaKind,
+    MediaStatus,
+    PropertyMedia,
+)
 from loka.bounded_contexts.property.domain.entities.tenant_demand import (
     DemandStatus,
     TenantDemand,
@@ -57,13 +62,39 @@ def a_demand(
     return demand
 
 
-def a_listing(*, neighbourhood: str = "Jouvence", rent: int = 40_000) -> Property:
+def a_listing(
+    *,
+    neighbourhood: str = "Jouvence",
+    rent: int = 40_000,
+    photos: tuple[str, ...] = (),
+    documents: tuple[str, ...] = (),
+) -> Property:
     prop = Property(property_id=uuid.uuid4(), landlord_id=uuid.uuid4(), now=NOW)
     prop.set_type(PropertyType.STUDIO, now=NOW)
     prop.set_location(Location(city="Yaoundé", neighbourhood=neighbourhood), now=NOW)
     prop.set_rent(Money(rent), now=NOW)
     prop.set_charges(Money(0), ChargingPolicy.INCLUDED, now=NOW)
     prop.status = PropertyStatus.AVAILABLE
+    for key in photos:
+        prop.add_media(
+            PropertyMedia(
+                media_id=uuid.uuid4(),
+                object_key=key,
+                kind=MediaKind.PHOTO,
+                status=MediaStatus.UPLOADED,
+            ),
+            now=NOW,
+        )
+    for key in documents:
+        prop.add_media(
+            PropertyMedia(
+                media_id=uuid.uuid4(),
+                object_key=key,
+                kind=MediaKind.DOCUMENT,
+                status=MediaStatus.UPLOADED,
+            ),
+            now=NOW,
+        )
     return prop
 
 
@@ -206,7 +237,25 @@ class TestAPublicationFindsTheDemandsWaiting:
                 "city": "Yaoundé",
                 "neighbourhood": "Jouvence",
                 "rent_xaf": 40_000,
+                "photo_object_keys": [],
             }
+        ]
+
+    async def test_the_published_photos_travel_with_the_proposal(self) -> None:
+        # A tenant sent a line and a rent but no picture has to take the
+        # landlord's word for it: the photos he published are what he is shown.
+        demand = a_demand()
+        listing = a_listing(
+            photos=("properties/p/1/a.jpg", "properties/p/1/b.jpg"),
+            documents=("properties/p/1/plan.pdf",),
+        )
+        use_case, _, _ = build(demand, listings=(listing,))
+
+        await use_case.for_listing(listing.id, now=NOW)
+
+        assert answered_proposals(demand)[0]["photo_object_keys"] == [
+            "properties/p/1/a.jpg",
+            "properties/p/1/b.jpg",
         ]
 
     async def test_a_listing_elsewhere_leaves_him_waiting(self) -> None:
@@ -248,6 +297,40 @@ class TestADemandFindsWhatIsAlreadyPublished:
             36_000,
             47_250,
         )
+
+    async def test_the_hit_photos_are_carried_to_the_proposal(self) -> None:
+        demand = a_demand()
+        hit = {
+            "property_id": str(uuid.uuid4()),
+            "type": "STUDIO",
+            "city": "Yaoundé",
+            "neighbourhood": "Jouvence",
+            "price_xaf": 40_000,
+            "media_object_keys": ["properties/p/9/a.jpg", "properties/p/9/b.jpg"],
+        }
+        use_case, _, _ = build(demand, hits=[hit])
+
+        await use_case.for_demand(demand.id, now=NOW)
+
+        assert answered_proposals(demand)[0]["photo_object_keys"] == [
+            "properties/p/9/a.jpg",
+            "properties/p/9/b.jpg",
+        ]
+
+    async def test_a_hit_without_media_carries_no_photo(self) -> None:
+        demand = a_demand()
+        hit = {
+            "property_id": str(uuid.uuid4()),
+            "type": "STUDIO",
+            "city": "Yaoundé",
+            "neighbourhood": "Jouvence",
+            "price_xaf": 40_000,
+        }
+        use_case, _, _ = build(demand, hits=[hit])
+
+        await use_case.for_demand(demand.id, now=NOW)
+
+        assert answered_proposals(demand)[0]["photo_object_keys"] == []
 
     async def test_nothing_found_keeps_the_demand_open(self) -> None:
         demand = a_demand()
