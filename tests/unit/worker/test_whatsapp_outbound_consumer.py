@@ -288,6 +288,23 @@ class TestRetryable:
                 outbound(reply_kind="ACK")
             )
 
+    async def test_a_fresh_reply_waits_out_a_whatsapp_disconnect(
+        self, settings: Settings
+    ) -> None:
+        """Observed live: a short disconnect sent every reply to the DLQ."""
+        message = outbound(reply_kind="ACK")
+        message["payload"]["occurred_at"] = datetime.now(UTC).isoformat()
+
+        with pytest.raises(DeferredHandlerError):
+            await build(settings, respond(503, "whatsapp is not connected")).handle(message)
+
+    async def test_a_stale_reply_is_not_held_for_ever(self, settings: Settings) -> None:
+        message = outbound(reply_kind="ACK")
+        message["payload"]["occurred_at"] = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+
+        with pytest.raises(RetryableHandlerError, match="http_503"):
+            await build(settings, respond(503, "whatsapp is not connected")).handle(message)
+
     async def test_the_rate_limit_parks_the_message_instead_of_sending(
         self, settings: Settings
     ) -> None:

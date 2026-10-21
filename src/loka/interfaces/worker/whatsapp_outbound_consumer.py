@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -65,6 +65,17 @@ from loka.shared.infrastructure.redis_client import (
 )
 
 OUTBOUND_QUEUE = "whatsapp.outgoing"
+
+# While WhatsApp itself is unreachable, a reply waits for it instead of burning
+# its retries in fifteen seconds and landing in the dead-letter queue. Observed
+# live: a short disconnect lost every message sent during it. Past this age a
+# reply is stale, and the ordinary retries take over.
+GATEWAY_DOWN_PATIENCE = timedelta(minutes=30)
+GATEWAY_DOWN_RECHECK_MS = 15_000
+
+
+class GatewayDown(RetryableHandlerError):
+    """The gateway or its WhatsApp socket is down, not this message."""
 
 _logger = get_logger(__name__)
 
@@ -126,8 +137,14 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         if burst_of is not None and await self._a_newer_photo_follows(burst_of):
             _logger.info("photo_ack_superseded", session_id=metadata.get("session_id"))
             return
-        async with self._in_thread_order(recipient):
-            await self._deliver(body, metadata, recipient)
+        try:
+            async with self._in_thread_order(recipient):
+                await self._deliver(body, metadata, recipient)
+        except GatewayDown:
+            sent_at = _optional_datetime(body.get("occurred_at"))
+            if sent_at is not None and datetime.now(UTC) - sent_at < GATEWAY_DOWN_PATIENCE:
+                raise DeferredHandlerError(GATEWAY_DOWN_RECHECK_MS) from None
+            raise
 
     async def _a_newer_photo_follows(self, message_id: uuid.UUID) -> bool:
         """Whether this acknowledgement is not the last of its burst.
@@ -301,7 +318,7 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             response = await self._client.post("/send", json=body)
         except (httpx.TimeoutException, httpx.TransportError) as exc:
             whatsapp_failures_total.labels(operation="send", reason="unreachable").inc()
-            raise RetryableHandlerError(f"gateway unreachable: {exc}") from exc
+            raise GatewayDown(f"gateway unreachable: {exc}") from exc
 
         if response.status_code < 300:
             return
@@ -309,6 +326,8 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         reason = f"http_{response.status_code}"
         whatsapp_failures_total.labels(operation="send", reason=reason).inc()
         detail = response.text[:512]
+        if response.status_code in (502, 503, 504):
+            raise GatewayDown(f"gateway returned {reason}: {detail}")
         if response.status_code == 429 or response.status_code >= 500:
             raise RetryableHandlerError(f"gateway returned {reason}: {detail}")
         # The gateway is up and refuses this specific send: the phone number or
