@@ -169,9 +169,18 @@ def _opens_new_flow(session: ConversationSession, intent: str) -> bool:
     the model's reading of one ambiguous verb.
     """
     opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
-    if opening_flow is None or session.flow is opening_flow:
+    if opening_flow is None:
         return False
+    if session.flow is opening_flow:
+        # The same flow opened again once its task is over is a new task:
+        # observed live, "j'ai encore un autre studio" after a publication
+        # reused the published listing's facts and attached its photos to it.
+        return session.step in _FINISHED_STEPS
     return not (session.flow in LISTING_FLOWS and _has_listing_facts(session.context))
+
+
+# Where a listing or a search has nothing left to collect.
+_FINISHED_STEPS = frozenset({FlowStep.PUBLISHED, FlowStep.DONE})
 
 
 def _target_flow(session: ConversationSession, intent: str) -> FlowName:

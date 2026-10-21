@@ -140,6 +140,8 @@ class ConversationSession(AggregateRoot):
         self.step = first_step
         self.status = SessionStatus.ACTIVE
         self.context = {}
+        # A new task: the lodging the last one saved is not this one's.
+        self.assigned_property_id = None
         self._touch(now)
         self.record(
             "ConversationFlowStarted",

@@ -3025,3 +3025,41 @@ class TestStillSearching:
         )
 
         assert follow_up.calls == []
+
+
+class TestASecondListing:
+    async def test_another_lodging_after_a_publication_starts_a_fresh_form(
+        self, uow: FakeUnitOfWork, session: ConversationSession, message_id: uuid.UUID
+    ) -> None:
+        """Observed live: "j'ai encore un autre studio" went straight to the
+        summary of the listing already published, and its photos were
+        attached to that one, which was rented."""
+        published = uuid.uuid4()
+        session.start_flow(FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.PUBLISHED)
+        session.context.update(
+            {
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Ékounou"},
+                "rent": 65_000,
+            }
+        )
+        session.attach_property(published, now=NOW)
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="j'ai encore un autre studio à louer",
+            model=StubModel(
+                result=_model_result(
+                    intent="CREATE_PROPERTY", entities={"property_type": "STUDIO"}
+                )
+            ),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.assigned_property_id is None
+        assert "rent" not in session.context
+        assert session.step is not FlowStep.CONFIRM_PROPERTY

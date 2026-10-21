@@ -101,8 +101,9 @@ _TEXT: dict[str, dict[str, str]] = {
         ),
         "unavailable": (
             "Le propriétaire indique que ce logement n'est plus disponible. Aucun "
-            "paiement ne vous est demandé. Répondez avec le numéro d'un autre logement "
-            "de la liste, ou décrivez une nouvelle recherche."
+            "paiement ne vous est demandé. Je continue à chercher : si un autre "
+            "logement correspond, je vous l'envoie ici. Vous pouvez aussi répondre "
+            "avec le numéro d'un autre logement de la liste."
         ),
         "contact": (
             "Paiement reçu, merci !\nContact du propriétaire : {phone}\n"
@@ -150,8 +151,9 @@ _TEXT: dict[str, dict[str, str]] = {
         ),
         "unavailable": (
             "The landlord says this place is no longer available. No payment is "
-            "requested. Reply with the number of another place on the list, or "
-            "describe a new search."
+            "requested. I keep looking: if another place matches, I will send it "
+            "to you here. You can also reply with the number of another place on "
+            "the list."
         ),
         "contact": "Payment received, thank you!\nLandlord's contact: {phone}\nPlace: {lodging}",
         "map": "Location: https://maps.google.com/?q={lat},{lon}",
