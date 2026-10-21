@@ -241,3 +241,38 @@ class TestTheRewrite:
         )
 
         assert sent == WAITING
+
+
+class _Sequence(_Writer):
+    """Answers with each sentence in turn, one per call."""
+
+    def __init__(self, *sentences: str) -> None:
+        super().__init__()
+        self._sentences = list(sentences)
+
+    async def generate_response(self, prompt: Prompt) -> LlmResponse:
+        self._content = self._sentences.pop(0)
+        return await super().generate_response(prompt)
+
+
+class TestTheRetry:
+    async def test_a_lost_number_gets_one_more_try_told_what_to_keep(self) -> None:
+        """Observed live: "ta photo" for "2 photos" sent the stock copy in "vous"."""
+        stock = "Photo bien reçue (2 photos) : votre annonce est en ligne."
+        writer = _Sequence(
+            "Super, ta photo est reçue, ton annonce est en ligne !",
+            "Super, tes 2 photos sont reçues, ton annonce est en ligne !",
+        )
+        ledger = _Ledger()
+
+        sent = await _voice(writer, ledger, _Uow()).execute(
+            session_id=uuid.uuid4(),
+            user_id=None,
+            message="(photo envoyée)",
+            platform_text=stock,
+            now=NOW,
+        )
+
+        assert sent == "Super, tes 2 photos sont reçues, ton annonce est en ligne !"
+        assert json.loads(writer.prompts[1].user)["numbers_to_keep_in_digits"] == ["2"]
+        assert len(ledger.entries) == 2

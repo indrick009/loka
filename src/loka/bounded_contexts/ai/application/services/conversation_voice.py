@@ -31,7 +31,8 @@ VOICE_SYSTEM_PROMPT = (
     "words and in the user's language and register (French, English or Cameroonian "
     "Pidgin; 'tu' when the user says 'tu' or writes casually) — never copy its "
     "formal sentences. Keep its facts: every number exactly as written, every place "
-    "and property type, and its offer or question, last. Add no number, price, "
+    "and property type, and its offer or question, last — numbers stay in "
+    "digits ('2 photos', never 'deux photos'). Add no number, price, "
     "delay, listing or promise of your own. Start with what the user just said "
     "when platform_message does not answer it: a question gets an honest answer "
     "from the recent messages — entry conditions such as the advance or the "
@@ -48,18 +49,23 @@ _NUMBER = re.compile(r"\d(?:[\d\s\u202f.]*\d)?")
 
 
 def build_voice_prompt(
-    *, message: str, platform_text: str, exchanges: list[Exchange]
+    *,
+    message: str,
+    platform_text: str,
+    exchanges: list[Exchange],
+    keep_numbers: tuple[str, ...] = (),
 ) -> Prompt:
+    payload: dict[str, object] = {
+        "user_message": message,
+        "platform_message": platform_text,
+        "recent_messages": exchanges_as_json(exchanges),
+    }
+    if keep_numbers:
+        # The retry after a rewrite that lost or invented a number.
+        payload["numbers_to_keep_in_digits"] = list(keep_numbers)
     return Prompt(
         system=VOICE_SYSTEM_PROMPT,
-        user=json.dumps(
-            {
-                "user_message": message,
-                "platform_message": platform_text,
-                "recent_messages": exchanges_as_json(exchanges),
-            },
-            ensure_ascii=False,
-        ),
+        user=json.dumps(payload, ensure_ascii=False),
         temperature=0.5,
         max_output_tokens=300,
     )
@@ -86,6 +92,11 @@ def keeps_the_facts(
 
 # "150 mil" is 150 000 here (see ``market``): the thread says it both ways.
 _THOUSANDS = re.compile(r"(\d+)\s*mil(?:le)?\b", re.IGNORECASE)
+
+
+def numbers_in(text: str) -> tuple[str, ...]:
+    """The numbers a sentence states, as written, in order."""
+    return tuple(match.strip() for match in _NUMBER.findall(text))
 
 
 def _numbers(text: str) -> set[str]:

@@ -21,7 +21,7 @@ reply; otherwise the outbound layer renders a stable template from the key.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -348,6 +348,25 @@ def _keeping_the_place(
                 "longitude": known["longitude"],
             }
     return entities
+
+
+# How a question opens, when it does not end with "?" — WhatsApp users often
+# leave it off. Kept short: a false "question" only re-shows the recap.
+_QUESTION_OPENINGS = (
+    "est-ce", "pourquoi", "comment", "combien", "quand", "quel", "quelle",
+    "c'est quoi", "tu as", "as-tu", "what", "why", "how", "where", "when", "did ",
+)
+
+
+def _is_a_question(text: str | None) -> bool:
+    """Whether a message asks something rather than answering.
+
+    Observed live: "Tu as retenu la localisation ?", sent at the summary, was
+    read as AFFIRMATIVE and the listing was registered — nobody had said yes.
+    A confirmation publishes a listing; a question is never one.
+    """
+    stripped = (text or "").strip().casefold()
+    return stripped.endswith("?") or stripped.startswith(_QUESTION_OPENINGS)
 
 
 def _is_search(flow: FlowName) -> bool:
@@ -976,6 +995,7 @@ class AnalyseConversationMessageUseCase:
         property_id = session.assigned_property_id
         reason: str | None = None
         reply_text: str | None = None
+        settles_on: FlowStep | None = None
         if self._listing is None or property_id is None:
             if session.flow is FlowName.PROPERTY_SEARCH or self._listing is None:
                 reason = "media_without_a_listing"
@@ -998,6 +1018,10 @@ class AnalyseConversationMessageUseCase:
                     kind=media_kind,
                     now=now,
                 )
+                if attached is not None and attached.published:
+                    # The listing is online: the conversation is too. Left on
+                    # COLLECT_MEDIA, it kept asking for the photos it had.
+                    settles_on = FlowStep.PUBLISHED
                 if attached is not None:
                     reply_text = media_received_text(
                         kind=media_kind,
@@ -1033,6 +1057,7 @@ class AnalyseConversationMessageUseCase:
             text=text,
             media_burst_of=message_id,
             media_marker=_MEDIA_MARKERS.get(kind, "(fichier envoyé)"),
+            settles_on=settles_on,
         )
 
     async def _keep_for_listing(
@@ -1141,6 +1166,7 @@ class AnalyseConversationMessageUseCase:
         text: str | None = None,
         media_burst_of: uuid.UUID | None = None,
         media_marker: str | None = None,
+        settles_on: FlowStep | None = None,
     ) -> AnalysisReport:
         """Close a call that did not reach the model.
 
@@ -1149,17 +1175,20 @@ class AnalyseConversationMessageUseCase:
         ``text`` is the raw message, handed on so a step that is read by a rule
         alone — the 1 000 FCFA answer — can be decided without a model.
         """
+        verdict = self._verdict(
+            session=session,
+            intent=intent,
+            confidence=confidence,
+            entities=entities,
+            reason=reason,
+        )
+        if settles_on is not None and verdict.accepted:
+            verdict = replace(verdict, next_step=settles_on)
         return await self._apply(
             session=session,
             message_id=message_id,
             text=text,
-            verdict=self._verdict(
-                session=session,
-                intent=intent,
-                confidence=confidence,
-                entities=entities,
-                reason=reason,
-            ),
+            verdict=verdict,
             confidence=confidence,
             used_llm=used_llm,
             latency_ms=latency_ms,
@@ -1427,7 +1456,7 @@ class AnalyseConversationMessageUseCase:
                 session, intent=intent, now=now
             )
             listing_text, next_step, listing_id = await self._confirm_listing(
-                session, intent=intent, next_step=next_step, now=now
+                session, intent=intent, next_step=next_step, now=now, text=text
             )
             search_text, next_step = await self._record_demand(
                 session, intent=intent, facts=facts, next_step=next_step, now=now
@@ -1486,7 +1515,11 @@ class AnalyseConversationMessageUseCase:
             answering=(
                 (text or media_marker)
                 if media_marker is not None
-                else text if platform_text and reply_text == platform_text else None
+                # Stock copy too: the fast lane ("1", "60mil", "6") answers
+                # with a template, which used to go out in "vous" mid-thread.
+                else text
+                if (platform_text and reply_text == platform_text) or reply_text is None
+                else None
             ),
             media_burst_of=media_burst_of,
         )
@@ -1832,6 +1865,7 @@ class AnalyseConversationMessageUseCase:
         intent: str,
         next_step: FlowStep | None,
         now: datetime,
+        text: str | None = None,
     ) -> tuple[str | None, FlowStep | None, uuid.UUID | None]:
         """Register the listing when the landlord confirms the summary.
 
@@ -1847,6 +1881,10 @@ class AnalyseConversationMessageUseCase:
             or session.step is not FlowStep.CONFIRM_PROPERTY
         ):
             return None, next_step, None
+        if _is_a_question(text):
+            # Not a yes: the summary is shown again, with the place it holds,
+            # and the confirmation is still his to give.
+            return None, FlowStep.CONFIRM_PROPERTY, None
 
         result = await self._listing.register_from_conversation(
             user_id=session.user_id,

@@ -39,6 +39,7 @@ _TYPES: dict[str, dict[str, str]] = {
 _WORDS: dict[str, dict[str, str]] = {
     "fr": {
         "intro": "Voici votre annonce :",
+        "pinned": " (position WhatsApp enregistrée)",
         "modern": "moderne",
         "basic": "non moderne",
         "lodging": "logement",
@@ -60,6 +61,7 @@ _WORDS: dict[str, dict[str, str]] = {
     },
     "en": {
         "intro": "Here is your listing:",
+        "pinned": " (WhatsApp location saved)",
         "modern": "modern",
         "basic": "basic",
         "lodging": "unit",
@@ -86,7 +88,13 @@ _PHOTO_TEXT: dict[str, dict[str, str]] = {
             "locataires qui cherchent un logement comme le vôtre peuvent la "
             "trouver. Vous pouvez encore envoyer d'autres photos."
         ),
-        "published": "Photo bien reçue, elle est ajoutée à votre annonce ({count}).",
+        # Also the answer to the last photo of an album, whose first photo may
+        # be the one that published the listing: so it says the listing is
+        # online, not only that a photo was added.
+        "published": (
+            "Photo bien reçue ({count}) : votre annonce est en ligne, les "
+            "locataires qui cherchent un logement comme le vôtre peuvent la trouver."
+        ),
         "draft": "Photo bien reçue ({count}).",
         "one": "1 photo",
         "many": "{photos} photos",
@@ -96,7 +104,10 @@ _PHOTO_TEXT: dict[str, dict[str, str]] = {
             "Photo received. Your listing is now published: tenants looking for "
             "a place like yours can find it. You can still send more photos."
         ),
-        "published": "Photo received, it is added to your listing ({count}).",
+        "published": (
+            "Photo received ({count}): your listing is online, tenants looking "
+            "for a place like yours can find it."
+        ),
         "draft": "Photo received ({count}).",
         "one": "1 photo",
         "many": "{photos} photos",
@@ -274,7 +285,13 @@ def listing_recap_text(facts: Mapping[str, Any], language: str) -> str:
     location = facts.get("location")
     if isinstance(location, Mapping) and location.get("city"):
         district = str(location.get("neighbourhood") or "").strip()
-        lines.append(f"- {district + ', ' if district else ''}{location['city']}")
+        # Observed live: "tu as retenu la localisation ?" — the recap read
+        # "Yaoundé" and nothing said the exact spot he shared was kept.
+        pinned = location.get("latitude") is not None
+        lines.append(
+            f"- {district + ', ' if district else ''}{location['city']}"
+            + (words["pinned"] if pinned else "")
+        )
 
     rent = facts.get("rent")
     if isinstance(rent, int):

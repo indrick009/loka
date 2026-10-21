@@ -52,11 +52,27 @@ PERSONA = (
     "written plainly (50 000 FCFA). You are an AI assistant: say so plainly if asked."
 )
 
+# How Kora actually works (Housing §9), so "c'est quoi la suite ?" gets the
+# truth. Observed live: asked that right after publishing, the model told a
+# landlord that tenants would contact him directly on WhatsApp — the opposite
+# of the product, where the number is only released once a tenant has paid.
+HOW_KORA_WORKS = (
+    "How Kora works — never contradict it, never describe another process: Kora "
+    "shows a published listing to the tenants whose search matches it; tenants "
+    "never get the landlord's number directly. When a tenant picks a lodging, "
+    "Kora asks the landlord on WhatsApp whether it is still available, and he "
+    "should answer quickly. Only if he confirms may the tenant pay 1 000 FCFA to "
+    "unlock the landlord's number and the location; then they arrange the visit "
+    "themselves. No agent, no commission. A tenant's search is recorded and Kora "
+    "comes back to him when a lodging matches."
+)
+
 # What turns a form into a conversation. Shared by every prompt that writes a
 # sentence: observed live, "c'est combien d'avance ?", "tu me comprends même ?"
 # and "rappelle-moi mon budget" all got the same stock sentence, because only
 # a slot answer had a next step.
 DIGRESSION_RULE = (
+    f"{HOW_KORA_WORKS} "
     "When the user's message asks something or drifts off topic (football, news, "
     "a joke, 'are you a robot?'), first react to it in one short sentence, then "
     "come back to where the conversation is. Answer only from known_facts and the "

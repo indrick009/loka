@@ -31,6 +31,7 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     PHOTO_BURST_SECONDS,
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
+    _is_a_question,
     _keeping_the_place,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
@@ -552,3 +553,63 @@ class TestAVideoTooHeavyToStore:
         staged = uow.events.staged[0]
         assert "16 Mo" in staged.text
         assert staged.answering == "(vidéo envoyée)"
+
+
+class TestWhatTheLiveTestShowed:
+    """Three defects from the landlord's live test of 21 October."""
+
+    @pytest.mark.parametrize(
+        "text",
+        ["Tu as retenu la localisation ?", "est-ce que la caution est notée", "pourquoi"],
+    )
+    def test_a_question_is_never_a_confirmation(self, text: str) -> None:
+        assert _is_a_question(text)
+
+    @pytest.mark.parametrize("text", ["oui", "Oui c'est bon publie", "ok vas-y"])
+    def test_a_yes_is_still_a_yes(self, text: str) -> None:
+        assert not _is_a_question(text)
+
+    async def test_the_photo_that_publishes_moves_the_thread_to_published(self) -> None:
+        """Left on COLLECT_MEDIA, Kora kept asking for the photos it had."""
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_MEDIA,
+            property_id=uuid.uuid4(),
+        )
+        use_case, message_id, _, _ = _build(
+            session,
+            kind=MessageKind.IMAGE,
+            media_object_key="chat/abc/photo.jpg",
+            listing=FakeListing(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.step is FlowStep.PUBLISHED
+
+    async def test_a_fast_lane_answer_is_said_in_his_voice(self) -> None:
+        """"2", "6", "60mil" were answered by stock copy in "vous"."""
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_DEPOSIT,
+            context={
+                "property_type": "STUDIO",
+                "standing": "MODERN",
+                "quantity": 1,
+                "location": {"city": "Yaoundé", "neighbourhood": "Odza"},
+                "rent": 60_000,
+                "charges": 0,
+                "charging_policy": "EXTRA",
+                "next_question": "ask.deposit",
+            },
+        )
+        use_case, message_id, model, uow = _build(session, kind=MessageKind.TEXT, text="2")
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert model.calls == 0
+        assert uow.events.staged[0].answering == "2"

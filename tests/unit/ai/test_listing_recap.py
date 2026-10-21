@@ -80,7 +80,12 @@ def test_the_photo_that_publishes_says_so() -> None:
 @pytest.mark.parametrize(
     ("photos", "published", "expected"),
     [
-        (3, True, "Photo bien reçue, elle est ajoutée à votre annonce (3 photos)."),
+        (
+            3,
+            True,
+            "Photo bien reçue (3 photos) : votre annonce est en ligne, les "
+            "locataires qui cherchent un logement comme le vôtre peuvent la trouver.",
+        ),
         (1, False, "Photo bien reçue (1 photo)."),
     ],
 )

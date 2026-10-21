@@ -23,7 +23,9 @@ from loka.bounded_contexts.ai.application.ports import (
 from loka.bounded_contexts.ai.application.services.conversation_voice import (
     build_voice_prompt,
     keeps_the_facts,
+    numbers_in,
 )
+from loka.bounded_contexts.ai.domain.services.ai_provider import Prompt
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
 
@@ -63,16 +65,53 @@ class VoicePlatformReplyUseCase:
         exchanges = await self._exchanges.recent(session_id)
         # Released before the network call, as in the analysis.
         await self._uow.commit()
+        already_said = (message, *(line.text for line in exchanges))
         prompt = build_voice_prompt(
             message=message, platform_text=platform_text, exchanges=exchanges
         )
+        rewritten = await self._write(prompt, session_id=session_id, user_id=user_id, now=now)
+        if rewritten is not None and not keeps_the_facts(
+            platform_text, rewritten, already_said=already_said
+        ):
+            # Observed live: "ta photo" for "2 photos". One more try, told which
+            # numbers to keep, before falling back to the stock sentence.
+            self._logger.info("voice_retried", session_id=str(session_id))
+            prompt = build_voice_prompt(
+                message=message,
+                platform_text=platform_text,
+                exchanges=exchanges,
+                keep_numbers=numbers_in(platform_text),
+            )
+            rewritten = await self._write(
+                prompt, session_id=session_id, user_id=user_id, now=now
+            )
+        if rewritten is None or not keeps_the_facts(
+            platform_text, rewritten, already_said=already_said
+        ):
+            self._logger.warning(
+                "voice_rejected",
+                session_id=str(session_id),
+                rewritten=(rewritten or "")[:300],
+            )
+            return platform_text
+        return rewritten
+
+    async def _write(
+        self,
+        prompt: Prompt,
+        *,
+        session_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        now: datetime,
+    ) -> str | None:
+        """One model call, paid for in the ledger; ``None`` when it failed."""
         try:
             response = await self._model.generate_response(prompt)
         except DomainError as exc:
             self._logger.warning(
                 "voice_failed", session_id=str(session_id), error=type(exc).__name__
             )
-            return platform_text
+            return None
         usage = response.usage
         await self._usage.append(
             UsageEntry(
@@ -92,11 +131,4 @@ class VoicePlatformReplyUseCase:
             )
         )
         await self._uow.commit()
-        rewritten = response.content.strip()
-        already_said = (message, *(line.text for line in exchanges))
-        if not keeps_the_facts(platform_text, rewritten, already_said=already_said):
-            self._logger.warning(
-                "voice_rejected", session_id=str(session_id), rewritten=rewritten[:300]
-            )
-            return platform_text
-        return rewritten
+        return response.content.strip()
