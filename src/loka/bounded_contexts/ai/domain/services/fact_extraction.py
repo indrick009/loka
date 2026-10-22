@@ -69,8 +69,11 @@ PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("location", FlowStep.COLLECT_LOCATION),
     ("rent", FlowStep.COLLECT_PRICE),
     ("charges", FlowStep.COLLECT_CHARGES),
-    ("deposit_months", FlowStep.COLLECT_DEPOSIT),
+    # One question for both, the way a landlord says it: "6 mois, pas de
+    # caution" or "6 mois et 2 mois de caution". The caution is only asked on
+    # its own when the answer left it out.
     ("advance_months", FlowStep.COLLECT_ADVANCE),
+    ("deposit_months", FlowStep.COLLECT_DEPOSIT),
     ("security", FlowStep.COLLECT_SECURITY),
 )
 

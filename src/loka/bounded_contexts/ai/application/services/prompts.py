@@ -251,9 +251,11 @@ _LANDLORD_TOPICS: dict[str, str] = {
     ),
     "ask.rent": "the monthly rent you are asking for it, in XAF",
     "ask.charges": (
-        "whether water and electricity are included in your rent and, if not, "
-        "their monthly amount — and whether the property actually has running "
-        "water and electricity"
+        "how water and electricity work for the tenant, in local terms: his own "
+        "ENEO meter (often prepaid), a shared or sub-meter, Camwater or a "
+        "borehole (forage) for water, or included in the rent — and the monthly "
+        "amount only if a fixed one is asked on top. Own or shared meters mean "
+        "charging_policy EXTRA; included means INCLUDED"
     ),
     "ask.deposit": (
         "the refundable caution you ask of your tenant, in MONTHS of rent. In "
@@ -264,8 +266,11 @@ _LANDLORD_TOPICS: dict[str, str] = {
         "again for the number of months."
     ),
     "ask.advance": (
-        "how many months of rent you want up front, on top of the caution. "
-        "Three to six months is the usual range here."
+        "how many months of rent the tenant must pay when moving in, and whether "
+        "there is a caution on top — one question for both, as a landlord says "
+        "it: '6 mois, pas de caution' is advance_months 6 and deposit_months 0; "
+        "'6 mois et 2 mois de caution' is advance_months 6 and deposit_months 2. "
+        "Never suggest a number of months: the landlord says it himself"
     ),
     "ask.security": "whether your property has a guard and whether it has parking",
     "ask.minimum_duration": "the minimum duration you want for the rental",
@@ -319,7 +324,7 @@ _FIELD_FOR_QUESTION: dict[str, str] = {
     "ask.charges": "charges and charging_policy",
     "ask.quantity": "quantity",
     "ask.deposit": "deposit_months",
-    "ask.advance": "advance_months",
+    "ask.advance": "advance_months (and deposit_months when a caution is mentioned)",
     "ask.security": "amenities.security and amenities.parking",
     "ask.minimum_duration": "minimum_duration_months",
     "ask.availability": "availability",

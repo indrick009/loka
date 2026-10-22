@@ -42,9 +42,9 @@ QUESTION_TEXT: dict[str, str] = {
     # answered "oui" by landlords whose lodging has no running water at all,
     # and the tenant discovered it on the visit.
     "ask.charges": (
-        "L'eau et l'électricité sont-elles incluses dans le loyer ?\n"
-        "Précisez aussi si le logement a bien l'eau courante et l'électricité.\n"
-        "Si elles ne sont pas incluses, indiquez le montant mensuel en FCFA."
+        "Pour l'eau et l'électricité, comment ça se passe ?\n"
+        "Par exemple : « compteur ENEO prépayé et forage », « compteur "
+        "partagé », ou « compris dans le loyer »."
     ),
     "ask.quantity": (
         "Combien de logements identiques louez-vous ?\n"
@@ -54,13 +54,14 @@ QUESTION_TEXT: dict[str, str] = {
     # Months, not francs: the caution is a multiple of the rent here, and an
     # amount stored decouples the day the landlord corrects his rent.
     "ask.deposit": (
-        "Demandez-vous une caution ? Si oui, combien de mois de loyer ?\n"
-        "La caution s'ajoute à l'avance et vous la remboursez au départ du "
-        "locataire. Répondez 0 s'il n'y a pas de caution."
+        "Y a-t-il aussi une caution ? Si oui, combien de mois de loyer ?\n"
+        "Répondez 0 s'il n'y en a pas."
     ),
     "ask.advance": (
-        "Combien de mois de loyer demandez-vous d'avance ?\n"
-        "En plus de la caution. Habituellement entre 3 et 6 mois."
+        "Combien de mois de loyer le locataire doit-il payer à l'entrée ? "
+        "Y a-t-il aussi une caution ?\n"
+        "Par exemple : « 6 mois, pas de caution » ou « 6 mois et 2 mois de "
+        "caution »."
     ),
     "ask.security": (
         "Y a-t-il un gardien ? Et un parking ?\n"
@@ -162,10 +163,9 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "You can also give the surface area in m2."
     ),
     "ask.charges": (
-        "Are water and electricity included in the rent?\n"
-        "Please also say whether the property actually has running water and "
-        "electricity.\n"
-        "If they are not included, give the monthly amount in FCFA."
+        "How do water and electricity work?\n"
+        "For example: \"prepaid ENEO meter and borehole\", \"shared meter\", "
+        "or \"included in the rent\"."
     ),
     "ask.quantity": (
         "How many identical lodgings are you renting out?\n"
@@ -173,13 +173,14 @@ _QUESTION_TEXT_EN: dict[str, str] = {
         "one."
     ),
     "ask.deposit": (
-        "Do you ask for a caution? If so, how many months of rent?\n"
-        "The caution is added to the advance and you refund it when the tenant "
-        "leaves. Answer 0 if there is none."
+        "Is there also a caution? If so, how many months of rent?\n"
+        "Answer 0 if there is none."
     ),
     "ask.advance": (
-        "How many months of rent do you want up front?\n"
-        "On top of the caution. Usually between 3 and 6 months."
+        "How many months of rent must the tenant pay when moving in? Is there "
+        "also a caution?\n"
+        "For example: \"6 months, no caution\" or \"6 months and 2 months of "
+        "caution\"."
     ),
     "ask.security": (
         "Is there a guard? And parking?\n"

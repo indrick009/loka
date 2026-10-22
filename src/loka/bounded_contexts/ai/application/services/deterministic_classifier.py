@@ -327,12 +327,6 @@ _ONE_ONLY = frozenset(
 _NO_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
     "ask.deposit": ("COLLECT_DEPOSIT", {"deposit_months": 0}),
     "ask.advance": ("COLLECT_ADVANCE", {"advance_months": 0}),
-    # "L'eau et l'électricité sont-elles incluses dans le loyer ?" answered "non"
-    # means they are charged on top, not that there are none. Without this the
-    # refusal was read as a bare dialogue act, produced no step, and the whole
-    # question came back — observed live on a landlord whose next turn had to
-    # spell the answer out before the form moved on.
-    "ask.charges": ("COLLECT_CHARGES", {"charging_policy": "EXTRA"}),
     "ask.security": (
         "COLLECT_SECURITY",
         {"amenities": {"security": False, "parking": False}},
@@ -349,9 +343,24 @@ _NO_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
 # following "2" was filed as the charges instead of the caution. Only questions
 # where "oui" names one thing belong here: "gardien ? parking ?" and "combien de
 # mois ?" still go to the model, which can ask for the missing half.
-_YES_MEANS: dict[str, tuple[str, dict[str, Any]]] = {
-    "ask.charges": ("COLLECT_CHARGES", {"charging_policy": "INCLUDED"}),
-}
+_YES_MEANS: dict[str, tuple[str, dict[str, Any]]] = {}
+
+# "Pour l'eau et l'électricité, comment ça se passe ?" is answered in local
+# terms. A meter of his own or a shared one means he pays on top; "compris"
+# means it is in the rent. A bare yes or no answers nothing here.
+_UTILITIES_INCLUDED = re.compile(r"\b(compris|inclus|incluse|included)\b")
+_UTILITIES_EXTRA = re.compile(
+    r"\b(compteurs?|pr[ée]pay[ée]s?|forage|camwater|eneo|partag[ée]s?|"
+    r"à part|a part|chacun|meters?|borehole|prepaid)\b"
+)
+
+# "6 mois, pas de caution", "6 mois avec 2 mois de caution", "caution 1 mois
+# et 6 mois d'avance": the advance and the caution in one breath.
+_NO_CAUTION = re.compile(r"\b(pas de|sans|aucune|0|zéro|zero)\s+caution\b|\bno caution\b")
+_CAUTION_MONTHS = re.compile(
+    r"(?P<a>\d{1,2})\s*(?:mois)?\s*(?:de\s+)?caution|caution\s*(?:de\s+|:\s*)?(?P<b>\d{1,2})"
+)
+_ANY_MONTHS = re.compile(r"(?<!\d)(\d{1,2})(?!\d)")
 
 _MONTH_ANSWER_FIELDS: dict[str, tuple[str, str]] = {
     "ask.deposit": ("COLLECT_DEPOSIT", "deposit_months"),
@@ -684,6 +693,26 @@ class DeterministicClassifier:
         if not pending or not normalized:
             return None
 
+        # Both read before the word cap: a landlord's real answer to either is
+        # longer than four words, and neither carries anything a model adds.
+        if pending == "ask.advance":
+            entry = _entry_months(normalized)
+            if entry is not None:
+                return DeterministicMatch(intent="COLLECT_ADVANCE", confidence=0.95, entities=entry)
+        if pending == "ask.charges" and _find_digits(normalized) is None:
+            if _UTILITIES_INCLUDED.search(normalized):
+                return DeterministicMatch(
+                    intent="COLLECT_CHARGES",
+                    confidence=0.95,
+                    entities={"charging_policy": "INCLUDED", "charges": 0},
+                )
+            if _UTILITIES_EXTRA.search(normalized):
+                return DeterministicMatch(
+                    intent="COLLECT_CHARGES",
+                    confidence=0.95,
+                    entities={"charging_policy": "EXTRA", "charges": 0},
+                )
+
         if pending == "ask.publish_or_search":
             # Read before the word cap, and before anything else: this is the
             # one question that gets a user out of a conversation that never
@@ -885,6 +914,37 @@ class DeterministicClassifier:
             .replace("\u2019", "'")
         )
         return re.sub(r"\s+", " ", folded)
+
+
+def _find_digits(normalized: str) -> str | None:
+    found = re.search(r"\d", normalized)
+    return found.group(0) if found else None
+
+
+def _entry_months(normalized: str) -> dict[str, Any] | None:
+    """The advance and, when said, the caution, from one answer.
+
+    ``None`` unless an advance is found: a caution alone is not an answer to
+    "combien de mois à l'entrée ?", and the model reads what the rule cannot.
+    """
+    deposit: int | None = None
+    if _NO_CAUTION.search(normalized):
+        deposit = 0
+    caution = _CAUTION_MONTHS.search(normalized)
+    rest = normalized
+    if caution is not None:
+        deposit = int(caution.group("a") or caution.group("b"))
+        rest = normalized[: caution.start()] + " " + normalized[caution.end() :]
+    advance = _ANY_MONTHS.search(rest)
+    if advance is None:
+        return None
+    months = int(advance.group(1))
+    if months > _MAX_ENTRY_MONTHS or (deposit is not None and deposit > _MAX_ENTRY_MONTHS):
+        return None
+    entities: dict[str, Any] = {"advance_months": months}
+    if deposit is not None:
+        entities["deposit_months"] = deposit
+    return entities
 
 
 def _parse_amount(raw: str) -> int:

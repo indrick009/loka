@@ -213,7 +213,8 @@ class TestConversationOrder:
         """The order of conception_metier/kora-housing-v1.md §4, step by step.
 
         What it is, how many, where, for how much, then the real move-in cost —
-        water and electricity, the caution in months, the advance in months —
+        water and electricity, the advance in months then the caution, asked
+        together and only re-asked for the caution when it was left out —
         then the guard and the parking. The photos are step ten and are chased
         by the quality gate, not by this form: no message produces a ``media``
         fact, so requiring one here would park the conversation for ever.
@@ -229,9 +230,9 @@ class TestConversationOrder:
             ({"quantity": 2}, FlowStep.COLLECT_LOCATION),
             ({"city": "Douala", "neighbourhood": "Bonamoussadi"}, FlowStep.COLLECT_PRICE),
             ({"price": 250_000}, FlowStep.COLLECT_CHARGES),
-            ({"charges": 0, "charging_policy": "INCLUDED"}, FlowStep.COLLECT_DEPOSIT),
-            ({"deposit_months": 2}, FlowStep.COLLECT_ADVANCE),
-            ({"advance_months": 6}, FlowStep.COLLECT_SECURITY),
+            ({"charges": 0, "charging_policy": "INCLUDED"}, FlowStep.COLLECT_ADVANCE),
+            ({"advance_months": 6}, FlowStep.COLLECT_DEPOSIT),
+            ({"deposit_months": 2}, FlowStep.COLLECT_SECURITY),
             (
                 {"amenities": {"security": True, "parking": False}},
                 FlowStep.CONFIRM_PROPERTY,
@@ -655,37 +656,54 @@ class TestPendingAnswerBinding:
         assert match.intent == "COLLECT_ADVANCE"
         assert match.entities == {"advance_months": 6}
 
-    def test_non_to_the_charges_question_means_they_are_not_included(self) -> None:
-        """Observed live: a landlord answered "non" to "l'eau et l'électricité
-        sont-elles incluses ?", the refusal produced no step, and the whole
-        question came back until he spelled the answer out by hand."""
-        classifier = DeterministicClassifier()
+    @pytest.mark.parametrize(
+        ("text", "policy"),
+        [
+            ("compteur ENEO prépayé et forage", "EXTRA"),
+            ("chacun a son compteur", "EXTRA"),
+            ("compteur partagé", "EXTRA"),
+            ("eau et lumière à part", "EXTRA"),
+            ("c'est compris dans le loyer", "INCLUDED"),
+            ("tout est inclus", "INCLUDED"),
+        ],
+    )
+    def test_water_and_electricity_are_read_in_local_terms(
+        self, text: str, policy: str
+    ) -> None:
+        match = DeterministicClassifier().shortcut(text, pending="ask.charges")
 
-        for text in ("non", "aucun", "aucune"):
-            match = classifier.classify(text, pending="ask.charges")
+        assert match is not None
+        assert match.intent == "COLLECT_CHARGES"
+        assert match.entities == {"charging_policy": policy, "charges": 0}
 
-            assert match is not None, text
-            assert match.intent == "COLLECT_CHARGES", text
-            assert match.entities == {"charging_policy": "EXTRA"}, text
+    @pytest.mark.parametrize("text", ["oui", "non"])
+    def test_a_bare_yes_or_no_answers_nothing_about_the_utilities(self, text: str) -> None:
+        """The question is now "comment ça se passe ?": the model asks again."""
+        match = DeterministicClassifier().shortcut(text, pending="ask.charges")
 
-    def test_oui_to_the_charges_question_means_they_are_included(self) -> None:
-        """Observed live: a landlord answered "oui" to "l'eau et l'électricité
-        sont-elles incluses ?", it was read as a bare dialogue act and produced
-        no step, and — because the single-call writer still named the next
-        question — the "2" meant for the caution was filed as the charges."""
-        classifier = DeterministicClassifier()
+        assert match is None or match.intent != "COLLECT_CHARGES"
 
-        for text in ("oui", "Oui", "OUI"):
-            shortcut = classifier.shortcut(text, pending="ask.charges")
+    @pytest.mark.parametrize(
+        ("text", "entities"),
+        [
+            ("6 mois pas de caution", {"advance_months": 6, "deposit_months": 0}),
+            ("6 mois, sans caution", {"advance_months": 6, "deposit_months": 0}),
+            ("6 mois avec 2 mois de caution", {"advance_months": 6, "deposit_months": 2}),
+            ("6 mois et 2 mois de caution", {"advance_months": 6, "deposit_months": 2}),
+            ("caution 1 mois et 3 mois d'avance", {"advance_months": 3, "deposit_months": 1}),
+            ("6 mois", {"advance_months": 6}),
+            ("6", {"advance_months": 6}),
+        ],
+    )
+    def test_the_advance_and_the_caution_come_in_one_answer(
+        self, text: str, entities: dict[str, int]
+    ) -> None:
+        """The landlord's own way of saying it: one question, both fields."""
+        match = DeterministicClassifier().shortcut(text, pending="ask.advance")
 
-            assert shortcut is not None, text
-            assert shortcut.intent == "COLLECT_CHARGES", text
-            assert shortcut.entities == {"charging_policy": "INCLUDED"}, text
-
-            match = classifier.classify(text, pending="ask.charges")
-
-            assert match is not None, text
-            assert match.entities == {"charging_policy": "INCLUDED"}, text
+        assert match is not None
+        assert match.intent == "COLLECT_ADVANCE"
+        assert match.entities == entities
 
     def test_oui_to_a_question_that_names_two_things_goes_to_the_model(self) -> None:
         """A bare "oui" to "gardien ? parking ?" — or to a question that wants a

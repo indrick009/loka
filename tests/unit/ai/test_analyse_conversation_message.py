@@ -422,17 +422,15 @@ class TestDeterministicShortCircuit:
         # Step 3 of the form, which the standing answer unblocks.
         assert report.next_step == "COLLECT_QUANTITY"
 
-    async def test_a_bare_oui_answers_the_charges_question(
+    async def test_a_local_answer_settles_the_charges_question(
         self,
         uow: FakeUnitOfWork,
         session: ConversationSession,
         message_id: uuid.UUID,
     ) -> None:
-        """Observed live: a bare "oui" to "l'eau et l'électricité sont-elles
-        incluses ?" was read as a dialogue act that carried no value, produced no
-        step, and the sentence the writer sent named the caution instead — so the
-        landlord's next "2" was filed as the charges. The fast lane reads it here
-        as the value of the open question, off the model entirely."""
+        """A landlord answers "comment ça se passe pour l'eau et l'électricité ?"
+        in local terms. A meter of his own means the tenant pays on top, read
+        by the fast lane off the model entirely; the advance comes next."""
         session.start_flow(
             FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_CHARGES
         )
@@ -448,7 +446,9 @@ class TestDeterministicShortCircuit:
         )
         model = StubModel(result=_model_result())
 
-        use_case, turns, _, _ = build(uow, session, message_id, text="Oui", model=model)
+        use_case, turns, _, _ = build(
+            uow, session, message_id, text="compteur ENEO prépayé et forage", model=model
+        )
 
         report = await use_case.execute(
             AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
@@ -456,10 +456,10 @@ class TestDeterministicShortCircuit:
 
         assert model.calls == 0
         assert turns.turns[0].used_llm is False
-        assert session.context["charging_policy"] == "INCLUDED"
-        # The deposit is the next open field once the charges are answered.
-        assert report.next_step == "COLLECT_DEPOSIT"
-        assert report.question_key == "ask.deposit"
+        assert session.context["charging_policy"] == "EXTRA"
+        # The advance, with the caution in the same question, comes next.
+        assert report.next_step == "COLLECT_ADVANCE"
+        assert report.question_key == "ask.advance"
 
     async def test_a_bare_greeting_costs_no_model_call(
         self,
@@ -1652,7 +1652,7 @@ class TestSingleCallReply:
             uow,
             session,
             message_id,
-            text="elle sont inclus",
+            text="c'est comme les autres maisons",
             model=StubModel(
                 result=_model_result(
                     intent="COLLECT_CHARGES", entities={}, reply=inline
@@ -1793,8 +1793,8 @@ class TestSingleCallReply:
             "location",
             "rent",
             "charges",
-            "deposit_months",
             "advance_months",
+            "deposit_months",
             "security",
         ]
         studio = payload["price_reference_monthly_xaf"]["STUDIO"]
