@@ -120,8 +120,7 @@ QUESTION_TEXT: dict[str, str] = {
     ),
     "ask.search_budget": "Quel est votre budget maximum de loyer mensuel, en FCFA ?",
     "ask.search_advance": (
-        "Combien de mois de loyer pouvez-vous payer d'avance à l'entrée ?\n"
-        "Exemple : 3 mois."
+        "Combien de mois de loyer pouvez-vous payer d'avance à l'entrée ?"
     ),
     "ask.search_criteria": (
         "Quel critère voulez-vous modifier ?\n"
@@ -229,8 +228,7 @@ _QUESTION_TEXT_EN: dict[str, str] = {
     ),
     "ask.search_budget": "What is your maximum monthly rent, in FCFA?",
     "ask.search_advance": (
-        "How many months of rent can you pay up front when you move in?\n"
-        "Example: 3 months."
+        "How many months of rent can you pay up front when you move in?"
     ),
     "ask.search_criteria": (
         "Which criterion would you like to change?\n"

@@ -34,8 +34,8 @@ def test_every_stored_value_is_shown_before_the_question() -> None:
         "- Bonamoussadi, Douala\n"
         "- Loyer : 75 000 FCFA/mois\n"
         "- Eau et électricité : à part, selon la consommation\n"
-        "- Caution : 2 mois\n"
         "- Avance : 6 mois\n"
+        "- Caution : 2 mois\n"
         "- Gardien : oui\n"
         "- Parking : non\n"
         "Confirmez-vous la publication ? Répondez oui pour publier, ou "
@@ -100,3 +100,11 @@ def test_a_later_photo_reports_the_count(photos: int, published: bool, expected:
         )
         == expected
     )
+
+
+
+def test_no_caution_reads_as_none() -> None:
+    """Observed live: "Caution : 0 mois" — a landlord says "pas de caution"."""
+    text = listing_recap_text({"advance_months": 3, "deposit_months": 0}, "fr")
+
+    assert "- Avance : 3 mois\n- Caution : aucune" in text

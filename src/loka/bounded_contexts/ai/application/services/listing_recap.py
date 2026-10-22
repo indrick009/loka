@@ -49,6 +49,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "extra_metered": "Eau et électricité : à part, selon la consommation",
         "extra_amount": "Eau et électricité : {amount} FCFA/mois en plus du loyer",
         "deposit": "Caution : {months} mois",
+        "no_deposit": "Caution : aucune",
         "advance": "Avance : {months} mois",
         "guard": "Gardien : {value}",
         "parking": "Parking : {value}",
@@ -71,6 +72,7 @@ _WORDS: dict[str, dict[str, str]] = {
         "extra_metered": "Water and electricity: extra, by consumption",
         "extra_amount": "Water and electricity: {amount} FCFA/month on top of the rent",
         "deposit": "Deposit: {months} months",
+        "no_deposit": "Deposit: none",
         "advance": "Advance: {months} months",
         "guard": "Guard: {value}",
         "parking": "Parking: {value}",
@@ -307,10 +309,12 @@ def listing_recap_text(facts: Mapping[str, Any], language: str) -> str:
             else "- " + words["extra_metered"]
         )
 
-    for key, label in (("deposit_months", "deposit"), ("advance_months", "advance")):
+    # The order the landlord was asked them in: the advance, then the caution.
+    for key, label in (("advance_months", "advance"), ("deposit_months", "deposit")):
         months = facts.get(key)
         if isinstance(months, int):
-            lines.append("- " + words[label].format(months=months))
+            shown = words["no_deposit"] if label == "deposit" and months == 0 else None
+            lines.append("- " + (shown or words[label].format(months=months)))
 
     amenities = facts.get("amenities")
     if isinstance(amenities, Mapping):
