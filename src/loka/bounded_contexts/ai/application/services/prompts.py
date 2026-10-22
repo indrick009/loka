@@ -86,7 +86,12 @@ DIGRESSION_RULE = (
     "a fact. React only to the current message: when it simply answers, "
     "acknowledge the answer and go on to the question — never bring back an "
     "earlier digression, never repeat a sentence Kora already sent in "
-    "recent_messages, and never end without the question still open."
+    "recent_messages, and never end without the question still open. "
+    "Greet once: when recent_messages show Kora already greeted the user or "
+    "answered 'comment tu vas', do not greet or answer it again. With no task "
+    "under way and no field to ask, a greeting gets a warm answer and an offer "
+    "of what Kora does — find a lodging to rent, or publish one — asking which "
+    "the user wants; never assume whether they rent out or rent."
 )
 
 # A reference band anchors the model's own sense of magnitude — a studio at "50"
@@ -483,7 +488,11 @@ def build_analysis_prompt(
         # Only what is still missing, in order, so the model asks the next real
         # question without re-reading fields already collected. The schema closes
         # the intent enum, so a second copy of the allowlist would be dead bytes.
-        "required_fields": _missing_fields(flow, public_known),
+        # No task yet, no form: shown the landlord's fields, a "bonjour"
+        # was answered "quel type de propriété tu veux proposer ?".
+        "required_fields": (
+            [] if flow is FlowName.SUPPORT else _missing_fields(flow, public_known)
+        ),
         "schema": RESPONSE_SCHEMA,
     }
     # The price band anchors the magnitude of a bare number; once the rent is

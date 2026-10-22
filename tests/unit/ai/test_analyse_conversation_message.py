@@ -1775,6 +1775,9 @@ class TestSingleCallReply:
     ) -> None:
         """The single call can only ask the right next question and read a bare
         number if the prompt hands it the ordered form and the local rents."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_PROPERTY_TYPE
+        )
         model = StubModel(result=_model_result())
         use_case, _, _, _ = build(uow, session, message_id, model=model)
 
@@ -1799,6 +1802,26 @@ class TestSingleCallReply:
         assert "reply" in payload["schema"]["properties"]
         assert "standing" in payload["schema"]["properties"]["entities"]["properties"]
         assert payload["you_are_helping"]
+
+    async def test_a_greeting_outside_any_task_is_shown_no_form(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: shown the landlord's fields, "Hello comment tu vas"
+        was answered "quel type de propriété tu veux proposer ?"."""
+        model = StubModel(result=_model_result(intent="SUPPORT", entities={}))
+        use_case, _, _, _ = build(
+            uow, session, message_id, text="Hello comment tu vas", model=model
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert json.loads(model.prompts[0].user)["required_fields"] == []
+        assert "never assume whether they rent out or rent" in model.prompts[0].system
 
     async def test_the_prompt_omits_context_that_can_no_longer_be_used(
         self,
