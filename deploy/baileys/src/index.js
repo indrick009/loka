@@ -42,6 +42,7 @@ const {
   mediaDescriptorOf,
   uploadMedia,
 } = require('./media');
+const { createLidMap } = require('./lid-map');
 
 const PORT = Number(process.env.PORT || 3000);
 const AUTH_DIR = process.env.AUTH_DIR || path.join(process.cwd(), 'auth');
@@ -97,8 +98,9 @@ function rememberForRetry(message) {
 // inbound delivery carries both, so the mapping is learned here and reused to
 // answer on the same address WhatsApp used. Replying to the `@s.whatsapp.net`
 // form when the chat is LID-addressed is what leaves the recipient on
-// "waiting for this message".
-const lidByPhone = new Map();
+// "waiting for this message". Persisted on the auth volume (see lid-map.js):
+// held in memory only, a restart sent every reply to the wrong address.
+const lidByPhone = createLidMap(AUTH_DIR, { log });
 
 function rememberLid(phone, key) {
   if (!phone || !key) return;
