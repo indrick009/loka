@@ -481,7 +481,15 @@ def _inline_reply_fits(
     if _is_search(prompt_flow) is not _is_search(target):
         return False
     step = verdict.next_step
-    if step is None or step in _STEPS_THE_WRITER_MAY_REACH:
+    if step is None:
+        # Nothing moved while a form question is open, and nothing was
+        # recorded: the sentence cannot be about an answer. Observed live:
+        # "gardien oui parking non" came back a bare AFFIRMATIVE, and the
+        # writer asked an availability date the form never asks, then told the
+        # landlord "je publie" while the session still waited on the guard.
+        open_field = _field_for_step(session.step, target)
+        return open_field is None or bool(verdict.facts.facts)
+    if step in _STEPS_THE_WRITER_MAY_REACH:
         return True
     field = _field_for_step(step, target)
     if field is None:

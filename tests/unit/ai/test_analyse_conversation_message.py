@@ -1618,6 +1618,42 @@ class TestSingleCallReply:
 
         assert responder.calls == 1
 
+    async def test_an_inline_reply_on_a_turn_that_recorded_nothing_is_rewritten(
+        self,
+        uow: FakeUnitOfWork,
+        session: ConversationSession,
+        message_id: uuid.UUID,
+    ) -> None:
+        """Observed live: a bare AFFIRMATIVE on the security question let the
+        writer ask an availability date and then say "je publie", while the
+        session still waited on the guard."""
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=NOW, first_step=FlowStep.COLLECT_SECURITY
+        )
+        session.context.update({"property_type": "STUDIO", "next_question": "ask.security"})
+        responder = StubResponseModel(text="Y a-t-il un gardien, et un parking ?")
+        use_case, _, _, _ = build(
+            uow,
+            session,
+            message_id,
+            text="c'est bon comme ça",
+            model=StubModel(
+                result=_model_result(
+                    intent="AFFIRMATIVE",
+                    entities={},
+                    reply="C'est noté, je publie ton studio.",
+                )
+            ),
+            response_model=responder,
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert uow.events.staged[0].text == "Y a-t-il un gardien, et un parking ?"
+        assert session.context["next_question"] == "ask.security"
+
     async def test_an_inline_reply_that_moved_past_the_open_step_is_rewritten(
         self,
         uow: FakeUnitOfWork,

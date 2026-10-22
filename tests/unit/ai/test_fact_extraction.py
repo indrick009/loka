@@ -1063,3 +1063,25 @@ class TestSeveralLodgings:
 
         assert not facts.has("_next_lodgings")
         assert "_next_lodgings" in facts.rejected
+
+
+
+@pytest.mark.parametrize(
+    ("text", "amenities"),
+    [
+        ("gardien oui parking non", {"security": True, "parking": False}),
+        ("pas de gardien, parking oui", {"security": False, "parking": True}),
+        ("il y a un gardien", {"security": True}),
+        ("parking: oui", {"parking": True}),
+    ],
+)
+def test_the_guard_and_the_parking_are_read_by_a_rule(
+    text: str, amenities: dict[str, bool]
+) -> None:
+    """Observed live: "gardien oui parking non" came back from the model a bare
+    AFFIRMATIVE, and the form stood still on the security question."""
+    match = DeterministicClassifier().shortcut(text, pending="ask.security")
+
+    assert match is not None
+    assert match.intent == "COLLECT_SECURITY"
+    assert match.entities == {"amenities": amenities}

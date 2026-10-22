@@ -699,6 +699,14 @@ class DeterministicClassifier:
             entry = _entry_months(normalized)
             if entry is not None:
                 return DeterministicMatch(intent="COLLECT_ADVANCE", confidence=0.95, entities=entry)
+        if pending == "ask.security":
+            security = _security_answer(normalized)
+            if security is not None:
+                return DeterministicMatch(
+                    intent="COLLECT_SECURITY",
+                    confidence=0.95,
+                    entities={"amenities": security},
+                )
         if pending == "ask.charges" and _find_digits(normalized) is None:
             if _UTILITIES_INCLUDED.search(normalized):
                 return DeterministicMatch(
@@ -914,6 +922,19 @@ class DeterministicClassifier:
             .replace("\u2019", "'")
         )
         return re.sub(r"\s+", " ", folded)
+
+
+def _security_answer(normalized: str) -> dict[str, bool] | None:
+    """ "gardien oui parking non", "pas de gardien", "il y a un parking"."""
+    stated: dict[str, bool] = {}
+    for axis, word in (("security", "gardien"), ("parking", "parking")):
+        absent = rf"\b(pas de|sans|aucun|no)\s+{word}\b|\b{word}\s*:?\s*(non|no|pas)\b"
+        present = rf"\b{word}\s*:?\s*(oui|yes|ok)\b|\b(un|le|avec|a|y a)\s+{word}\b"
+        if re.search(absent, normalized):
+            stated[axis] = False
+        elif re.search(present, normalized):
+            stated[axis] = True
+    return stated or None
 
 
 def _find_digits(normalized: str) -> str | None:
