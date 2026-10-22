@@ -637,3 +637,60 @@ class TestAPlainYesToTheSummary:
     )
     def test_a_yes_with_a_but_or_a_question_does_not(self, text: str) -> None:
         assert not _confirms_the_summary(text)
+
+
+class TestSeveralLodgings:
+    """§5: two studios at 65 000 and a flat at 90 000 are two listings."""
+
+    async def test_the_next_lodging_opens_once_the_first_is_published(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_MEDIA,
+            property_id=uuid.uuid4(),
+            context={
+                "property_type": "STUDIO",
+                "rent": 65_000,
+                "quantity": 2,
+                "_next_lodgings": [
+                    {"property_type": "APARTMENT", "rent": 90_000, "quantity": 1}
+                ],
+            },
+        )
+        use_case, message_id, _, uow = _build(
+            session,
+            kind=MessageKind.IMAGE,
+            media_object_key="chat/abc/photo.jpg",
+            listing=FakeListing(),
+        )
+
+        report = await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert report.question_key == "ask.standing"
+        assert session.step is FlowStep.COLLECT_STANDING
+        assert session.assigned_property_id is None
+        assert session.context["property_type"] == "APARTMENT"
+        assert session.context["rent"] == 90_000
+        assert "_next_lodgings" not in session.context
+        [reply] = uow.events.staged
+        assert "Passons maintenant à ton appartement à 90 000 FCFA/mois" in reply.text
+
+    async def test_a_single_lodging_ends_on_published(self) -> None:
+        session = _session(
+            flow=FlowName.PROPERTY_CREATION,
+            step=FlowStep.COLLECT_MEDIA,
+            property_id=uuid.uuid4(),
+        )
+        use_case, message_id, _, _ = _build(
+            session,
+            kind=MessageKind.IMAGE,
+            media_object_key="chat/abc/photo.jpg",
+            listing=FakeListing(),
+        )
+
+        await use_case.execute(
+            AnalysisCommand(message_id=message_id, session_id=session.id), now=NOW
+        )
+
+        assert session.step is FlowStep.PUBLISHED

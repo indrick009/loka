@@ -95,6 +95,10 @@ PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
 # The advance is the one entry condition a tenant *can* answer — it is about
 # his own savings, not about the lodging — and §3 asks it: in this market the
 # months handed over up front rule out more lodgings than the rent does.
+# Session context key: the other lodgings a landlord described, still to be
+# published one at a time once the form under way is (§5).
+NEXT_LODGINGS_KEY = "_next_lodgings"
+
 SEARCH_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
     ("property_type", FlowStep.COLLECT_PROPERTY_TYPE),
     ("location", FlowStep.COLLECT_LOCATION),
@@ -351,6 +355,17 @@ class FactExtractor:
                 "advance_months",
                 lambda: RentMonths(months=_as_int(present["advance_months"])).months,
             )
+        if isinstance(present.get("lodgings"), list):
+            keep(NEXT_LODGINGS_KEY, lambda: self._build_lodgings(present["lodgings"]))
+            queued = facts.get(NEXT_LODGINGS_KEY)
+            if queued:
+                # The first lodging is the form under way: what the model did not
+                # also put in the flat fields is taken from it.
+                first = queued.pop(0)
+                for name, value in first.items():
+                    facts.setdefault(name, value)
+                if not queued:
+                    del facts[NEXT_LODGINGS_KEY]
         if "amenities" in present and _states_security(entities):
             # Step 9 is answered by either half of it: a landlord who says
             # "il y a un gardien" has answered, and so has one who says
@@ -457,6 +472,25 @@ class FactExtractor:
                 context={"amount": amount.amount, "ceiling": MAX_PLAUSIBLE_RENT_XAF},
             )
         return amount.amount
+
+    def _build_lodgings(self, raw: list[Any]) -> list[dict[str, Any]]:
+        """Each distinct lodging he described, validated like the form's fields.
+
+        One that does not validate drops the whole list: publishing the others
+        while silently forgetting one would leave a lodging nobody asked about.
+        """
+        lodgings: list[dict[str, Any]] = []
+        for item in raw:
+            if not isinstance(item, dict):
+                raise ValidationFailed("a lodging must be an object", context={"value": repr(item)})
+            lodging: dict[str, Any] = {
+                "property_type": PropertyType(str(item.get("property_type")).upper()).value,
+                "quantity": _build_quantity(item.get("quantity") or 1),
+            }
+            if item.get("price") is not None:
+                lodging["rent"] = self._build_rent(item["price"])
+            lodgings.append(lodging)
+        return lodgings
 
     @staticmethod
     def _build_rooms(entities: dict[str, Any]) -> dict[str, int]:

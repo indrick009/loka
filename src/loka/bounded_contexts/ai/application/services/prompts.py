@@ -123,6 +123,12 @@ SYSTEM_PROMPT = (
     "'neighbourhood'. When he adds one to those already known ('Logbessou "
     "aussi', 'also Logbessou'), 'neighbourhoods' lists the known ones too; when "
     "he replaces them ('plutôt Logbessou'), only the new one."
+    " A landlord who describes lodgings that differ by type or by rent ('deux "
+    "studios à 65 000 et un appartement à 90 000') is listing several: put each "
+    "distinct one in 'lodgings' in his order (identical ones are one entry with "
+    "their quantity), fill property_type, price and quantity with the first only, "
+    "and tell him in one short sentence that each is published separately, "
+    "starting with the first."
     " Set 'intent' to exactly one value from the 'intent' enum in 'schema' and nothing else. "
     "A greeting or small talk is SUPPORT; use UNKNOWN only when no listed intent "
     "applies at all."
@@ -383,6 +389,19 @@ RESPONSE_SCHEMA: dict[str, Any] = {
                 "advance_months": {"type": "integer"},
                 "deposit": {"type": "integer"},
                 "quantity": {"type": "integer"},
+                # A landlord's lodgings that differ by type or rent, in the
+                # order he gave them; each becomes its own listing (§5).
+                "lodgings": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "property_type": {"type": "string"},
+                            "price": {"type": "integer"},
+                            "quantity": {"type": "integer"},
+                        },
+                    },
+                },
                 # Which line of the result list the tenant picked, one-based.
                 "property_choice": {"type": "integer"},
                 "minimum_duration_months": {"type": "integer"},

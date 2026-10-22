@@ -1017,3 +1017,49 @@ class TestChargesBreakdown:
 
         assert not facts.has("charges")
         assert "charges" in facts.rejected
+
+
+class TestSeveralLodgings:
+    """§5: a different type or a different rent is another listing."""
+
+    def test_the_first_lodging_fills_the_form_and_the_others_wait(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "lodgings": [
+                    {"property_type": "studio", "price": 65_000, "quantity": 2},
+                    {"property_type": "apartment", "price": 90_000},
+                ]
+            }
+        )
+
+        assert facts.get("property_type") == "STUDIO"
+        assert facts.get("rent") == 65_000
+        assert facts.get("quantity") == 2
+        assert facts.get("_next_lodgings") == [
+            {"property_type": "APARTMENT", "quantity": 1, "rent": 90_000}
+        ]
+
+    def test_one_lodging_alone_queues_nothing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {"lodgings": [{"property_type": "studio", "price": 65_000}]}
+        )
+
+        assert facts.get("property_type") == "STUDIO"
+        assert not facts.has("_next_lodgings")
+
+    def test_a_lodging_that_does_not_validate_queues_nothing(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "lodgings": [
+                    {"property_type": "studio", "price": 65_000},
+                    {"property_type": "castle", "price": 90_000},
+                ]
+            }
+        )
+
+        assert not facts.has("_next_lodgings")
+        assert "_next_lodgings" in facts.rejected

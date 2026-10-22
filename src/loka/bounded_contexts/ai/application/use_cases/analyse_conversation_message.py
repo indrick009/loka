@@ -85,6 +85,12 @@ from loka.bounded_contexts.ai.application.services.negotiation_copy import (
     OFFER_QUESTION_KEY,
     read_offer_reply,
 )
+from loka.bounded_contexts.ai.application.services.other_lodgings import (
+    NEXT_LODGING_QUESTION,
+    NEXT_LODGINGS_KEY,
+    next_lodging_facts,
+    next_lodging_text,
+)
 from loka.bounded_contexts.ai.application.services.prompts import (
     build_analysis_prompt,
     build_reply_prompt,
@@ -1572,6 +1578,12 @@ class AnalyseConversationMessageUseCase:
                 availability_text or search_text or waiting_text or choice_text or listing_text
             )
             reply_text = platform_text or recap_text or reply_text
+            if next_step is FlowStep.PUBLISHED:
+                # His other lodgings (§5): the next form opens on the spot.
+                following = await self._open_next_lodging(session, now=now)
+                if following is not None:
+                    question = NEXT_LODGING_QUESTION
+                    reply_text = "\n".join(part for part in (reply_text, following) if part)
         else:
             # Not understood, but nothing he says now can be misfiled: the
             # demand is kept and no question is open. Observed live with the
@@ -2272,6 +2284,33 @@ class AnalyseConversationMessageUseCase:
         session.record_pending_question(asked)
         await self._sessions.save(session, expected_revision=observed)
         return asked
+
+    async def _open_next_lodging(
+        self, session: ConversationSession, *, now: datetime
+    ) -> str | None:
+        """Open the form of the next lodging he described, if any is waiting.
+
+        Type, rent and count are already known, so the form starts at the
+        standing; the rest of the list waits for this one in turn.
+        """
+        waiting = session.context.get(NEXT_LODGINGS_KEY)
+        if session.flow is not FlowName.PROPERTY_CREATION or not isinstance(waiting, list):
+            return None
+        lodgings = [lodging for lodging in waiting if isinstance(lodging, dict)]
+        if not lodgings:
+            return None
+        first, rest = lodgings[0], lodgings[1:]
+        observed = session.revision
+        session.start_flow(
+            FlowName.PROPERTY_CREATION, now=now, first_step=FlowStep.COLLECT_STANDING
+        )
+        session.merge_context(
+            {**next_lodging_facts(first), **({NEXT_LODGINGS_KEY: rest} if rest else {})},
+            now=now,
+        )
+        session.record_pending_question(NEXT_LODGING_QUESTION)
+        await self._sessions.save(session, expected_revision=observed)
+        return next_lodging_text(first, session.language)
 
     async def _budget_decision(
         self, user_id: uuid.UUID | None, now: datetime
