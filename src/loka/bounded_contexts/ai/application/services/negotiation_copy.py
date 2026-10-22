@@ -23,6 +23,7 @@ _AMOUNT = re.compile(r"(?<![\d.])(\d[\d\s.\u202f]*\d|\d)\s*(mil|mille|k)?\b")
 
 _TEXT: dict[str, dict[str, str]] = {
     "fr": {
+        "about": "Pour votre annonce : {lodging}",
         "intro": "Le logement est encore disponible ? Un locataire aimerait visiter.",
         "rent": "{rent} FCFA par mois au lieu de {asked}",
         "advance": "{months} mois d'avance au lieu de {asked}",
@@ -42,6 +43,7 @@ _TEXT: dict[str, dict[str, str]] = {
         "advance_terms": "{months} mois d'avance",
     },
     "en": {
+        "about": "About your listing: {lodging}",
         "intro": "Is the place still available? A tenant would like to visit.",
         "rent": "{rent} FCFA a month instead of {asked}",
         "advance": "{months} months of advance instead of {asked}",
@@ -84,6 +86,17 @@ def landlord_offer_text(offer: Mapping[str, Any], language: str) -> str:
         )
     ask = words["ask"].format(terms=words["and"].join(terms))
     return "\n".join((words["intro"], ask, words["how"]))
+
+
+def naming_the_lodging(question: str, lodging: str | None, language: str) -> str:
+    """The availability question, preceded by which listing it is about.
+
+    A landlord with several listings could not tell which one "le logement"
+    meant. The spec's sentence stays as it is, under the line that names it.
+    """
+    if not lodging:
+        return question
+    return f"{_words(language)['about'].format(lodging=lodging)}\n{question}"
 
 
 def read_offer_reply(text: str | None) -> dict[str, Any] | None:

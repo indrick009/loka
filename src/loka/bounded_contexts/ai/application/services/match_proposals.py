@@ -168,6 +168,15 @@ def match_proposal_line(
     return f"{number}. {_line(proposal, language, words)}"
 
 
+def lodging_label(proposal: Mapping[str, Any], language: str) -> str:
+    """ "Studio - Ékounou, Yaoundé - 65 000 FCFA/mois", unnumbered.
+
+    The words the tenant read, so the landlord asked about this lodging reads
+    the same description of it.
+    """
+    return _line(proposal, language, _WORDS.get(language, _WORDS["fr"]))
+
+
 def match_proposal_caption(
     line: str, *, index: int, total: int, language: str
 ) -> str:

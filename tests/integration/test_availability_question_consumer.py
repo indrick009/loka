@@ -171,8 +171,11 @@ async def test_the_landlord_receives_the_question_on_his_own_thread(
     payload = dict(staged.payload["metadata"])
     assert payload["recipient_phone"] == LANDLORD_PHONE
     assert payload["question_key"] == "ask.availability_check"
-    # No model-written sentence: the wording of this question is the rule.
-    assert payload["text"] is None
+    # Platform text, never the model's: the wording of this question is the
+    # rule. No listing in the catalogue here, so nothing names it.
+    assert payload["text"].startswith(
+        "Le logement est encore disponible ? Un locataire aimerait visiter."
+    )
 
 
 async def test_a_landlord_profile_nobody_owns_is_parked_not_retried(

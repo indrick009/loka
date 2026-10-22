@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pytest
 
+from loka.bounded_contexts.ai.application.services.match_proposals import lodging_label
 from loka.bounded_contexts.ai.application.services.negotiation_copy import (
     landlord_offer_text,
+    naming_the_lodging,
     read_offer_reply,
     tenant_offer_text,
 )
@@ -64,3 +66,25 @@ def test_the_tenant_hears_the_outcome(reply: dict[str, object], said: str) -> No
     text = tenant_offer_text(OFFER, reply, "fr")
 
     assert text is not None and said in text
+
+
+def test_the_question_names_the_lodging_it_is_about() -> None:
+    """A landlord with several listings could not tell which one was meant."""
+    lodging = lodging_label(
+        {"property_type": "STUDIO", "neighbourhood": "Ékounou", "city": "Yaoundé",
+         "rent_xaf": 65_000},
+        "fr",
+    )
+
+    text = naming_the_lodging("Le logement est encore disponible ?", lodging, "fr")
+
+    assert text == (
+        "Pour votre annonce : Studio - Ékounou, Yaoundé - 65 000 FCFA/mois\n"
+        "Le logement est encore disponible ?"
+    )
+
+
+def test_a_listing_that_cannot_be_named_leaves_the_question_alone() -> None:
+    assert naming_the_lodging("Le logement est encore disponible ?", None, "fr") == (
+        "Le logement est encore disponible ?"
+    )

@@ -20,9 +20,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from loka.bounded_contexts.ai.application.services.match_proposals import lodging_label
 from loka.bounded_contexts.ai.application.services.negotiation_copy import (
     OFFER_QUESTION_KEY,
     landlord_offer_text,
+    naming_the_lodging,
 )
 from loka.bounded_contexts.landlord.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.bounded_contexts.messaging.domain.events.message_events import (
@@ -34,6 +36,8 @@ from loka.bounded_contexts.messaging.infrastructure.composition import (
 from loka.bounded_contexts.property.application.use_cases.check_availability import (
     LANDLORD_QUESTION_KEY,
 )
+from loka.bounded_contexts.property.domain.entities.property import Property
+from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import ConsumerBase, PermanentHandlerError
 from loka.shared.infrastructure.broker.topology import Broker, QueueSpec
 from loka.shared.infrastructure.composition import unit_of_work
@@ -78,6 +82,22 @@ class AvailabilityQuestionConsumer(ConsumerBase):
                     f"landlord {account_id} has no conversation to be asked in"
                 )
 
+            listing: Property | None = await uow.repository("property").get(property_id)
+            question = (
+                landlord_offer_text(offer, session.language)
+                if offer
+                else render_reply(
+                    reply_kind="QUESTION",
+                    question_key=LANDLORD_QUESTION_KEY,
+                    language=session.language,
+                )
+            )
+            text = naming_the_lodging(
+                question,
+                lodging_label(_as_proposal(listing), session.language) if listing else None,
+                session.language,
+            )
+
             # His next message answers this question, whatever form he was in
             # the middle of: left on his photo question, "oui, toujours
             # disponible" was read as small talk and the tenant never released.
@@ -100,7 +120,7 @@ class AvailabilityQuestionConsumer(ConsumerBase):
                         # No model-written sentence: the wording of this
                         # question *is* the business rule, and a rephrased
                         # version asks something slightly different.
-                        text=landlord_offer_text(offer, session.language) if offer else None,
+                        text=text,
                         intent="AVAILABILITY_CHECK",
                         language=session.language,
                     )
@@ -118,6 +138,21 @@ class AvailabilityQuestionConsumer(ConsumerBase):
             landlord_id=str(landlord_profile_id),
             session_id=str(session.id),
         )
+
+
+def _as_proposal(listing: Property) -> dict[str, Any]:
+    """The listing in the shape the tenant's list describes it from."""
+    location = listing.location
+    coordinates = location.coordinates if location else None
+    price = listing.public_price
+    return {
+        "property_type": listing.property_type.value if listing.property_type else None,
+        "city": location.city if location else None,
+        "neighbourhood": (location.neighbourhood or None) if location else None,
+        "latitude": coordinates.latitude if coordinates else None,
+        "longitude": coordinates.longitude if coordinates else None,
+        "rent_xaf": price.amount if price else None,
+    }
 
 
 def _uuid_field(payload: dict[str, Any], name: str) -> uuid.UUID:
