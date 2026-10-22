@@ -203,6 +203,12 @@ def _as_gap(demand: TenantDemand, proposal: dict[str, Any]) -> dict[str, Any]:
         point=point,
         advance_months=proposal.get("advance_months"),
     )
+    # Found by the wider search yet differing in nothing he would read: it is
+    # a match, and announcing it as a near miss told him the opposite.
+    if not gap.get("over_budget_xaf") and not gap.get("over_advance_months") and (
+        gap.get("distance_km") or 0
+    ) < 0.5:
+        return proposal
     return {**proposal, "gap": gap}
 
 

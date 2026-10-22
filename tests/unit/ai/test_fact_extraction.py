@@ -1085,3 +1085,18 @@ def test_the_guard_and_the_parking_are_read_by_a_rule(
     assert match is not None
     assert match.intent == "COLLECT_SECURITY"
     assert match.entities == {"amenities": amenities}
+
+
+def test_a_typed_district_takes_the_gazetteer_spelling(extractor: FactExtractor) -> None:
+    """Observed live: a tenant's "Ekounou" never matched the "Ékounou" named
+    from the landlord's pin, and an exact match was offered as a near miss."""
+    facts = extractor.validate({"city": "Yaoundé", "neighbourhood": "Ekounou"})
+
+    assert facts.get("location")["neighbourhood"] == "Ékounou"
+
+
+def test_a_district_is_never_respelt_through_an_alias(extractor: FactExtractor) -> None:
+    """"Makepe" is a whole area; its alias names one part of it."""
+    facts = extractor.validate({"city": "Douala", "neighbourhood": "Makepe"})
+
+    assert facts.get("location")["neighbourhood"] == "Makepe"

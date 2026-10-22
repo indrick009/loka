@@ -533,3 +533,21 @@ class TestTheAdvanceHeCanPay:
         exact, wider = search.calls
         assert exact.max_advance_months == 3
         assert wider.max_advance_months == 5
+
+
+async def test_a_wider_find_that_differs_in_nothing_is_a_match() -> None:
+    """Observed live: found by the wider search, "Je n'ai rien trouvé qui
+    corresponde exactement" was said of a lodging matching on every point."""
+    demand = a_demand(neighbourhoods=("Jouvence",))
+    hit = {
+        "property_id": str(uuid.uuid4()),
+        "type": "STUDIO",
+        "city": "Yaoundé",
+        "neighbourhood": "Jouvence",
+        "price_xaf": 45_000,
+    }
+    uow = FakeUnitOfWork(FakeDemands(demand), FakeProperties(), _NothingExact([hit]))
+
+    await MatchTenantDemandsUseCase(uow).for_demand(demand.id, now=NOW)
+
+    assert "gap" not in answered_proposals(demand)[0]

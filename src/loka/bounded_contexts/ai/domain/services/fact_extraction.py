@@ -17,6 +17,7 @@ from typing import Any
 
 from loka.bounded_contexts.ai.domain.knowledge import market
 from loka.bounded_contexts.ai.domain.knowledge.places import (
+    canonical_district,
     district_centre,
     nearest_district,
 )
@@ -522,6 +523,10 @@ class FactExtractor:
             raise ValidationFailed(
                 "no city was extracted", context={"entities": sorted(entities)}
             )
+        # One spelling per district, the gazetteer's, so a typed "Ekounou" and
+        # an "Ékounou" named from a pin are the same place to the matching.
+        accepted = [canonical_district(name, city=city) or name for name in accepted]
+        neighbourhood_text = accepted[0] if accepted else ""
         if not neighbourhood_text and coordinates is not None:
             # A pin with no place name: the nearest known district names it,
             # so a tenant reads "Studio - Odza" rather than "Studio - Yaoundé".
