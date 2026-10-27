@@ -178,8 +178,6 @@ SUPPORTED_INTENTS = frozenset(
         "COLLECT_SEARCH_CRITERIA",
         "PROPERTY_SEARCH",
         "AVAILABILITY_CHECK",
-        "TENANT_ONBOARDING",
-        "REPORT_FLOW",
         "SUPPORT",
         "UNKNOWN",
     }
