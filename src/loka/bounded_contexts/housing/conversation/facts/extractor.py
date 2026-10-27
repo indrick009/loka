@@ -8,7 +8,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.housing.conversation.facts.facts import (
+from loka.bounded_contexts.conversation.domain.services.extracted_facts import (
     ExtractedFacts,
 )
 from loka.bounded_contexts.housing.conversation.facts.forms import (

@@ -8,11 +8,11 @@ place to refuse them is here, in code, with one rule for every source.
 
 Refused fields are dropped, never repaired. The conversation asks again."""
 
+from loka.bounded_contexts.conversation.domain.services.extracted_facts import (
+    ExtractedFacts,
+)
 from loka.bounded_contexts.housing.conversation.facts.extractor import (
     FactExtractor,
-)
-from loka.bounded_contexts.housing.conversation.facts.facts import (
-    ExtractedFacts,
 )
 from loka.bounded_contexts.housing.conversation.facts.forms import (
     NEXT_LODGINGS_KEY,

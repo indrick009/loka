@@ -25,6 +25,10 @@ class FlowName(StrEnum):
     AVAILABILITY_CHECK = "AVAILABILITY_CHECK"
     PROPERTY_SEARCH = "PROPERTY_SEARCH"
     SUPPORT = "SUPPORT"
+    # Food: a restaurateur registering and publishing today's menu, and a
+    # client looking for a dish cooking today.
+    FOOD_RESTAURANT = "FOOD_RESTAURANT"
+    FOOD_SEARCH = "FOOD_SEARCH"
 
 
 class FlowStep(StrEnum):
@@ -66,6 +70,9 @@ class FlowStep(StrEnum):
     AWAITING_PAYMENT = "AWAITING_PAYMENT"
     COLLECT_ACQUISITION_SOURCE = "COLLECT_ACQUISITION_SOURCE"
     DONE = "DONE"
+    COLLECT_RESTAURANT_NAME = "COLLECT_RESTAURANT_NAME"
+    COLLECT_MENU = "COLLECT_MENU"
+    COLLECT_DISH_CHOICE = "COLLECT_DISH_CHOICE"
 
 
 class SessionStatus(StrEnum):
