@@ -9,15 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
-    DeterministicClassifier,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.domain.knowledge import market
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     FLOW_BY_OPENING_INTENT,
     MAX_PLAUSIBLE_RENT_XAF,
     MIN_PLAUSIBLE_RENT_XAF,
@@ -27,6 +23,10 @@ from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     is_supported_intent,
     question_key_for,
 )
+from loka.bounded_contexts.housing.conversation.rules import (
+    DeterministicClassifier,
+)
+from loka.shared.domain.knowledge import market
 
 pytestmark = pytest.mark.unit
 

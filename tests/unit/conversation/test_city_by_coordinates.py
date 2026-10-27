@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.domain.knowledge import market
+from loka.shared.domain.knowledge import market
 
 
 class TestResolveCityByCoordinates:

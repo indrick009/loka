@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.patterns import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.facts import (
+    MIN_PLAUSIBLE_RENT_XAF,
+)
+from loka.bounded_contexts.housing.conversation.rules.patterns import (
     _ADDS_A_PLACE,
     ADDS_NEIGHBOURHOODS,
     AMOUNT_PATTERN,
@@ -20,10 +23,7 @@ from loka.bounded_contexts.conversation.application.services.deterministic_class
     SHORTHAND_THOUSAND_PATTERN,
     SURFACE_PATTERN,
 )
-from loka.bounded_contexts.conversation.domain.knowledge import market
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
-    MIN_PLAUSIBLE_RENT_XAF,
-)
+from loka.shared.domain.knowledge import market
 
 
 def _extract_entities(normalized: str) -> dict[str, object]:

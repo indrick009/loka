@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from loka.bounded_contexts.conversation.domain.knowledge import market
 from loka.bounded_contexts.housing.domain.value_objects.enums import (
     PropertyStanding,
 )
 from loka.shared.domain.errors import ValidationFailed
+from loka.shared.domain.knowledge import market
 
 _AMENITY_AXES = ("parking", "water", "electricity", "internet", "security")
 

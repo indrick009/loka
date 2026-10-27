@@ -26,7 +26,7 @@ from loka.bounded_contexts.conversation.domain.events.message_events import (
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     FLOW_BY_OPENING_INTENT,
     ExtractedFacts,
     question_to_ask,

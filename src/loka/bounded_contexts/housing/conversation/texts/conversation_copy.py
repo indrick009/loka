@@ -23,7 +23,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     ConversationPropertyHit,
     ConversationSearchQuery,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import MAX_RESULT_CHOICES
+from loka.bounded_contexts.housing.conversation.facts import MAX_RESULT_CHOICES
 
 # The quality gate reports stable codes; the user gets words. Kept here rather
 # than in the outbound layer because the list is dynamic and cannot be a fixed

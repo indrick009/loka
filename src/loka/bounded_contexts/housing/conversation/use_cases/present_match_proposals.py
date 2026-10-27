@@ -34,7 +34,6 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.events.message_events import (
     WhatsAppMessageSendRequested,
 )
-from loka.bounded_contexts.conversation.domain.knowledge.places import nearest_district
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
 )
@@ -45,6 +44,7 @@ from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
     match_proposals_text,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.domain.knowledge.places import nearest_district
 
 CHOICE_QUESTION_KEY = "ask.search_choice"
 

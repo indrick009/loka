@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.answer_readers import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.facts import (
+    MAX_RESULT_CHOICES,
+    MIN_PLAUSIBLE_RENT_XAF,
+)
+from loka.bounded_contexts.housing.conversation.rules.answer_readers import (
     _entry_months,
     _security_answer,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.answer_rules import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.answer_rules import (
     _BILLABLE_ANSWER_FIELDS,
     _DATE_ANSWER_PATTERN,
     _DURATION_ANSWER_PATTERN,
@@ -20,25 +24,21 @@ from loka.bounded_contexts.conversation.application.services.deterministic_class
     _UTILITIES_EXTRA,
     _UTILITIES_INCLUDED,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.match import (
+from loka.bounded_contexts.housing.conversation.rules.match import (
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.text import (
+from loka.bounded_contexts.housing.conversation.rules.text import (
     _find_amount,
     _find_digits,
     _parse_amount,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.vocabulary import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.vocabulary import (
     _DENIALS,
     _NO_MEANS,
     _ONE_ONLY,
     _YES_MEANS,
     AFFIRMATIVE,
     NEGATIVE,
-)
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
-    MAX_RESULT_CHOICES,
-    MIN_PLAUSIBLE_RENT_XAF,
 )
 
 

@@ -12,24 +12,24 @@ Two entry points, with different jobs:
 Anything neither can resolve returns ``None``, which is the signal to fall back
 rather than guess."""
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.classifier import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.classifier import (
     DeterministicClassifier,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.match import (
+from loka.bounded_contexts.housing.conversation.rules.match import (
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.patterns import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.patterns import (
     ADDS_NEIGHBOURHOODS,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.pending import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.pending import (
     denial_answer,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.reading import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.reading import (
     classify,
     shortcut,
     shorthand_amount,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.vocabulary import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.vocabulary import (
     AFFIRMATIVE,
     NEGATIVE,
 )

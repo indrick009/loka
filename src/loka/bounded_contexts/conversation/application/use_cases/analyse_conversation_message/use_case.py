@@ -42,9 +42,6 @@ from loka.bounded_contexts.conversation.application.ports import (
     UnlockPayments,
 )
 from loka.bounded_contexts.conversation.application.services.decision_shadow import DecisionShadow
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
-    DeterministicClassifier,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
 )
@@ -79,8 +76,11 @@ from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repo
     InboundMessageRepository,
     StoredInboundMessage,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     FactExtractor,
+)
+from loka.bounded_contexts.housing.conversation.rules import (
+    DeterministicClassifier,
 )
 from loka.bounded_contexts.housing.conversation.turns.location import (
     shared_location,

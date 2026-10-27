@@ -5,16 +5,16 @@ from __future__ import annotations
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.ports import Exchange, TurnSummary
-from loka.bounded_contexts.conversation.application.services.prompts.topics import (
-    question_topic,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     PROPERTY_REQUIREMENTS,
     SEARCH_REQUIREMENTS,
     question_key_for,
+)
+from loka.bounded_contexts.housing.conversation.texts.question_topics import (
+    question_topic,
 )
 
 # Keys the pipeline keeps in the session for its own use, never for the model:

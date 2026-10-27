@@ -29,7 +29,7 @@ from loka.bounded_contexts.conversation.application.services.prompts import buil
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import ExtractedFacts
+from loka.bounded_contexts.housing.conversation.facts import ExtractedFacts
 
 pytestmark = pytest.mark.unit
 

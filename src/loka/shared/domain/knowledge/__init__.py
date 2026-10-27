@@ -16,7 +16,7 @@ Confidence vocabulary:
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.domain.knowledge.market import (
+from loka.shared.domain.knowledge.market import (
     CITY_ALIASES,
     EXPRESSIONS,
     NEIGHBOURHOODS,

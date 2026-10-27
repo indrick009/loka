@@ -7,7 +7,7 @@ from loka.bounded_contexts.conversation.application.services.prompts.persona imp
     PERSONA,
     PRICE_REFERENCE_RULE,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     SUPPORTED_INTENTS,
 )
 

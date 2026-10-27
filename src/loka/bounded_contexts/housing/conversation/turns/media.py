@@ -23,8 +23,8 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import LISTING_FLOWS
 from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import MessageKind
+from loka.bounded_contexts.housing.conversation.facts import LISTING_FLOWS
 from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
     media_kept_text,
     media_received_text,

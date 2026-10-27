@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import Any
 
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowStep
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import ExtractedFacts
+from loka.bounded_contexts.housing.conversation.facts import ExtractedFacts
 
 USE_CASE = "analyse_conversation_message"
 

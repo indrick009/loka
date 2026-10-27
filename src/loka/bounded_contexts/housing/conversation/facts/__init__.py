@@ -8,26 +8,26 @@ place to refuse them is here, in code, with one rule for every source.
 
 Refused fields are dropped, never repaired. The conversation asks again."""
 
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.extractor import (
+from loka.bounded_contexts.housing.conversation.facts.extractor import (
     FactExtractor,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.facts import (
+from loka.bounded_contexts.housing.conversation.facts.facts import (
     ExtractedFacts,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.forms import (
+from loka.bounded_contexts.housing.conversation.facts.forms import (
     NEXT_LODGINGS_KEY,
     PROPERTY_REQUIREMENTS,
     SEARCH_REQUIREMENTS,
     question_key_for,
     question_to_ask,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.intents import (
+from loka.bounded_contexts.housing.conversation.facts.intents import (
     FLOW_BY_OPENING_INTENT,
     LISTING_FLOWS,
     SUPPORTED_INTENTS,
     is_supported_intent,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.limits import (
+from loka.bounded_contexts.housing.conversation.facts.limits import (
     MAX_PLAUSIBLE_RENT_XAF,
     MAX_RESULT_CHOICES,
     MIN_ACCEPTED_CONFIDENCE,

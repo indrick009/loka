@@ -12,7 +12,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import NEXT_LODGINGS_KEY
+from loka.bounded_contexts.housing.conversation.facts import NEXT_LODGINGS_KEY
 from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
     property_type_label,
 )

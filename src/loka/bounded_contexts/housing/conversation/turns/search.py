@@ -15,7 +15,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     ConversationSession,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     SEARCH_REQUIREMENTS,
     ExtractedFacts,
 )

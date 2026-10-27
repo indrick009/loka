@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.domain.knowledge import market
+from loka.shared.domain.knowledge import market
 
 # Both prompts below can write the sentence a user reads, so the identity lives
 # in one place. When only one of them carried a name, the assistant introduced

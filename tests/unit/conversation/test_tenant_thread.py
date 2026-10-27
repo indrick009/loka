@@ -24,12 +24,12 @@ from typing import Any
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
-    DeterministicClassifier,
-)
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     MAX_RESULT_CHOICES,
     FactExtractor,
+)
+from loka.bounded_contexts.housing.conversation.rules import (
+    DeterministicClassifier,
 )
 
 pytestmark = pytest.mark.unit

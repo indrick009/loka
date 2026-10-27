@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.answer_rules import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.answer_rules import (
     _ANY_MONTHS,
     _CAUTION_MONTHS,
     _MAX_ENTRY_MONTHS,

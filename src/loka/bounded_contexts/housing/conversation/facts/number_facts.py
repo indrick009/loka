@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.limits import (
+from loka.bounded_contexts.housing.conversation.facts.limits import (
     MAX_PLAUSIBLE_RENT_XAF,
     MAX_RESULT_CHOICES,
 )

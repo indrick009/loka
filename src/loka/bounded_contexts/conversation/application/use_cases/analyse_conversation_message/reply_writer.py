@@ -20,7 +20,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     ConversationSession,
 )
 from loka.bounded_contexts.conversation.domain.services.ai_provider import LlmUsage
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import question_to_ask
+from loka.bounded_contexts.housing.conversation.facts import question_to_ask
 from loka.shared.domain.errors import DomainError
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import llm_calls_total

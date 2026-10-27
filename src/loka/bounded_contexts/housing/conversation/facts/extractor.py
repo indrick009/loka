@@ -8,20 +8,20 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.facts import (
+from loka.bounded_contexts.housing.conversation.facts.facts import (
     ExtractedFacts,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.forms import (
+from loka.bounded_contexts.housing.conversation.facts.forms import (
     NEXT_LODGINGS_KEY,
     PROPERTY_REQUIREMENTS,
     SEARCH_REQUIREMENTS,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.intents import (
+from loka.bounded_contexts.housing.conversation.facts.intents import (
     FLOW_BY_OPENING_INTENT,
     LISTING_FLOWS,
     LISTING_INTENTS,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.lodging_facts import (
+from loka.bounded_contexts.housing.conversation.facts.lodging_facts import (
     _build_amenities,
     _build_availability,
     _build_conditions,
@@ -29,7 +29,7 @@ from loka.bounded_contexts.conversation.domain.services.fact_extraction.lodging_
     _build_standing,
     _states_security,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.number_facts import (
+from loka.bounded_contexts.housing.conversation.facts.number_facts import (
     _as_int,
     _build_charges,
     _build_choice,
@@ -37,7 +37,7 @@ from loka.bounded_contexts.conversation.domain.services.fact_extraction.number_f
     _build_rent,
     _build_rooms,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction.place_facts import (
+from loka.bounded_contexts.housing.conversation.facts.place_facts import (
     _build_location,
     _clean_hint,
     _resolve_location_hint,

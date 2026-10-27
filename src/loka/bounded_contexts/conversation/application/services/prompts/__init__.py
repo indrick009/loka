@@ -27,7 +27,7 @@ from loka.bounded_contexts.conversation.application.services.prompts.sanitize im
 from loka.bounded_contexts.conversation.application.services.prompts.state import (
     exchanges_as_json,
 )
-from loka.bounded_contexts.conversation.application.services.prompts.topics import (
+from loka.bounded_contexts.housing.conversation.texts.question_topics import (
     question_topic,
 )
 

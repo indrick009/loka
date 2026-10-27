@@ -33,7 +33,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     question_key_for,
     question_to_ask,
 )

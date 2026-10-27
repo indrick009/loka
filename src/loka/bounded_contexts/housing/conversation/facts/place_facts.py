@@ -4,17 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.conversation.domain.knowledge import market
-from loka.bounded_contexts.conversation.domain.knowledge.places import (
-    canonical_district,
-    district_centre,
-    nearest_district,
-)
 from loka.bounded_contexts.housing.domain.value_objects.location import (
     Coordinates,
     Location,
 )
 from loka.shared.domain.errors import ValidationFailed
+from loka.shared.domain.knowledge import market
+from loka.shared.domain.knowledge.places import (
+    canonical_district,
+    district_centre,
+    nearest_district,
+)
 
 
 def _accepted_neighbourhoods(main: str, listed: Any) -> list[str]:

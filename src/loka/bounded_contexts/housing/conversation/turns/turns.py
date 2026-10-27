@@ -18,10 +18,6 @@ from loka.bounded_contexts.conversation.application.ports import (
     TenantDemands,
     UnlockPayments,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
-    DeterministicClassifier,
-    DeterministicMatch,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     known_facts,
 )
@@ -36,6 +32,10 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.rules import (
+    DeterministicClassifier,
+    DeterministicMatch,
 )
 from loka.bounded_contexts.housing.conversation.texts.demand_reminder import (
     STILL_SEARCHING_KEY,

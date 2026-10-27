@@ -14,7 +14,7 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+from loka.bounded_contexts.housing.conversation.facts import (
     MIN_ACCEPTED_CONFIDENCE,
     FactExtractor,
     is_supported_intent,

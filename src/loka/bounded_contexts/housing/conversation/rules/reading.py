@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.answer_rules import (  # noqa: E501
+from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
+from loka.bounded_contexts.housing.conversation.facts import (
+    MIN_PLAUSIBLE_RENT_XAF,
+)
+from loka.bounded_contexts.housing.conversation.rules.answer_rules import (
     _BARE_AMOUNT_PATTERN,
     _UNIT_BOUND_QUESTIONS,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.match import (
+from loka.bounded_contexts.housing.conversation.rules.match import (
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.patterns import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.patterns import (
     _ACQUISITION_QUESTION,
     _LANDLORD_OWNERSHIP_PATTERN,
     ACQUISITION_SOURCE_PATTERNS,
@@ -20,27 +24,23 @@ from loka.bounded_contexts.conversation.application.services.deterministic_class
     SHORTHAND_MILLION_PATTERN,
     SHORTHAND_THOUSAND_PATTERN,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.pending import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.pending import (
     _no_to_a_form_question,
     _standing_reply,
     _yes_to_a_form_question,
     pending_answer,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.text import (
+from loka.bounded_contexts.housing.conversation.rules.text import (
     _extract_entities,
     _first_match,
     _normalize,
     _parse_amount,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.vocabulary import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.vocabulary import (
     _NO_MEANS,
     AFFIRMATIVE,
     GREETINGS,
     NEGATIVE,
-)
-from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
-    MIN_PLAUSIBLE_RENT_XAF,
 )
 
 

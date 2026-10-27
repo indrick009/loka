@@ -15,16 +15,16 @@ from loka.bounded_contexts.conversation.application.services.prompts.state impor
 from loka.bounded_contexts.conversation.application.services.prompts.system import (
     REPLY_SYSTEM_PROMPT,
 )
-from loka.bounded_contexts.conversation.application.services.prompts.topics import (
-    _FLOW_ROLES,
-    question_topic,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
 )
 from loka.bounded_contexts.conversation.domain.services.ai_provider import (
     SUPPORTED_LANGUAGES,
     Prompt,
+)
+from loka.bounded_contexts.housing.conversation.texts.question_topics import (
+    _FLOW_ROLES,
+    question_topic,
 )
 
 

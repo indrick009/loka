@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
-    ADDS_NEIGHBOURHOODS,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
-from loka.bounded_contexts.conversation.domain.knowledge import market
+from loka.bounded_contexts.housing.conversation.rules import (
+    ADDS_NEIGHBOURHOODS,
+)
+from loka.shared.domain.knowledge import market
 
 
 def neighbourhood_from_label(label: str | None) -> str | None:

@@ -8,12 +8,12 @@ network call, no position leaving the platform.
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.domain.knowledge.districts import (
+from loka.shared.domain.knowledge.districts import (
     ALIASES,
     DISTRICTS,
     District,
 )
-from loka.bounded_contexts.conversation.domain.knowledge.market import distance_km, normalize
+from loka.shared.domain.knowledge.market import distance_km, normalize
 
 # A pin further than this from every known centre is on the outskirts: naming
 # the nearest district would place it somewhere it is not.

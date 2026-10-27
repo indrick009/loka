@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
+from loka.bounded_contexts.housing.conversation.rules import (
     DeterministicClassifier,
     DeterministicMatch,
 )

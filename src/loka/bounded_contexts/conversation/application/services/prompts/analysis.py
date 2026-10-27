@@ -21,11 +21,6 @@ from loka.bounded_contexts.conversation.application.services.prompts.state impor
 from loka.bounded_contexts.conversation.application.services.prompts.system import (
     SYSTEM_PROMPT,
 )
-from loka.bounded_contexts.conversation.application.services.prompts.topics import (
-    _FIELD_FOR_QUESTION,
-    _FLOW_ROLES,
-    question_topic,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
@@ -33,6 +28,11 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.services.ai_provider import (
     SUPPORTED_LANGUAGES,
     Prompt,
+)
+from loka.bounded_contexts.housing.conversation.texts.question_topics import (
+    _FIELD_FOR_QUESTION,
+    _FLOW_ROLES,
+    question_topic,
 )
 
 

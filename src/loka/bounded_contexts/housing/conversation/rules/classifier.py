@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.match import (
+from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
+from loka.bounded_contexts.housing.conversation.rules.match import (
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.pending import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.pending import (
     denial_answer,
     pending_answer,
 )
-from loka.bounded_contexts.conversation.application.services.deterministic_classifier.reading import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.rules.reading import (
     classify,
     shortcut,
     shorthand_amount,
     to_intent_result,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
 
 
 class DeterministicClassifier:
