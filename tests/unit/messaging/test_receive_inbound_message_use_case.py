@@ -104,9 +104,13 @@ class FakeUserProvisioning:
         self._user_id = user_id
         self.calls = 0
         self.created: list[uuid.UUID] = []
+        self.names: list[str | None] = []
 
-    async def ensure_user(self, phone: PhoneNumber, *, now: datetime) -> uuid.UUID:
+    async def ensure_user(
+        self, phone: PhoneNumber, *, now: datetime, display_name: str | None = None
+    ) -> uuid.UUID:
         self.calls += 1
+        self.names.append(display_name)
         if self._user_id is None:
             self._user_id = uuid.uuid4()
             self.created.append(self._user_id)
@@ -265,6 +269,23 @@ async def test_an_unknown_sender_is_registered_on_first_contact() -> None:
     assert receipt.sender_user_id is not None
     assert h.users.created == [receipt.sender_user_id]
     assert receipt.session_id is not None
+
+
+async def test_the_whatsapp_profile_name_names_the_account() -> None:
+    h = _harness(user_id=None)
+
+    await h.use_case.execute(_command(metadata={"pushName": "  Paul   Mbarga "}), now=NOW)
+
+    assert h.users.names == ["Paul Mbarga"]
+
+
+@pytest.mark.parametrize("push_name", [None, "", "👑", ".", "237 699", "🔥🔥 A"])
+async def test_a_profile_name_that_is_not_a_name_is_dropped(push_name: object) -> None:
+    h = _harness(user_id=None)
+
+    await h.use_case.execute(_command(metadata={"pushName": push_name}), now=NOW)
+
+    assert h.users.names == [None]
 
 
 async def test_the_first_message_opens_a_session() -> None:

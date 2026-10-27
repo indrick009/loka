@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from loka.bounded_contexts.identity.application.ports import UserProvisioning
+from loka.bounded_contexts.identity.domain.entities.user import whatsapp_name
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -143,7 +144,13 @@ class ReceiveInboundMessageUseCase:
         # holds the number, so no separate sign-up is needed. The account is
         # created in this same transaction, after the dedupe check, so a
         # redelivery cannot mint a second one.
-        user_id = await self._users.ensure_user(phone, now=received_at)
+        # The WhatsApp profile name, when it reads as a name, names an account
+        # that has none — what lets Kora greet him without asking.
+        user_id = await self._users.ensure_user(
+            phone,
+            now=received_at,
+            display_name=whatsapp_name(command.metadata.get("pushName")),
+        )
         session = await self._resolve_session(phone, user_id=user_id, now=received_at)
 
         await self._inbound.attach_conversation(

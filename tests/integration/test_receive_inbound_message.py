@@ -216,6 +216,24 @@ async def test_a_second_message_reuses_the_same_account(
         assert await session.scalar(select(func.count()).select_from(UserRow)) == 1
 
 
+async def test_the_whatsapp_name_fills_an_unnamed_account_and_never_overwrites(
+    database: Database, integration_settings: Settings
+) -> None:
+    user_id = await _user(database, integration_settings)
+
+    for index, name in enumerate(("Paul Mbarga", "Le Boss")):
+        await _execute(
+            database,
+            integration_settings,
+            _command(external_message_id=f"BAIL_NAME_{index}", metadata={"pushName": name}),
+            now=NOW + timedelta(minutes=index),
+        )
+
+    async with database.session() as session:
+        user = await session.get(UserRow, user_id)
+        assert user is not None and user.display_name == "Paul Mbarga"
+
+
 async def test_the_account_is_found_through_the_blind_index(
     database: Database, integration_settings: Settings
 ) -> None:

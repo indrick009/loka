@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -40,7 +40,9 @@ class SqlAlchemyUserRepository:
         )
         return result.scalar_one_or_none()
 
-    async def ensure_user(self, phone: PhoneNumber, *, now: datetime) -> uuid.UUID:
+    async def ensure_user(
+        self, phone: PhoneNumber, *, now: datetime, display_name: str | None = None
+    ) -> uuid.UUID:
         """Return the account for ``phone``, creating it on first contact.
 
         First contact is a WhatsApp message, which proves the sender holds the
@@ -49,14 +51,27 @@ class SqlAlchemyUserRepository:
         number, and the loser must resolve to the winner's row instead of
         aborting the whole message transaction.
         """
-        existing = await self.user_id_for_phone(phone)
+        existing = (
+            await self._session.execute(
+                select(UserRow.id, UserRow.display_name).where(
+                    UserRow.phone_e164_hash == self._key(phone)
+                )
+            )
+        ).first()
         if existing is not None:
-            return existing
+            if display_name and existing.display_name is None:
+                await self._session.execute(
+                    update(UserRow)
+                    .where(UserRow.id == existing.id, UserRow.display_name.is_(None))
+                    .values(display_name=display_name, updated_at=now)
+                )
+            user_id: uuid.UUID = existing.id
+            return user_id
 
         user = User(
             user_id=uuid.uuid4(),
             phone=phone,
-            display_name=None,
+            display_name=display_name,
             now=now,
             roles=frozenset({Role.TENANT}),
         )

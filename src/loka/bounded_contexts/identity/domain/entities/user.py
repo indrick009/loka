@@ -37,6 +37,21 @@ class VerificationPurpose(StrEnum):
     LOGIN = "LOGIN"
 
 
+def whatsapp_name(raw: object) -> str | None:
+    """The name a user set on his WhatsApp profile, when it reads as one.
+
+    Free text nobody checked: "Paul Mbarga" is kept, while "👑", "." or a
+    bare number is not a name and is dropped. Good enough to greet someone,
+    never proof of who he is.
+    """
+    if not isinstance(raw, str):
+        return None
+    cleaned = " ".join(raw.split())[:80]
+    if sum(char.isalpha() for char in cleaned) < 2:
+        return None
+    return cleaned
+
+
 CODE_TTL_MINUTES = 5
 CODE_LENGTH = 6
 MAX_SEND_PER_HOUR = 5

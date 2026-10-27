@@ -19,9 +19,13 @@ class UserProvisioning(Protocol):
     unknown number is a normal state (first contact), not an error.
     """
 
-    async def ensure_user(self, phone: PhoneNumber, *, now: datetime) -> uuid.UUID:
+    async def ensure_user(
+        self, phone: PhoneNumber, *, now: datetime, display_name: str | None = None
+    ) -> uuid.UUID:
         """Return the account for ``phone``, creating it on first contact.
 
         First contact is a WhatsApp message, which proves the sender holds the
         number, so the account is active immediately and no OTP is sent.
+        ``display_name`` names an account that has no name yet; it never
+        overwrites one.
         """
