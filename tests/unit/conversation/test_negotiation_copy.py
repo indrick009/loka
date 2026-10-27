@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.match_proposals import lodging_label
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
+from loka.bounded_contexts.housing.conversation.texts.match_proposals import lodging_label
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
     landlord_offer_text,
     naming_the_lodging,
     read_offer_reply,

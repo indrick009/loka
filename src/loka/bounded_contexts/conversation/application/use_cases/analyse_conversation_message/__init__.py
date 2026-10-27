@@ -4,9 +4,6 @@
 housing turn does lives in ``housing/``.
 """
 
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
-    PENDING_MEDIA_KEY,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     PHOTO_BURST_SECONDS,
 )
@@ -17,6 +14,9 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.use_case import (  # noqa: E501
     AnalyseConversationMessageUseCase,
+)
+from loka.bounded_contexts.housing.conversation.turns.keys import (
+    PENDING_MEDIA_KEY,
 )
 
 __all__ = [

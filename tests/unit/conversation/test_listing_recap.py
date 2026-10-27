@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.listing_recap import listing_recap_text
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import listing_recap_text
 
 pytestmark = pytest.mark.unit
 
@@ -67,7 +67,7 @@ def test_charges_billed_on_top_show_their_amount() -> None:
 
 def test_the_photo_that_publishes_says_so() -> None:
     """The template it replaces asked for photos after the publishing one."""
-    from loka.bounded_contexts.conversation.application.services.listing_recap import (
+    from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
         photo_received_text,
     )
 
@@ -90,7 +90,7 @@ def test_the_photo_that_publishes_says_so() -> None:
     ],
 )
 def test_a_later_photo_reports_the_count(photos: int, published: bool, expected: str) -> None:
-    from loka.bounded_contexts.conversation.application.services.listing_recap import (
+    from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
         photo_received_text,
     )
 

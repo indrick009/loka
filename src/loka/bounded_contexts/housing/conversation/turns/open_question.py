@@ -8,10 +8,10 @@ from loka.bounded_contexts.conversation.application.services.deterministic_class
     DeterministicClassifier,
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
     OFFER_QUESTION_KEY,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
+from loka.bounded_contexts.housing.conversation.turns.keys import (
     AVAILABILITY_QUESTION_KEY,
     CONFIRM_QUESTION_KEY,
     is_availability_answer,

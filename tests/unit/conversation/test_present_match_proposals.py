@@ -14,21 +14,21 @@ from typing import Any
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.match_proposals import (
-    SHOWN_LISTINGS_KEY,
-    match_proposals_text,
-)
-from loka.bounded_contexts.conversation.application.use_cases.ask_still_searching import (
-    AskStillSearchingUseCase,
-)
-from loka.bounded_contexts.conversation.application.use_cases.present_match_proposals import (
-    PresentMatchProposalsUseCase,
-    TenantBusy,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
+    SHOWN_LISTINGS_KEY,
+    match_proposals_text,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.ask_still_searching import (
+    AskStillSearchingUseCase,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.present_match_proposals import (
+    PresentMatchProposalsUseCase,
+    TenantBusy,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork

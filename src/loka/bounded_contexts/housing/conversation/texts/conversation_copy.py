@@ -25,20 +25,6 @@ from loka.bounded_contexts.conversation.application.ports import (
 )
 from loka.bounded_contexts.conversation.domain.services.fact_extraction import MAX_RESULT_CHOICES
 
-
-def reply_kind(*, reason: str | None, question_key: str | None) -> str:
-    """What kind of answer this turn owes the user.
-
-    Three cases, decided here so the outbound layer never has to re-derive
-    whether an analysis succeeded. ``reason`` is what the pipeline refused:
-    answering a question when the message was not understood would move a
-    conversation the platform never actually followed.
-    """
-    if reason is not None:
-        return "CLARIFY"
-    return "QUESTION" if question_key else "ACK"
-
-
 # The quality gate reports stable codes; the user gets words. Kept here rather
 # than in the outbound layer because the list is dynamic and cannot be a fixed
 # ``question_key``. Every platform-authored sentence exists in French (the

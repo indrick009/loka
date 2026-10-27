@@ -5,20 +5,20 @@ from __future__ import annotations
 from datetime import datetime
 
 from loka.bounded_contexts.conversation.application.ports import AvailabilityAnswers
-from loka.bounded_contexts.conversation.application.services.conversation_copy import (
-    availability_answer_text,
-)
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
-    read_offer_reply,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
-    is_availability_answer,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     Settled,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
+)
+from loka.bounded_contexts.housing.conversation.texts.conversation_copy import (
+    availability_answer_text,
+)
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
+    read_offer_reply,
+)
+from loka.bounded_contexts.housing.conversation.turns.keys import (
+    is_availability_answer,
 )
 
 

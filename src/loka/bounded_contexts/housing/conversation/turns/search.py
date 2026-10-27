@@ -7,17 +7,6 @@ from datetime import datetime
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.ports import AvailabilityRequests, TenantDemands
-from loka.bounded_contexts.conversation.application.services.conversation_copy import (
-    availability_pending_text,
-    choice_out_of_range_text,
-    demand_recorded_text,
-    demand_waiting_text,
-    search_query,
-    search_unavailable_text,
-)
-from loka.bounded_contexts.conversation.application.services.match_proposals import (
-    SHOWN_LISTINGS_KEY,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     known_facts,
     opens_new_flow,
@@ -29,6 +18,17 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     SEARCH_REQUIREMENTS,
     ExtractedFacts,
+)
+from loka.bounded_contexts.housing.conversation.texts.conversation_copy import (
+    availability_pending_text,
+    choice_out_of_range_text,
+    demand_recorded_text,
+    demand_waiting_text,
+    search_query,
+    search_unavailable_text,
+)
+from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
+    SHOWN_LISTINGS_KEY,
 )
 
 

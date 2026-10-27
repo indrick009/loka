@@ -45,15 +45,6 @@ from loka.bounded_contexts.conversation.application.services.decision_shadow imp
 from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
     DeterministicClassifier,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.location import (  # noqa: E501
-    shared_location,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.media import (  # noqa: E501
-    refused_media,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.turns import (  # noqa: E501
-    HousingTurns,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
 )
@@ -90,6 +81,15 @@ from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repo
 )
 from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     FactExtractor,
+)
+from loka.bounded_contexts.housing.conversation.turns.location import (
+    shared_location,
+)
+from loka.bounded_contexts.housing.conversation.turns.media import (
+    refused_media,
+)
+from loka.bounded_contexts.housing.conversation.turns.turns import (
+    HousingTurns,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
-    AVAILABILITY_INTENTS,
-)
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_availability import (
+from loka.bounded_contexts.housing.conversation.adapters.conversation_availability import (
     ANSWER_BY_INTENT,
+)
+from loka.bounded_contexts.housing.conversation.turns.keys import (
+    AVAILABILITY_INTENTS,
 )
 
 pytestmark = pytest.mark.unit

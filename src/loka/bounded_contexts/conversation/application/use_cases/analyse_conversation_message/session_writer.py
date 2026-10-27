@@ -6,20 +6,10 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.conversation_copy import reply_kind
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
-    OFFER_QUESTION_KEY,
-)
-from loka.bounded_contexts.conversation.application.services.unlock_copy import UNLOCK_KEY
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     carried_question,
     facts_worth_carrying,
     opens_new_flow,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
-    AVAILABILITY_QUESTION_KEY,
-    PENDING_MEDIA_KEY,
-    is_availability_answer,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     AnalysisReport,
@@ -41,11 +31,33 @@ from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     ExtractedFacts,
     question_to_ask,
 )
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
+    OFFER_QUESTION_KEY,
+)
+from loka.bounded_contexts.housing.conversation.texts.unlock_copy import UNLOCK_KEY
+from loka.bounded_contexts.housing.conversation.turns.keys import (
+    AVAILABILITY_QUESTION_KEY,
+    PENDING_MEDIA_KEY,
+    is_availability_answer,
+)
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 
 # How long an acknowledgement waits for the rest of an album.
 PHOTO_BURST_SECONDS = 6
+
+
+def reply_kind(*, reason: str | None, question_key: str | None) -> str:
+    """What kind of answer this turn owes the user.
+
+    Three cases, decided here so the outbound layer never has to re-derive
+    whether an analysis succeeded. ``reason`` is what the pipeline refused:
+    answering a question when the message was not understood would move a
+    conversation the platform never actually followed.
+    """
+    if reason is not None:
+        return "CLARIFY"
+    return "QUESTION" if question_key else "ACK"
 
 
 class SessionWriter:

@@ -12,10 +12,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.listing_recap import (
+from loka.bounded_contexts.conversation.domain.services.fact_extraction import NEXT_LODGINGS_KEY
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
     property_type_label,
 )
-from loka.bounded_contexts.conversation.domain.services.fact_extraction import NEXT_LODGINGS_KEY
 
 __all__ = ["NEXT_LODGINGS_KEY", "NEXT_LODGING_QUESTION", "next_lodging_facts", "next_lodging_text"]
 

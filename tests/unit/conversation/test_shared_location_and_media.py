@@ -32,13 +32,6 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.open_question import (  # noqa: E501
-    confirms_the_summary,
-    is_a_question,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.places import (  # noqa: E501
-    keeping_the_place,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -53,6 +46,13 @@ from loka.bounded_contexts.conversation.domain.value_objects.inbound_message imp
 )
 from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (
     ConversationMediaResult,
+)
+from loka.bounded_contexts.housing.conversation.turns.open_question import (
+    confirms_the_summary,
+    is_a_question,
+)
+from loka.bounded_contexts.housing.conversation.turns.places import (
+    keeping_the_place,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork

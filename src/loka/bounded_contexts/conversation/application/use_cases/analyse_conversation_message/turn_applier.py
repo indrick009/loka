@@ -5,9 +5,6 @@ from __future__ import annotations
 import uuid
 
 from loka.bounded_contexts.conversation.application.services.prompts import collapse_repeats
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.turns import (  # noqa: E501
-    HousingTurns,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     SessionWriter,
 )
@@ -22,6 +19,9 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
+)
+from loka.bounded_contexts.housing.conversation.turns.turns import (
+    HousingTurns,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 

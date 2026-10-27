@@ -11,10 +11,10 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.listing_recap import (
+from loka.bounded_contexts.conversation.domain.knowledge.places import nearest_district
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
     property_type_label,
 )
-from loka.bounded_contexts.conversation.domain.knowledge.places import nearest_district
 
 # The listing ids last printed to this tenant, in the order he saw them: his
 # "2" is read against this. The leading underscore keeps it out of every

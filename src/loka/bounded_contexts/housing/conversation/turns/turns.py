@@ -18,45 +18,12 @@ from loka.bounded_contexts.conversation.application.ports import (
     TenantDemands,
     UnlockPayments,
 )
-from loka.bounded_contexts.conversation.application.services.demand_reminder import (
-    STILL_SEARCHING_KEY,
-)
 from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
     DeterministicClassifier,
     DeterministicMatch,
 )
-from loka.bounded_contexts.conversation.application.services.listing_recap import listing_recap_text
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
-    OFFER_QUESTION_KEY,
-)
-from loka.bounded_contexts.conversation.application.services.other_lodgings import (
-    NEXT_LODGING_QUESTION,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     known_facts,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.availability import (  # noqa: E501
-    LandlordAvailability,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.listing import (  # noqa: E501
-    LandlordListing,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.media import (  # noqa: E501
-    ListingMedia,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.open_question import (  # noqa: E501
-    read_open_question,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.payment import (  # noqa: E501
-    PAYMENT_STEPS,
-    PaymentTurn,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.reminder import (  # noqa: E501
-    SearchReminder,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.search import (  # noqa: E501
-    TenantSearch,
-    while_waiting,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     SessionWriter,
@@ -69,6 +36,39 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.texts.demand_reminder import (
+    STILL_SEARCHING_KEY,
+)
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import listing_recap_text
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
+    OFFER_QUESTION_KEY,
+)
+from loka.bounded_contexts.housing.conversation.texts.other_lodgings import (
+    NEXT_LODGING_QUESTION,
+)
+from loka.bounded_contexts.housing.conversation.turns.availability import (
+    LandlordAvailability,
+)
+from loka.bounded_contexts.housing.conversation.turns.listing import (
+    LandlordListing,
+)
+from loka.bounded_contexts.housing.conversation.turns.media import (
+    ListingMedia,
+)
+from loka.bounded_contexts.housing.conversation.turns.open_question import (
+    read_open_question,
+)
+from loka.bounded_contexts.housing.conversation.turns.payment import (
+    PAYMENT_STEPS,
+    PaymentTurn,
+)
+from loka.bounded_contexts.housing.conversation.turns.reminder import (
+    SearchReminder,
+)
+from loka.bounded_contexts.housing.conversation.turns.search import (
+    TenantSearch,
+    while_waiting,
 )
 
 

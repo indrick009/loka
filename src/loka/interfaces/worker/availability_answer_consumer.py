@@ -18,11 +18,11 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.use_cases.handle_availability_answer import (
-    HandleAvailabilityAnswerUseCase,
-)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.handle_availability_answer import (
+    HandleAvailabilityAnswerUseCase,
 )
 from loka.shared.infrastructure.broker.consumer import ConsumerBase, PermanentHandlerError
 from loka.shared.infrastructure.broker.topology import Broker, QueueSpec

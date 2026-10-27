@@ -12,15 +12,6 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from loka.bounded_contexts.conversation.application.ports import PropertyListing
-from loka.bounded_contexts.conversation.application.services.listing_recap import (
-    media_kept_text,
-    media_received_text,
-    media_refused_text,
-    unsupported_media_text,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.keys import (  # noqa: E501
-    PENDING_MEDIA_KEY,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     SessionWriter,
 )
@@ -34,6 +25,15 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 )
 from loka.bounded_contexts.conversation.domain.services.fact_extraction import LISTING_FLOWS
 from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import MessageKind
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
+    media_kept_text,
+    media_received_text,
+    media_refused_text,
+    unsupported_media_text,
+)
+from loka.bounded_contexts.housing.conversation.turns.keys import (
+    PENDING_MEDIA_KEY,
+)
 from loka.shared.domain.errors import DomainError
 from loka.shared.infrastructure.logging import get_logger
 

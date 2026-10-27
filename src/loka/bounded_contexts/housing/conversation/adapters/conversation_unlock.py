@@ -22,13 +22,13 @@ from loka.bounded_contexts.conversation.application.ports import (
     UnlockedContact,
     UnlockRequestOutcome,
 )
-from loka.bounded_contexts.conversation.application.services.listing_recap import (
-    property_type_label,
-)
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
 )
 from loka.bounded_contexts.housing.application.ports import LandlordDirectory
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
+    property_type_label,
+)
 from loka.bounded_contexts.housing.domain.repositories.property_repository import (
     PropertyRepository,
 )

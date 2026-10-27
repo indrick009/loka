@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.places import (  # noqa: E501
-    neighbourhood_from_label,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     Reading,
 )
 from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import SharedLocation
+from loka.bounded_contexts.housing.conversation.turns.places import (
+    neighbourhood_from_label,
+)
 
 
 def shared_location(point: SharedLocation) -> Reading:

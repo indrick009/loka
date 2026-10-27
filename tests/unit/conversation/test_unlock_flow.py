@@ -15,23 +15,23 @@ from typing import Any
 import pytest
 
 from loka.bounded_contexts.conversation.application.ports import UnlockedContact
-from loka.bounded_contexts.conversation.application.services.unlock_copy import (
-    PAYMENT_QUESTION_KEY,
-    UNLOCK_KEY,
-)
-from loka.bounded_contexts.conversation.application.use_cases.handle_availability_answer import (
-    HandleAvailabilityAnswerUseCase,
-)
-from loka.bounded_contexts.conversation.application.use_cases.present_payment_failure import (
-    PresentPaymentFailureUseCase,
-)
-from loka.bounded_contexts.conversation.application.use_cases.reveal_unlocked_contact import (
-    RevealUnlockedContactUseCase,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
+    PAYMENT_QUESTION_KEY,
+    UNLOCK_KEY,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.handle_availability_answer import (
+    HandleAvailabilityAnswerUseCase,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.present_payment_failure import (
+    PresentPaymentFailureUseCase,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.reveal_unlocked_contact import (
+    RevealUnlockedContactUseCase,
 )
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork

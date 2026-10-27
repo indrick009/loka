@@ -18,13 +18,13 @@ from loka.bounded_contexts.conversation.application.ports import (
     ConversationPropertyHit,
     ConversationSearchQuery,
 )
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_property_search import (  # noqa: E501
-    ConversationPropertySearch,
-    budget_band,
-)
 from loka.bounded_contexts.housing.application.queries.search_properties import (
     PropertySearchCriteria,
     PropertySearchResult,
+)
+from loka.bounded_contexts.housing.conversation.adapters.conversation_property_search import (
+    ConversationPropertySearch,
+    budget_band,
 )
 
 pytestmark = pytest.mark.unit

@@ -5,15 +5,15 @@ from __future__ import annotations
 from datetime import datetime
 
 from loka.bounded_contexts.conversation.application.ports import DemandFollowUp
-from loka.bounded_contexts.conversation.application.services.demand_reminder import (
-    reminder_text,
-    still_searching,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     Settled,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
+)
+from loka.bounded_contexts.housing.conversation.texts.demand_reminder import (
+    reminder_text,
+    still_searching,
 )
 
 

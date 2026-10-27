@@ -15,22 +15,22 @@ from loka.bounded_contexts.conversation.application.ports import (
     UnlockPayments,
     UnlockRequestOutcome,
 )
-from loka.bounded_contexts.conversation.application.services.match_proposals import (
-    SHOWN_LISTINGS_KEY,
-)
-from loka.bounded_contexts.conversation.application.services.unlock_copy import (
-    PAYMENT_QUESTION_KEY,
-    UNLOCK_KEY,
-    PaymentAnswer,
-    read_payment_answer,
-    unlock_text,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     Settled,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
+    SHOWN_LISTINGS_KEY,
+)
+from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
+    PAYMENT_QUESTION_KEY,
+    UNLOCK_KEY,
+    PaymentAnswer,
+    read_payment_answer,
+    unlock_text,
 )
 
 PAYMENT_STEPS = frozenset({FlowStep.CONFIRM_PAYMENT, FlowStep.AWAITING_PAYMENT})

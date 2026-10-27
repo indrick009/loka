@@ -20,12 +20,6 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.services.match_proposals import lodging_label
-from loka.bounded_contexts.conversation.application.services.negotiation_copy import (
-    OFFER_QUESTION_KEY,
-    landlord_offer_text,
-    naming_the_lodging,
-)
 from loka.bounded_contexts.conversation.domain.events.message_events import (
     WhatsAppMessageSendRequested,
 )
@@ -34,6 +28,12 @@ from loka.bounded_contexts.conversation.infrastructure.messaging_composition imp
 )
 from loka.bounded_contexts.housing.application.use_cases.check_availability import (
     LANDLORD_QUESTION_KEY,
+)
+from loka.bounded_contexts.housing.conversation.texts.match_proposals import lodging_label
+from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
+    OFFER_QUESTION_KEY,
+    landlord_offer_text,
+    naming_the_lodging,
 )
 from loka.bounded_contexts.housing.domain.entities.property import Property
 from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY

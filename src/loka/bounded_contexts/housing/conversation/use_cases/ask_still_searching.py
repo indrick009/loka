@@ -14,14 +14,6 @@ from datetime import datetime
 
 import structlog
 
-from loka.bounded_contexts.conversation.application.services.demand_reminder import (
-    STILL_SEARCHING_KEY,
-    reminder_text,
-)
-from loka.bounded_contexts.conversation.application.use_cases.present_match_proposals import (
-    BUSY_STEPS,
-    TenantBusy,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
     SessionStatus,
@@ -31,6 +23,14 @@ from loka.bounded_contexts.conversation.domain.events.message_events import (
 )
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
+)
+from loka.bounded_contexts.housing.conversation.texts.demand_reminder import (
+    STILL_SEARCHING_KEY,
+    reminder_text,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.present_match_proposals import (
+    BUSY_STEPS,
+    TenantBusy,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 

@@ -19,26 +19,8 @@ from loka.bounded_contexts.conversation.application.services.decision_shadow imp
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
-from loka.bounded_contexts.conversation.application.use_cases.reveal_unlocked_contact import (
-    RevealUnlockedContactUseCase,
-)
 from loka.bounded_contexts.conversation.application.use_cases.voice_platform_reply import (
     VoicePlatformReplyUseCase,
-)
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_availability import (
-    ConversationAvailabilityAnswers,
-    ConversationAvailabilityRequests,
-)
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_demand import (
-    ConversationDemandFollowUp,
-    ConversationTenantDemands,
-)
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_property_search import (  # noqa: E501
-    ConversationPropertySearch,
-)
-from loka.bounded_contexts.conversation.infrastructure.adapters.conversation_unlock import (
-    ConversationUnlockedContacts,
-    ConversationUnlockPayments,
 )
 from loka.bounded_contexts.conversation.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
@@ -50,6 +32,24 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
     SqlAlchemyConversationExchanges,
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDecisionShadowLog,
+)
+from loka.bounded_contexts.housing.conversation.adapters.conversation_availability import (
+    ConversationAvailabilityAnswers,
+    ConversationAvailabilityRequests,
+)
+from loka.bounded_contexts.housing.conversation.adapters.conversation_demand import (
+    ConversationDemandFollowUp,
+    ConversationTenantDemands,
+)
+from loka.bounded_contexts.housing.conversation.adapters.conversation_property_search import (
+    ConversationPropertySearch,
+)
+from loka.bounded_contexts.housing.conversation.adapters.conversation_unlock import (
+    ConversationUnlockedContacts,
+    ConversationUnlockPayments,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.reveal_unlocked_contact import (
+    RevealUnlockedContactUseCase,
 )
 from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.shared.application.unit_of_work import UnitOfWork

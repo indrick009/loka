@@ -206,7 +206,7 @@ class TestTheLandlordsAnswerFindsItsQuestion:
     async def test_the_account_is_translated_to_its_landlord_profile(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from loka.bounded_contexts.conversation.infrastructure.adapters import (
+        from loka.bounded_contexts.housing.conversation.adapters import (
             conversation_availability as module,
         )
 
@@ -233,7 +233,7 @@ class TestTheLandlordsAnswerFindsItsQuestion:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A tenant writing "c'est déjà loué" must not reach the catalogue."""
-        from loka.bounded_contexts.conversation.infrastructure.adapters import (
+        from loka.bounded_contexts.housing.conversation.adapters import (
             conversation_availability as module,
         )
 
@@ -261,7 +261,7 @@ class TestTheLandlordsAnswerFindsItsQuestion:
     ) -> None:
         """Guessing between "one was taken" and "all were taken" costs a
         landlord a lodging, so an unknown intent is not mapped to the nearest."""
-        from loka.bounded_contexts.conversation.infrastructure.adapters import (
+        from loka.bounded_contexts.housing.conversation.adapters import (
             conversation_availability as module,
         )
 

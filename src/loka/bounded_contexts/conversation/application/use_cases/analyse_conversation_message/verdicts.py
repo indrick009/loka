@@ -8,9 +8,6 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
     known_facts,
     target_flow,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.places import (  # noqa: E501
-    one_place,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     Verdict,
 )
@@ -21,6 +18,9 @@ from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     MIN_ACCEPTED_CONFIDENCE,
     FactExtractor,
     is_supported_intent,
+)
+from loka.bounded_contexts.housing.conversation.turns.places import (
+    one_place,
 )
 
 

@@ -6,25 +6,6 @@ import uuid
 from datetime import datetime
 
 from loka.bounded_contexts.conversation.application.ports import PropertyListing
-from loka.bounded_contexts.conversation.application.services.conversation_copy import (
-    listing_unsaved_text,
-    missing_listing_reply,
-)
-from loka.bounded_contexts.conversation.application.services.listing_recap import (
-    kept_media_published_text,
-)
-from loka.bounded_contexts.conversation.application.services.other_lodgings import (
-    NEXT_LODGING_QUESTION,
-    NEXT_LODGINGS_KEY,
-    next_lodging_facts,
-    next_lodging_text,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.media import (  # noqa: E501
-    ListingMedia,
-)
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.open_question import (  # noqa: E501
-    is_a_question,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     SessionWriter,
 )
@@ -32,6 +13,25 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     ConversationSession,
     FlowName,
     FlowStep,
+)
+from loka.bounded_contexts.housing.conversation.texts.conversation_copy import (
+    listing_unsaved_text,
+    missing_listing_reply,
+)
+from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
+    kept_media_published_text,
+)
+from loka.bounded_contexts.housing.conversation.texts.other_lodgings import (
+    NEXT_LODGING_QUESTION,
+    NEXT_LODGINGS_KEY,
+    next_lodging_facts,
+    next_lodging_text,
+)
+from loka.bounded_contexts.housing.conversation.turns.media import (
+    ListingMedia,
+)
+from loka.bounded_contexts.housing.conversation.turns.open_question import (
+    is_a_question,
 )
 
 

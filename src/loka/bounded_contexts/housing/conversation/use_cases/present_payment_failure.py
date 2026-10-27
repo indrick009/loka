@@ -14,10 +14,6 @@ from datetime import datetime
 
 import structlog
 
-from loka.bounded_contexts.conversation.application.services.unlock_copy import (
-    PAYMENT_QUESTION_KEY,
-    unlock_text,
-)
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowStep,
 )
@@ -26,6 +22,10 @@ from loka.bounded_contexts.conversation.domain.events.message_events import (
 )
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
+)
+from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
+    PAYMENT_QUESTION_KEY,
+    unlock_text,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 

@@ -21,18 +21,18 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from loka.bounded_contexts.conversation.application.use_cases.ask_still_searching import (
-    AskStillSearchingUseCase,
-)
-from loka.bounded_contexts.conversation.application.use_cases.present_match_proposals import (
-    PresentMatchProposalsUseCase,
-    TenantBusy,
-)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
 from loka.bounded_contexts.housing.application.use_cases.match_tenant_demands import (
     MatchTenantDemandsUseCase,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.ask_still_searching import (
+    AskStillSearchingUseCase,
+)
+from loka.bounded_contexts.housing.conversation.use_cases.present_match_proposals import (
+    PresentMatchProposalsUseCase,
+    TenantBusy,
 )
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,

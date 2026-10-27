@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from loka.bounded_contexts.conversation.application.services.demand_reminder import still_searching
+from loka.bounded_contexts.housing.conversation.texts.demand_reminder import still_searching
 
 pytestmark = pytest.mark.unit
 

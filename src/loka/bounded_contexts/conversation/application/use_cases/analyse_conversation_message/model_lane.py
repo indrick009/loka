@@ -14,9 +14,6 @@ from loka.bounded_contexts.conversation.application.services.prompts import buil
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     target_flow,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.housing.turns import (  # noqa: E501
-    HousingTurns,
-)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.reply_fit import (  # noqa: E501
     inline_reply_fits,
 )
@@ -40,6 +37,9 @@ from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repo
     StoredInboundMessage,
 )
 from loka.bounded_contexts.conversation.domain.services.ai_provider import SUPPORTED_LANGUAGES
+from loka.bounded_contexts.housing.conversation.turns.turns import (
+    HousingTurns,
+)
 from loka.shared.domain.errors import ExternalServiceUnavailable
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import ai_bypass_total
