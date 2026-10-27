@@ -37,10 +37,6 @@ from loka.interfaces.worker.fraud_consumer import (
     FraudAnalysisConsumer,
     PaymentEventsConsumer,
 )
-from loka.interfaces.worker.landlord_verification_consumer import (
-    LANDLORD_VERIFICATION_QUEUE,
-    LandlordVerificationConsumer,
-)
 from loka.interfaces.worker.payment_unlock_consumer import (
     PAYMENT_UNLOCK_QUEUE,
     PaymentUnlockConsumer,
@@ -76,7 +72,6 @@ def handler_registry() -> dict[str, ConsumerFactory]:
         PAYMENTS_EVENTS_QUEUE: PaymentEventsConsumer,
         FRAUD_ANALYSIS_QUEUE: FraudAnalysisConsumer,
         SEARCH_PROJECTION_QUEUE: SearchProjectionConsumer,
-        LANDLORD_VERIFICATION_QUEUE: LandlordVerificationConsumer,
         AVAILABILITY_QUESTION_QUEUE: AvailabilityQuestionConsumer,
         AVAILABILITY_ANSWER_QUEUE: AvailabilityAnswerConsumer,
         PAYMENT_UNLOCK_QUEUE: PaymentUnlockConsumer,

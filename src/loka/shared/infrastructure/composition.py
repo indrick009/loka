@@ -48,28 +48,8 @@ from loka.bounded_contexts.housing.application.use_cases.publish_property import
     PublishPropertyUseCase,
 )
 from loka.bounded_contexts.housing.infrastructure.composition import (
-    PROPERTY_REPOSITORY_FACTORIES,
-)
-from loka.bounded_contexts.landlord.application.use_cases.adjudicate_landlord_verification import (
-    AdjudicateLandlordVerificationUseCase,
-)
-from loka.bounded_contexts.landlord.application.use_cases.get_landlord_verification_status import (
-    GetLandlordVerificationStatusUseCase,
-)
-from loka.bounded_contexts.landlord.application.use_cases.request_landlord_status import (
-    RequestLandlordStatusUseCase,
-)
-from loka.bounded_contexts.landlord.application.use_cases.review_landlord_verification import (
-    ReviewLandlordVerificationUseCase,
-)
-from loka.bounded_contexts.landlord.application.use_cases.submit_landlord_verification import (
-    SubmitLandlordVerificationUseCase,
-)
-from loka.bounded_contexts.landlord.infrastructure.composition import (
     LANDLORD_DIRECTORY,
-    LANDLORD_REPOSITORY_FACTORIES,
-    evidence_url_provider,
-    verification_adjudicator,
+    PROPERTY_REPOSITORY_FACTORIES,
 )
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     MESSAGING_REPOSITORY_FACTORIES,
@@ -126,7 +106,6 @@ from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
 
 _CONTEXT_FACTORIES: tuple[dict[str, Any], ...] = (
-    LANDLORD_REPOSITORY_FACTORIES,
     PROPERTY_REPOSITORY_FACTORIES,
     MESSAGING_REPOSITORY_FACTORIES,
     PAYMENT_REPOSITORY_FACTORIES,
@@ -288,41 +267,6 @@ def list_reports_use_case(uow: SqlAlchemyUnitOfWork) -> ListReportsUseCase:
 
 def get_fraud_summary_use_case(uow: SqlAlchemyUnitOfWork) -> GetFraudSummaryUseCase:
     return GetFraudSummaryUseCase(uow)
-
-
-def request_landlord_status_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> RequestLandlordStatusUseCase:
-    return RequestLandlordStatusUseCase(uow)
-
-
-def submit_landlord_verification_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> SubmitLandlordVerificationUseCase:
-    return SubmitLandlordVerificationUseCase(uow)
-
-
-def review_landlord_verification_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> ReviewLandlordVerificationUseCase:
-    return ReviewLandlordVerificationUseCase(uow)
-
-
-def get_landlord_verification_status_use_case(
-    uow: SqlAlchemyUnitOfWork,
-) -> GetLandlordVerificationStatusUseCase:
-    return GetLandlordVerificationStatusUseCase(uow)
-
-
-def adjudicate_landlord_verification_use_case(
-    uow: SqlAlchemyUnitOfWork, *, settings: Settings
-) -> AdjudicateLandlordVerificationUseCase:
-    """Assemble the AI pre-decision from the configured model and object storage."""
-    return AdjudicateLandlordVerificationUseCase(
-        uow,
-        adjudicator=verification_adjudicator(settings),
-        urls=evidence_url_provider(settings),
-    )
 
 
 def submit_review_use_case(uow: SqlAlchemyUnitOfWork) -> SubmitReviewUseCase:

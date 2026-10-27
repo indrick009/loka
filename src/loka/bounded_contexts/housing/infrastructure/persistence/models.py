@@ -320,3 +320,28 @@ class TenantDemandRow(Base):
         # The queue of answers still owed, oldest first.
         Index("ix_tenant_demand_open_age", "status", "received_at"),
     )
+
+
+class LandlordProfileRow(Base):
+    """Who owns a listing. The verification columns are no longer written."""
+
+    __tablename__ = "landlord_profiles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, unique=True
+    )
+    display_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    verification_status: Mapped[str] = mapped_column(String(24), nullable=False, default="PENDING")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    trust_score: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    successful_rentals: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    active_property_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (Index("ix_landlord_status", "verification_status", "created_at"),)

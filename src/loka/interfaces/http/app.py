@@ -17,7 +17,6 @@ from loka.interfaces.http.auth import BearerTokenAuthenticator
 from loka.interfaces.http.container import Container
 from loka.interfaces.http.errors import register_error_handlers
 from loka.interfaces.http.routers import fraud as fraud_router
-from loka.interfaces.http.routers import landlord as landlord_router
 from loka.interfaces.http.routers import payments as payments_router
 from loka.interfaces.http.routers import properties as properties_router
 from loka.interfaces.http.routers import reports as reports_router
@@ -162,7 +161,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return Response(content=metrics.render(), media_type="text/plain")
 
     app.include_router(properties_router.router)
-    app.include_router(landlord_router.router)
     app.include_router(payments_router.router)
     app.include_router(reports_router.router)
     app.include_router(fraud_router.router)

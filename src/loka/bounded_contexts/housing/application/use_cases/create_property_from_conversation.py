@@ -21,10 +21,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
+from loka.bounded_contexts.housing.application.ports import LandlordDirectory
+from loka.bounded_contexts.housing.domain.entities.landlord_profile import LandlordProfile
 from loka.bounded_contexts.housing.domain.entities.property import Amenities, Property
 from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
     PropertyMedia,
+)
+from loka.bounded_contexts.housing.domain.repositories.landlord_repository import (
+    LANDLORD_PROFILE_REPOSITORY,
 )
 from loka.bounded_contexts.housing.domain.repositories.property_repository import (
     PropertyRepository,
@@ -45,11 +50,6 @@ from loka.bounded_contexts.housing.domain.value_objects.location import (
     Location,
 )
 from loka.bounded_contexts.housing.domain.value_objects.money import Money
-from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
-from loka.bounded_contexts.landlord.domain.entities.landlord_profile import LandlordProfile
-from loka.bounded_contexts.landlord.domain.repositories.verification_repository import (
-    LANDLORD_PROFILE_REPOSITORY,
-)
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
 from loka.shared.domain.identifiers import new_id

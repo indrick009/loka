@@ -20,13 +20,11 @@ from loka.bounded_contexts.fraud.domain.value_objects.facts import (
 )
 from loka.bounded_contexts.fraud.infrastructure.persistence.models import ReportRow
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
+    LandlordProfileRow,
     PropertyMediaRow,
     PropertyRow,
 )
 from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import (
-    LandlordProfileRow,
-)
 from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     ServiceFeePaymentRow,
 )

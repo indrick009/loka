@@ -12,12 +12,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from loka.bounded_contexts.housing.application.dto.property_dto import PropertySummary
+from loka.bounded_contexts.housing.application.ports import LandlordDirectory
 from loka.bounded_contexts.housing.domain.exceptions import PublicationBlocked
 from loka.bounded_contexts.housing.domain.repositories.property_repository import (
     LandlordPropertyQuota,
     PropertyRepository,
 )
-from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
 

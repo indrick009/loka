@@ -33,9 +33,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
 from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
 from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
-from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token
 from loka.shared.infrastructure.composition import unit_of_work
@@ -67,9 +66,9 @@ async def _landlord(database: Database, *, verified: bool = True) -> tuple[uuid.
                 user_id=user_id,
                 display_name="Awa N.",
                 verification_status=(
-                    VerificationStatus.VERIFIED.value
+                    "VERIFIED"
                     if verified
-                    else VerificationStatus.PENDING.value
+                    else "PENDING"
                 ),
                 verified_at=NOW if verified else None,
                 created_at=NOW,

@@ -40,15 +40,12 @@ from loka.bounded_contexts.housing.infrastructure.composition import (
     PROPERTY_REPOSITORY,
     PROPERTY_SEARCH_PROJECTOR,
 )
+from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.identity.infrastructure.persistence.models import (
     RefreshTokenRow,
     UserRow,
 )
-from loka.bounded_contexts.landlord.domain.entities.verification_request import (
-    VerificationStatus,
-)
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
 from loka.interfaces.http.auth import generate_token, hash_token
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings, get_settings
@@ -159,16 +156,12 @@ async def _upsert_landlord(
                     id=landlord_id,
                     user_id=user_id,
                     display_name=display_name,
-                    verification_status=VerificationStatus.VERIFIED.value,
-                    verified_at=now,
                     created_at=now,
                     updated_at=now,
                 )
             )
         else:
             landlord_id = profile.id
-            profile.verification_status = VerificationStatus.VERIFIED.value
-            profile.verified_at = profile.verified_at or now
             profile.display_name = display_name or profile.display_name
             profile.updated_at = now
 

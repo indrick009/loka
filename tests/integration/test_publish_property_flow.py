@@ -34,11 +34,10 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
 from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
 from loka.bounded_contexts.housing.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
 )
-from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
 from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
 from loka.shared.infrastructure.composition import (
     publish_property_use_case,
@@ -67,9 +66,9 @@ async def _landlord(database: Database, *, verified: bool = True) -> tuple[uuid.
                 user_id=user_id,
                 display_name="Awa N.",
                 verification_status=(
-                    VerificationStatus.VERIFIED.value
+                    "VERIFIED"
                     if verified
-                    else VerificationStatus.PENDING.value
+                    else "PENDING"
                 ),
                 verified_at=NOW if verified else None,
                 created_at=NOW,

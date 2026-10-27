@@ -48,9 +48,7 @@ from loka.bounded_contexts.ai.infrastructure.persistence.repositories import (
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDecisionShadowLog,
 )
-from loka.bounded_contexts.landlord.infrastructure.composition import (
-    LANDLORD_DIRECTORY,
-)
+from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )

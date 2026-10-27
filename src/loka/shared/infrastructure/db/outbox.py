@@ -26,11 +26,6 @@ from loka.shared.infrastructure.db.base import Base
 _TOPIC_BY_EVENT = {
     "UserPhoneVerified": "identity.events",
     "LandlordProfileCreated": "landlord.events",
-    "LandlordVerificationSubmitted": "landlord.events",
-    "LandlordVerified": "landlord.events",
-    "LandlordVerificationRejected": "landlord.events",
-    "LandlordVerificationSuspended": "landlord.events",
-    "LandlordSuspended": "landlord.events",
     "PropertyPublished": "property.events",
     "PropertyMediaChanged": "property.events",
     "PropertyRented": "property.events",

@@ -19,6 +19,7 @@ from loka.bounded_contexts.fraud.infrastructure.persistence.models import (
 )
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     AvailabilityCheckRow,
+    LandlordProfileRow,
     PropertyDataQualityIssueRow,
     PropertyMediaRow,
     PropertyRow,
@@ -28,11 +29,6 @@ from loka.bounded_contexts.identity.infrastructure.persistence.models import (
     PhoneVerificationChallengeRow,
     RefreshTokenRow,
     UserRow,
-)
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import (
-    LandlordProfileRow,
-    VerificationDocumentRow,
-    VerificationRequestRow,
 )
 from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
     ConversationMetricsRow,
@@ -88,7 +84,5 @@ __all__ = [
     "TenantDemandRow",
     "TrustProfileRow",
     "UserRow",
-    "VerificationDocumentRow",
-    "VerificationRequestRow",
     "WebhookReplayGuard",
 ]

@@ -30,7 +30,7 @@ from loka.bounded_contexts.housing.application.use_cases.check_availability impo
     LANDLORD_QUESTION_KEY,
 )
 from loka.bounded_contexts.housing.domain.entities.property import Property
-from loka.bounded_contexts.landlord.infrastructure.composition import LANDLORD_DIRECTORY
+from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.bounded_contexts.messaging.domain.events.message_events import (
     WhatsAppMessageSendRequested,
 )
