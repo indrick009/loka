@@ -129,7 +129,7 @@ async def test_outbox_claim_batch_skips_locked_rows(database, now) -> None:  # t
 
 
 async def test_inbound_message_external_id_is_unique(database, now) -> None:  # type: ignore[no-untyped-def]
-    from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
+    from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
         InboundMessageRow,
     )
 

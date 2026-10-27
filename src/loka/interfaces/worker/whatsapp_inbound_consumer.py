@@ -17,11 +17,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from loka.bounded_contexts.messaging.application.use_cases.receive_inbound_message import (
+from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageCommand,
 )
-from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import MessageKind
-from loka.bounded_contexts.messaging.infrastructure.composition import (
+from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import MessageKind
+from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     receive_inbound_message_use_case,
 )
 from loka.shared.infrastructure.broker.consumer import ConsumerBase, PermanentHandlerError

@@ -10,7 +10,7 @@ import asyncio
 import contextlib
 import signal
 
-from loka.bounded_contexts.ai.infrastructure.composition import validate_ai_settings
+from loka.bounded_contexts.conversation.infrastructure.composition import validate_ai_settings
 from loka.interfaces.workers.demand_follow_up import sweep_forever
 from loka.interfaces.workers.registry import handler_registry
 from loka.shared.infrastructure.broker.topology import Broker

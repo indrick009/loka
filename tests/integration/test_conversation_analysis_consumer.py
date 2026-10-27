@@ -20,22 +20,22 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
 
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
-from loka.bounded_contexts.messaging.application.use_cases.receive_inbound_message import (
+from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageCommand,
 )
-from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import MessageKind
-from loka.bounded_contexts.messaging.infrastructure.composition import (
+from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import MessageKind
+from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     receive_inbound_message_use_case,
 )
-from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationSessionRow,
     ConversationTurnRow,
 )
+from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.interfaces.worker.conversation_analysis_consumer import (
     AI_REQUEST_QUEUE,
     ConversationAnalysisConsumer,

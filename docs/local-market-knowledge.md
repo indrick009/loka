@@ -1,7 +1,7 @@
 # Connaissance du marché immobilier camerounais
 
 Ce document décrit la base de connaissance codée dans
-`src/loka/bounded_contexts/ai/domain/knowledge/market.py` et explique **ce qui est
+`src/loka/bounded_contexts/conversation/domain/knowledge/market.py` et explique **ce qui est
 certain, ce qui est une habitude observée, ce qui varie et ce qui reste à
 confirmer**. La règle fondatrice : le LLM n'est jamais la source de vérité. Ces
 données, elles, le sont — et elles sont testées.

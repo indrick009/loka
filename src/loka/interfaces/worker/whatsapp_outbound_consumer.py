@@ -27,13 +27,13 @@ from typing import Any
 import httpx
 from redis.asyncio import Redis
 
-from loka.bounded_contexts.ai.infrastructure.composition import (
+from loka.bounded_contexts.conversation.infrastructure.composition import (
     voice_platform_reply_use_case,
 )
-from loka.bounded_contexts.messaging.infrastructure.persistence.media_bursts import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.media_bursts import (
     SqlAlchemyMediaBursts,
 )
-from loka.bounded_contexts.messaging.infrastructure.persistence.sent_messages import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.sent_messages import (
     SqlAlchemySentMessageLog,
 )
 from loka.interfaces.worker.conversation_analysis_consumer import (

@@ -1,0 +1,1102 @@
+"""Extracted facts must survive the domain's value objects.
+
+These tests are the enforcement of one rule: whatever produced a candidate, the
+value objects decide. They run pure, with no infrastructure, because the point
+is that validation is not an infrastructure concern.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from loka.bounded_contexts.conversation.application.services.deterministic_classifier import (
+    DeterministicClassifier,
+)
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
+    FlowName,
+    FlowStep,
+)
+from loka.bounded_contexts.conversation.domain.knowledge import market
+from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
+    FLOW_BY_OPENING_INTENT,
+    MAX_PLAUSIBLE_RENT_XAF,
+    MIN_PLAUSIBLE_RENT_XAF,
+    PROPERTY_REQUIREMENTS,
+    SUPPORTED_INTENTS,
+    FactExtractor,
+    is_supported_intent,
+    question_key_for,
+)
+
+pytestmark = pytest.mark.unit
+
+
+@pytest.fixture
+def extractor() -> FactExtractor:
+    return FactExtractor()
+
+
+
+def _named(location: object) -> object:
+    """The place as named, without the centre a district carries."""
+    if not isinstance(location, dict):
+        return location
+    return {
+        key: value
+        for key, value in location.items()
+        if key not in ("latitude", "longitude", "approximate")
+    }
+
+
+class TestAcceptedFacts:
+    def test_a_plausible_rent_is_kept(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"price": 250_000})
+
+        assert facts.get("rent") == 250_000
+        assert facts.rejected == {}
+
+    def test_rooms_and_surface_survive_their_bounds(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {"bedrooms": 3, "bathrooms": 2, "surface_area": 120}
+        )
+
+        assert facts.get("rooms") == {"bedrooms": 3, "bathrooms": 2}
+        assert facts.get("surface") == 120
+        assert facts.rejected == {}
+
+    def test_a_city_builds_a_location(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala", "neighbourhood": " Bonapriso "})
+
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Bonapriso"}
+
+    def test_a_standing_is_kept_from_either_spelling(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A model handed a French message may answer "modern": true instead of
+        the enum; both are normalised to one value the form can read."""
+        assert extractor.validate({"standing": "MODERNE"}).get("standing") == "MODERN"
+        assert extractor.validate({"modern": True}).get("standing") == "MODERN"
+        assert extractor.validate({"modern": False}).get("standing") == "NON_MODERN"
+        assert extractor.validate({"standing": "ancien"}).get("standing") == "NON_MODERN"
+
+    def test_an_unknown_standing_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"standing": "peut-etre"})
+
+        assert not facts.has("standing")
+        assert "standing" in facts.rejected
+
+
+class TestRefusedFacts:
+    def test_a_negative_rent_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"price": -5})
+
+        assert not facts.has("rent")
+        assert "rent" in facts.rejected
+
+    def test_an_absurd_rent_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"price": MAX_PLAUSIBLE_RENT_XAF + 1})
+
+        assert not facts.has("rent")
+        assert "rent" in facts.rejected
+
+    def test_impossible_rooms_are_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"bedrooms": 51})
+
+        assert not facts.has("rooms")
+        assert "rooms" in facts.rejected
+
+    def test_an_impossible_surface_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"surface_area": 2})
+
+        assert not facts.has("surface")
+        assert "surface" in facts.rejected
+
+    def test_a_non_numeric_rent_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"price": "beaucoup"})
+
+        assert not facts.has("rent")
+        assert "rent" in facts.rejected
+
+    def test_every_accepted_neighbourhood_is_kept(self, extractor: FactExtractor) -> None:
+        """"Bonamoussadi ou bien Makepe" is two places; keeping one narrows the
+        tenant's demand behind his back."""
+        facts = extractor.validate(
+            {
+                "city": "Douala",
+                "neighbourhood": "Bonamoussadi",
+                "neighbourhoods": ["Bonamoussadi", "Makepe", " makepe "],
+            }
+        )
+
+        assert _named(facts.get("location")) == {
+            "city": "Douala",
+            "neighbourhood": "Bonamoussadi",
+            "neighbourhoods": ["Bonamoussadi", "Makepe"],
+        }
+
+    def test_a_vague_neighbourhood_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala", "neighbourhood": "X"})
+
+        assert not facts.has("location")
+        assert "location" in facts.rejected
+
+    def test_one_bad_field_does_not_discard_the_good_ones(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"price": 250_000, "bedrooms": 99})
+
+        assert facts.get("rent") == 250_000
+        assert facts.rejected.keys() == {"rooms"}
+
+    def test_a_refused_field_never_reaches_the_session_context(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"price": 250_000, "bedrooms": 99})
+
+        assert "rooms" not in facts.as_context()
+
+
+class TestLocationHint:
+    def test_an_unknown_neighbourhood_is_not_promoted_to_a_city(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A place the index does not know stays a hint. Promoting any word to a
+        city is how a search for "Douala" returns a property that is not there."""
+        facts = extractor.validate({"location_hint": "Zzzville"})
+
+        assert not facts.has("location")
+        assert facts.get("location_hint") == "Zzzville"
+
+    def test_a_known_quartier_resolves_to_its_city(
+        self, extractor: FactExtractor
+    ) -> None:
+        """``Bastos`` is a complete answer: the district index knows it is in
+        Yaoundé, so the location question can actually close."""
+        facts = extractor.validate({"location_hint": "Bastos"})
+
+        assert _named(facts.get("location")) == {"city": "Yaoundé", "neighbourhood": "Bastos"}
+
+    def test_a_bare_neighbourhood_without_a_city_resolves(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"neighbourhood": "Bonapriso"})
+
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Bonapriso"}
+
+    def test_an_accented_neighbourhood_matches(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"neighbourhood": "Deido"})
+
+        assert _named(facts.get("location")) == {"city": "Douala", "neighbourhood": "Deido"}
+
+    def test_a_vague_hint_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"location_hint": "-"})
+
+        assert not facts.has("location_hint")
+        assert "location_hint" in facts.rejected
+
+
+class TestConversationOrder:
+    def test_the_first_missing_field_decides_the_next_step(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_STANDING
+
+    def test_the_form_walks_the_ten_steps_of_the_spec_in_order(
+        self, extractor: FactExtractor
+    ) -> None:
+        """The order of conception_metier/kora-housing-v1.md §4, step by step.
+
+        What it is, how many, where, for how much, then the real move-in cost —
+        water and electricity, the advance in months then the caution, asked
+        together and only re-asked for the caution when it was left out —
+        then the guard and the parking. The photos are step ten and are chased
+        by the quality gate, not by this form: no message produces a ``media``
+        fact, so requiring one here would park the conversation for ever.
+
+        Three fields this form used to ask for are gone: the minimum duration,
+        the availability date and the free-text conditions. Kora introduces a
+        landlord to a tenant, it does not negotiate a lease (§10).
+        """
+        answered: dict[str, object] = {}
+        expected_steps = [
+            ({"property_type": "APARTMENT"}, FlowStep.COLLECT_STANDING),
+            ({"standing": "MODERN"}, FlowStep.COLLECT_QUANTITY),
+            ({"quantity": 2}, FlowStep.COLLECT_LOCATION),
+            ({"city": "Douala", "neighbourhood": "Bonamoussadi"}, FlowStep.COLLECT_PRICE),
+            ({"price": 250_000}, FlowStep.COLLECT_CHARGES),
+            ({"charges": 0, "charging_policy": "INCLUDED"}, FlowStep.COLLECT_ADVANCE),
+            ({"advance_months": 6}, FlowStep.COLLECT_DEPOSIT),
+            ({"deposit_months": 2}, FlowStep.COLLECT_SECURITY),
+            (
+                {"amenities": {"security": True, "parking": False}},
+                FlowStep.CONFIRM_PROPERTY,
+            ),
+        ]
+        for given, expected in expected_steps:
+            answered.update(given)
+            facts = extractor.validate(dict(answered))
+            step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+            assert step is expected, answered
+
+    @pytest.mark.parametrize(
+        "dropped",
+        ["minimum_duration_months", "availability", "conditions"],
+    )
+    def test_the_dropped_questions_are_never_asked(
+        self, extractor: FactExtractor, dropped: str
+    ) -> None:
+        """Their steps and setters remain — optional, not asked.
+
+        A landlord who volunteers "disponible immédiatement" still has it
+        recorded; he is never stopped to be asked for it.
+        """
+        assert dropped not in {name for name, _ in PROPERTY_REQUIREMENTS}
+
+    def test_a_listing_intent_starts_from_what_is_already_known(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A landlord who says everything in one message must not be asked for
+        the type of property they just named."""
+        facts = extractor.validate(
+            {
+                "property_type": "APARTMENT",
+                "standing": "MODERN",
+                "quantity": 1,
+                "city": "Douala",
+                "neighbourhood": "Akwa",
+            }
+        )
+
+        step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_PRICE
+
+    def test_a_support_conversation_is_not_hijacked_by_a_stray_amount(
+        self, extractor: FactExtractor
+    ) -> None:
+        """Someone asking a support question with a price in it must not suddenly
+        find themselves inside a listing form."""
+        facts = extractor.validate({"price": 250_000})
+
+        step = extractor.next_step("COLLECT_PRICE", facts, flow=FlowName.SUPPORT)
+
+        assert step is None
+
+    def test_an_amount_advances_a_listing_that_is_already_open(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"price": 250_000})
+
+        step = extractor.next_step("COLLECT_PRICE", facts, flow=FlowName.PROPERTY_CREATION)
+
+        assert step is FlowStep.COLLECT_PROPERTY_TYPE
+
+    def test_facts_already_in_the_session_do_not_get_asked_again(
+        self, extractor: FactExtractor
+    ) -> None:
+        """A landlord who answers the location question after naming the type
+        moves to the rent question, not back to the type question."""
+        facts = extractor.validate({"city": "Yaoundé", "neighbourhood": "Bastos"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
+
+    def test_an_unrelated_intent_does_not_move_a_listing(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"bedrooms": 2})
+
+        step = extractor.next_step("AVAILABILITY_RENTED", facts, flow=FlowName.PROPERTY_CREATION)
+
+        assert step is None
+
+    def test_a_question_key_is_produced_for_the_next_step(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+
+        assert question_key_for(step) == "ask.standing"
+
+    def test_no_step_means_no_question(self) -> None:
+        assert question_key_for(None) is None
+
+
+class TestFlowOpening:
+    def test_only_listing_intents_open_a_flow(self) -> None:
+        assert FLOW_BY_OPENING_INTENT == {
+            "CREATE_PROPERTY": FlowName.PROPERTY_CREATION,
+            "PROPERTY_SEARCH": FlowName.PROPERTY_SEARCH,
+        }
+
+    def test_a_search_and_a_listing_open_different_flows(self) -> None:
+        assert (
+            FLOW_BY_OPENING_INTENT["PROPERTY_SEARCH"]
+            is not FLOW_BY_OPENING_INTENT["CREATE_PROPERTY"]
+        )
+
+
+class TestTenantSearchForm:
+    """A search is the tenant's form.
+
+    It asks only what narrows the catalogue — type, place, budget — and every
+    field a listing collects is a question a searching tenant cannot answer,
+    because it describes someone else's property.
+    """
+
+    def test_the_first_search_message_opens_on_the_tenant_form(
+        self, extractor: FactExtractor
+    ) -> None:
+        """The first message arrives in a session whose flow is still SUPPORT:
+        the tenant's form must open from the intent, not from the session."""
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("PROPERTY_SEARCH", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_LOCATION
+
+    def test_a_complete_criteria_set_reaches_the_results(
+        self, extractor: FactExtractor
+    ) -> None:
+        """Type, place, rent and advance fill the search: the landlord's
+        confirmation — and the charges, deposit and dates before it — must
+        never appear."""
+        facts = extractor.validate(
+            {
+                "property_type": "APARTMENT",
+                "city": "Douala",
+                "price": 150_000,
+                "advance_months": 3,
+                "standing": "MODERN",
+            }
+        )
+
+        step = extractor.next_step("PROPERTY_SEARCH", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.PRESENT_RESULTS
+
+    def test_the_message_supplying_the_last_fact_completes_the_search(
+        self, extractor: FactExtractor
+    ) -> None:
+        """The advance arriving last must not restart the form: what the session
+        already holds counts towards the same criteria."""
+        facts = extractor.validate({"advance_months": 4})
+
+        step = extractor.next_step(
+            "COLLECT_ADVANCE",
+            facts,
+            flow=FlowName.PROPERTY_SEARCH,
+            known={
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+                "rent": 150_000,
+            },
+        )
+
+        assert step is FlowStep.PRESENT_RESULTS
+
+    def test_the_budget_is_followed_by_the_months_of_advance(
+        self, extractor: FactExtractor
+    ) -> None:
+        """§3: the fourth question a tenant is asked is how many months of rent
+        he can pay up front."""
+        step = extractor.next_step(
+            "COLLECT_PRICE",
+            extractor.validate({"price": 150_000}),
+            flow=FlowName.PROPERTY_SEARCH,
+            known={
+                "property_type": "STUDIO",
+                "location": {"city": "Yaoundé", "neighbourhood": "Bastos"},
+            },
+        )
+
+        assert step is FlowStep.COLLECT_ADVANCE
+        assert question_key_for(step, FlowName.PROPERTY_SEARCH) == "ask.search_advance"
+
+    def test_the_search_questions_are_worded_for_a_tenant(self) -> None:
+        tenant = FlowName.PROPERTY_SEARCH
+
+        assert question_key_for(FlowStep.COLLECT_PROPERTY_TYPE, tenant) == "ask.search_type"
+        assert question_key_for(FlowStep.COLLECT_LOCATION, tenant) == "ask.search_location"
+        assert question_key_for(FlowStep.COLLECT_PRICE, tenant) == "ask.search_budget"
+        assert question_key_for(FlowStep.PRESENT_RESULTS, tenant) == "ask.search_results"
+
+    def test_the_landlord_keeps_the_listing_wording(self) -> None:
+        assert question_key_for(FlowStep.COLLECT_PRICE, FlowName.PROPERTY_CREATION) == "ask.rent"
+        assert question_key_for(FlowStep.COLLECT_PRICE, FlowName.SUPPORT) == "ask.rent"
+
+    def test_the_listing_form_is_untouched(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"property_type": "APARTMENT"})
+
+        step = extractor.next_step("CREATE_PROPERTY", facts, flow=FlowName.SUPPORT)
+
+        assert step is FlowStep.COLLECT_STANDING
+
+    def test_a_support_message_still_moves_nothing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step("SUPPORT", facts, flow=FlowName.PROPERTY_SEARCH)
+
+        assert step is None
+
+
+class TestADistrictHasAPlaceOnTheMap:
+    """The offline OpenStreetMap gazetteer gives each half its other half."""
+
+    def test_a_typed_district_carries_its_centre_marked_approximate(
+        self, extractor: FactExtractor
+    ) -> None:
+        location = extractor.validate({"city": "Yaoundé", "neighbourhood": "Odza"}).get(
+            "location"
+        )
+
+        assert location["approximate"] is True
+        assert location["latitude"] == pytest.approx(3.7986, abs=0.01)
+
+    def test_a_pin_with_no_name_is_named_after_the_nearest_district(
+        self, extractor: FactExtractor
+    ) -> None:
+        location = extractor.validate({"latitude": 3.7905, "longitude": 11.5370}).get(
+            "location"
+        )
+
+        assert location["neighbourhood"] == "Odza"
+        assert "approximate" not in location
+
+
+class TestTheLocationStep:
+    """Housing §4: a shared pin, or the city and the neighbourhood."""
+
+    def test_a_city_alone_does_not_place_a_listing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
+        )
+
+        assert step is FlowStep.COLLECT_LOCATION
+
+    def test_a_shared_pin_places_it_without_a_district_name(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"latitude": 3.7905, "longitude": 11.5370})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_CREATION,
+            known={"property_type": "STUDIO", "standing": "MODERN", "quantity": 1},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
+
+    def test_a_tenant_may_search_a_whole_city(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"city": "Douala"})
+
+        step = extractor.next_step(
+            "COLLECT_LOCATION",
+            facts,
+            flow=FlowName.PROPERTY_SEARCH,
+            known={"property_type": "STUDIO"},
+        )
+
+        assert step is FlowStep.COLLECT_PRICE
+
+
+class TestAmountShorthand:
+    def test_mil_means_thousands_not_millions(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("50 mil") == 50_000
+
+    def test_plain_amounts_are_not_treated_as_shorthand(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("250 000 fcfa") is None
+        assert classifier.shorthand_amount("250000") is None
+
+    def test_a_shorthand_amount_is_read_as_a_price(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("je vends un studio a 50 mil")
+
+        assert match is not None
+        assert match.entities["price"] == 50_000
+
+    def test_million_beats_thousand_in_the_same_message(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shorthand_amount("2 millions") == 2_000_000
+
+
+class TestSearchVersusListingRouting:
+    """To rent is the tenant's verb; to list is the landlord's.
+
+    "Je veux louer un studio" is a tenant looking, and reading "louer" as the
+    act of listing flipped the whole form onto the landlord's questions.
+    """
+
+    def test_renting_is_a_search_not_a_listing(self) -> None:
+        match = DeterministicClassifier().classify("je veux louer un studio moderne")
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+        assert match.entities["standing"] == "MODERN"
+        assert match.entities["property_type"] == "STUDIO"
+
+    def test_owning_a_property_is_what_lists_it(self) -> None:
+        match = DeterministicClassifier().classify("je veux louer mon studio a douala")
+
+        assert match is not None
+        assert match.intent == "CREATE_PROPERTY"
+        assert match.entities["city"] == "Douala"
+
+    def test_a_message_the_regexes_miss_stays_undecided(self) -> None:
+        """The model is still the fallback reader: an intent the rules cannot
+        place returns nothing rather than a wrong guess."""
+        assert DeterministicClassifier().classify("quelle heure est il") is None
+
+
+class TestLocationEntity:
+    """A named place is a fact, and an unknown place is not."""
+
+    def test_a_known_city_is_read(self) -> None:
+        match = DeterministicClassifier().classify("je cherche un studio a Douala")
+
+        assert match is not None
+        assert match.intent == "PROPERTY_SEARCH"
+        assert match.entities["city"] == "Douala"
+
+    def test_a_district_carries_its_city(self) -> None:
+        match = DeterministicClassifier().classify("New Bell")
+
+        assert match is not None
+        assert match.intent == "COLLECT_LOCATION"
+        assert match.entities == {"city": "Douala", "neighbourhood": "New Bell"}
+
+    def test_a_city_with_an_unknown_district_keeps_the_city(self) -> None:
+        """Nkoabang is not in the index, but Yaoundé is: the message must still
+        resolve to the city rather than being dropped and asked again."""
+        match = DeterministicClassifier().classify("yaounde nkoabang")
+
+        assert match is not None
+        assert match.intent == "COLLECT_LOCATION"
+        assert match.entities["city"] == "Yaoundé"
+
+    def test_an_unknown_place_is_not_invented(self) -> None:
+        match = DeterministicClassifier().classify("je cherche a Wakanda")
+
+        assert match is None or "city" not in match.entities
+
+
+class TestPendingAnswerBinding:
+    """A short answer means the open question, never the field of the month."""
+
+    def test_a_bare_number_answers_the_minimum_duration(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("5", pending="ask.minimum_duration")
+
+        assert match is not None
+        assert match.intent == "COLLECT_MINIMUM_DURATION"
+        assert match.entities == {"minimum_duration_months": 5}
+
+    def test_months_wording_is_read_the_same_way(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("5 mois", pending="ask.minimum_duration")
+
+        assert match is not None
+        assert match.entities["minimum_duration_months"] == 5
+
+    def test_a_bare_number_under_the_caution_question_is_months(self) -> None:
+        """"2" is two months of rent, not two francs and not a rent too small.
+
+        The caution is a multiple of the rent here, so the unit of the answer is
+        decided by the question that is open — not by the size of the number.
+        """
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("2", pending="ask.deposit")
+
+        assert match is not None
+        assert match.intent == "COLLECT_DEPOSIT"
+        assert match.entities == {"deposit_months": 2}
+
+    def test_no_caution_is_an_answer_of_zero(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("0", pending="ask.deposit")
+
+        assert match is not None
+        assert match.entities == {"deposit_months": 0}
+
+    def test_an_advance_answer_binds_to_the_advance(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.classify("6 mois", pending="ask.advance")
+
+        assert match is not None
+        assert match.intent == "COLLECT_ADVANCE"
+        assert match.entities == {"advance_months": 6}
+
+    @pytest.mark.parametrize(
+        ("text", "policy"),
+        [
+            ("compteur ENEO prépayé et forage", "EXTRA"),
+            ("chacun a son compteur", "EXTRA"),
+            ("compteur partagé", "EXTRA"),
+            ("eau et lumière à part", "EXTRA"),
+            ("c'est compris dans le loyer", "INCLUDED"),
+            ("tout est inclus", "INCLUDED"),
+        ],
+    )
+    def test_water_and_electricity_are_read_in_local_terms(
+        self, text: str, policy: str
+    ) -> None:
+        match = DeterministicClassifier().shortcut(text, pending="ask.charges")
+
+        assert match is not None
+        assert match.intent == "COLLECT_CHARGES"
+        assert match.entities == {"charging_policy": policy, "charges": 0}
+
+    @pytest.mark.parametrize("text", ["oui", "non"])
+    def test_a_bare_yes_or_no_answers_nothing_about_the_utilities(self, text: str) -> None:
+        """The question is now "comment ça se passe ?": the model asks again."""
+        match = DeterministicClassifier().shortcut(text, pending="ask.charges")
+
+        assert match is None or match.intent != "COLLECT_CHARGES"
+
+    @pytest.mark.parametrize(
+        ("text", "entities"),
+        [
+            ("6 mois pas de caution", {"advance_months": 6, "deposit_months": 0}),
+            ("6 mois, sans caution", {"advance_months": 6, "deposit_months": 0}),
+            ("6 mois avec 2 mois de caution", {"advance_months": 6, "deposit_months": 2}),
+            ("6 mois et 2 mois de caution", {"advance_months": 6, "deposit_months": 2}),
+            ("caution 1 mois et 3 mois d'avance", {"advance_months": 3, "deposit_months": 1}),
+            ("6 mois", {"advance_months": 6}),
+            ("6", {"advance_months": 6}),
+        ],
+    )
+    def test_the_advance_and_the_caution_come_in_one_answer(
+        self, text: str, entities: dict[str, int]
+    ) -> None:
+        """The landlord's own way of saying it: one question, both fields."""
+        match = DeterministicClassifier().shortcut(text, pending="ask.advance")
+
+        assert match is not None
+        assert match.intent == "COLLECT_ADVANCE"
+        assert match.entities == entities
+
+    def test_oui_to_a_question_that_names_two_things_goes_to_the_model(self) -> None:
+        """A bare "oui" to "gardien ? parking ?" — or to a question that wants a
+        count — says neither which of the two nor how many, so it still needs the
+        model to ask for the missing half."""
+        classifier = DeterministicClassifier()
+
+        for pending in ("ask.security", "ask.deposit", "ask.advance"):
+            assert classifier.shortcut("oui", pending=pending) is None, pending
+            assert classifier.classify("oui", pending=pending) is None, pending
+
+    def test_a_franc_amount_under_a_months_question_goes_to_the_model(self) -> None:
+        """Handed back rather than stored: 250 000 months is a typo, and the
+        landlord has to be asked again instead of having it recorded."""
+        classifier = DeterministicClassifier()
+
+        assert classifier.classify("250000", pending="ask.deposit") is None
+
+    def test_an_open_budget_question_binds_the_answer_as_a_price(self) -> None:
+        """A tenant's budget is priced like a rent: the open question, not the
+        wording of the reply, decides which field the number lands in."""
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("200 000 par mois", pending="ask.search_budget")
+
+        assert match is not None
+        assert match.intent == "COLLECT_PRICE"
+        assert match.entities == {"price": 200_000}
+
+    def test_a_short_immediate_answer_binds_to_availability(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("immédiat", pending="ask.availability")
+
+        assert match is not None
+        assert match.entities == {"availability": "IMMEDIATE"}
+
+    def test_a_short_date_answer_binds_to_availability(self) -> None:
+        classifier = DeterministicClassifier()
+
+        match = classifier.shortcut("01/11/2026", pending="ask.availability")
+
+        assert match is not None
+        assert match.entities == {"availability": "01/11/2026"}
+
+    def test_a_lone_number_with_no_open_question_is_not_a_price(self) -> None:
+        classifier = DeterministicClassifier()
+
+        assert classifier.shortcut("5") is None
+        assert classifier.classify("5") is None
+
+
+class TestEntryConditions:
+    """The move-in cost is part of the price here, so it must survive validation."""
+
+    def test_included_charges_are_a_policy_not_an_amount(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"charges_included": True})
+
+        assert facts.get("charges") == 0
+        assert facts.get("charging_policy") == "INCLUDED"
+
+    def test_extra_charges_keep_their_amount(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"charges": 15_000})
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charging_policy") == "EXTRA"
+
+    def test_the_caution_is_kept_in_months(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"deposit_months": 2})
+
+        assert facts.get("deposit_months") == 2
+
+    def test_no_caution_is_zero_months_not_a_missing_answer(
+        self, extractor: FactExtractor
+    ) -> None:
+        """"Aucune caution" is an ordinary answer and must advance the form."""
+        facts = extractor.validate({"deposit_months": 0})
+
+        assert facts.get("deposit_months") == 0
+
+    def test_the_advance_is_kept_in_months(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"advance_months": 6})
+
+        assert facts.get("advance_months") == 6
+
+    def test_a_caution_given_in_francs_is_refused_not_converted(
+        self, extractor: FactExtractor
+    ) -> None:
+        """Converting would mean dividing by a rent that may not be known yet,
+        or may be corrected later. A wrong number of months is a listing the
+        matching misplaces, so the landlord is asked again instead."""
+        facts = extractor.validate({"deposit": 250_000})
+
+        assert not facts.has("deposit_months")
+        assert "deposit_months" in facts.rejected
+
+    @pytest.mark.parametrize("months", [-1, 25])
+    def test_an_implausible_number_of_months_is_refused(
+        self, extractor: FactExtractor, months: int
+    ) -> None:
+        facts = extractor.validate({"deposit_months": months})
+
+        assert not facts.has("deposit_months")
+        assert "deposit_months" in facts.rejected
+
+    def test_availability_normalises_to_a_token(self, extractor: FactExtractor) -> None:
+        assert extractor.validate({"availability": "immédiatement"}).get(
+            "availability"
+        ) == "IMMEDIATE"
+        assert extractor.validate({"availability": "01/11/2026"}).get(
+            "availability"
+        ) == "2026-11-01"
+
+    def test_an_unreadable_availability_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"availability": "un jour"})
+
+        assert not facts.has("availability")
+        assert "availability" in facts.rejected
+
+    def test_conditions_must_be_specific_enough(self, extractor: FactExtractor) -> None:
+        assert not extractor.validate({"conditions": "ok"}).has("conditions")
+        kept = extractor.validate(
+            {"conditions": "Caution deux mois et avance de trois mois."}
+        )
+        assert kept.has("conditions")
+
+
+class TestMarketKnowledge:
+    """The district index is the authority a bare quartier resolves against."""
+
+    def test_a_district_resolves_to_its_city(self) -> None:
+        assert market.resolve_neighbourhood("Bastos") == "Yaoundé"
+        assert market.resolve_neighbourhood("Bonapriso") == "Douala"
+
+    def test_accents_and_case_do_not_matter(self) -> None:
+        assert market.resolve_city("YAOUNDE") == "Yaoundé"
+        assert market.resolve_neighbourhood("deido") == "Douala"
+
+    def test_an_unknown_place_stays_unresolved(self) -> None:
+        assert market.resolve_neighbourhood("Zzzville") is None
+        assert market.resolve_city("Zzzville") is None
+
+    def test_every_entry_points_at_a_declared_source(self) -> None:
+        for neighbourhood in market.NEIGHBOURHOODS:
+            assert neighbourhood.source in market.SOURCES
+        for expression in market.EXPRESSIONS:
+            assert expression.source in market.SOURCES
+
+    def test_a_premium_address_widens_the_price_band(self) -> None:
+        base = market.price_reference("APARTMENT")
+        premium = market.price_reference("APARTMENT", neighbourhood="Bastos")
+
+        assert base is not None and premium is not None
+        assert premium.low_xaf >= base.low_xaf
+        assert premium.high_xaf > base.high_xaf
+
+    def test_an_unknown_type_has_no_band(self) -> None:
+        assert market.price_reference("SPACESHIP") is None
+
+
+class TestTrustBoundary:
+    def test_every_deterministic_intent_is_trusted(self) -> None:
+        """The allowlist is the boundary between "act on this" and "do not".
+
+        It is maintained by hand, so it is closed here by test rather than by
+        memory: an intent the classifier can emit that the allowlist refuses
+        would silently stop working when the pipeline is switched on.
+        """
+        samples = [
+            "je vends un appartement a 250 000",
+            "je veux publier un appartement",
+            "appartement",
+            "250 000 fcfa",
+            "3 chambres 2 salles de bain 120m2",
+            "je cherche un appartement a Douala",
+            "avez-vous un studio a Bastos ?",
+            "toujours disponible",
+            "c'est déjà loué",
+            "indisponible pour le moment",
+            "j'ai trouvé via WhatsApp",
+            "oui",
+            "non",
+            "merci",
+        ]
+        classifier = DeterministicClassifier()
+        emitted = {
+            match.intent
+            for text in samples
+            if (match := classifier.classify(text)) is not None
+        }
+
+        assert emitted, "the samples must produce at least one intent"
+        assert emitted <= SUPPORTED_INTENTS
+
+    def test_every_answer_to_an_open_question_is_a_supported_intent(self) -> None:
+        """The half of the trust boundary the sample list could not reach.
+
+        The classifier emits different intents depending on which question is
+        open, and the samples above are all classified with none. Three intents
+        reachable only through a pending question were therefore missing from
+        ``SUPPORTED_INTENTS``, which means a landlord answering "6" to the
+        advance question had his answer refused as an invented state — the
+        thread stalled on a question he had just answered.
+        """
+        answers = {
+            "ask.rent": "250 000",
+            "ask.search_budget": "150 000",
+            "ask.charges": "15 000",
+            "ask.deposit": "2",
+            "ask.advance": "6",
+            "ask.quantity": "2",
+            "ask.search_choice": "1",
+            "ask.minimum_duration": "12",
+            "ask.availability": "immédiatement",
+        }
+        classifier = DeterministicClassifier()
+        emitted = {
+            match.intent
+            for pending, text in answers.items()
+            if (match := classifier.classify(text, pending=pending)) is not None
+        }
+
+        assert len(emitted) >= 6, emitted
+        assert emitted <= SUPPORTED_INTENTS, emitted - SUPPORTED_INTENTS
+
+    def test_an_invented_intent_is_refused(self) -> None:
+        assert not is_supported_intent("TRANSFER_MONEY_TO_LANDLORD")
+
+    def test_a_real_intent_is_accepted(self) -> None:
+        assert is_supported_intent("CREATE_PROPERTY")
+
+    def test_the_search_intent_is_trusted(self) -> None:
+        assert is_supported_intent("PROPERTY_SEARCH")
+
+    def test_the_two_rent_bounds_are_ordered(self) -> None:
+        assert MIN_PLAUSIBLE_RENT_XAF < MAX_PLAUSIBLE_RENT_XAF
+
+
+class TestAmenityFacts:
+    def test_confirmed_amenities_survive_validation(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {"amenities": {"parking": True, "water": True, "internet": False}}
+        )
+
+        assert facts.get("amenities") == {"parking": True, "water": True, "internet": False}
+        assert facts.rejected == {}
+
+    def test_only_the_five_axes_with_real_booleans_are_kept(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "amenities": {
+                    "swimming_pool": True,
+                    "water": "maybe",
+                    "security": False,
+                    "extras": ["balcon", "climatiseur"],
+                }
+            }
+        )
+
+        assert facts.get("amenities") == {"security": False, "extras": ["balcon", "climatiseur"]}
+
+    def test_an_amenity_payload_that_is_not_an_object_is_refused(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate({"amenities": "parc"})
+
+        assert not facts.has("amenities")
+        assert "amenities" in facts.rejected
+
+    def test_hints_keep_no_extras_so_they_can_never_become_facts(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {"amenities_hints": {"parking": True, "extras": ["cour"]}}
+        )
+
+        assert facts.get("amenities_hints") == {"parking": True}
+
+
+class TestChargesBreakdown:
+    def test_the_charges_breakdown_reaches_the_facts(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {
+                "water_charges": 5_000,
+                "electricity_charges": 10_000,
+                "charges": 15_000,
+                "charging_policy": "EXTRA",
+            }
+        )
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charging_policy") == "EXTRA"
+        assert facts.get("charges_breakdown") == {"water": 5_000, "electricity": 10_000}
+
+    def test_a_breakdown_without_a_total_is_still_summed(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {"water_charges": 5_000, "electricity_charges": 10_000}
+        )
+
+        assert facts.get("charges") == 15_000
+        assert facts.get("charges_breakdown") == {"water": 5_000, "electricity": 10_000}
+
+    def test_a_negative_breakdown_is_refused(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate({"water_charges": -5_000, "electricity_charges": 10_000})
+
+        assert not facts.has("charges")
+        assert "charges" in facts.rejected
+
+
+class TestSeveralLodgings:
+    """§5: a different type or a different rent is another listing."""
+
+    def test_the_first_lodging_fills_the_form_and_the_others_wait(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "lodgings": [
+                    {"property_type": "studio", "price": 65_000, "quantity": 2},
+                    {"property_type": "apartment", "price": 90_000},
+                ]
+            }
+        )
+
+        assert facts.get("property_type") == "STUDIO"
+        assert facts.get("rent") == 65_000
+        assert facts.get("quantity") == 2
+        assert facts.get("_next_lodgings") == [
+            {"property_type": "APARTMENT", "quantity": 1, "rent": 90_000}
+        ]
+
+    def test_one_lodging_alone_queues_nothing(self, extractor: FactExtractor) -> None:
+        facts = extractor.validate(
+            {"lodgings": [{"property_type": "studio", "price": 65_000}]}
+        )
+
+        assert facts.get("property_type") == "STUDIO"
+        assert not facts.has("_next_lodgings")
+
+    def test_a_lodging_that_does_not_validate_queues_nothing(
+        self, extractor: FactExtractor
+    ) -> None:
+        facts = extractor.validate(
+            {
+                "lodgings": [
+                    {"property_type": "studio", "price": 65_000},
+                    {"property_type": "castle", "price": 90_000},
+                ]
+            }
+        )
+
+        assert not facts.has("_next_lodgings")
+        assert "_next_lodgings" in facts.rejected
+
+
+
+@pytest.mark.parametrize(
+    ("text", "amenities"),
+    [
+        ("gardien oui parking non", {"security": True, "parking": False}),
+        ("pas de gardien, parking oui", {"security": False, "parking": True}),
+        ("il y a un gardien", {"security": True}),
+        ("parking: oui", {"parking": True}),
+    ],
+)
+def test_the_guard_and_the_parking_are_read_by_a_rule(
+    text: str, amenities: dict[str, bool]
+) -> None:
+    """Observed live: "gardien oui parking non" came back from the model a bare
+    AFFIRMATIVE, and the form stood still on the security question."""
+    match = DeterministicClassifier().shortcut(text, pending="ask.security")
+
+    assert match is not None
+    assert match.intent == "COLLECT_SECURITY"
+    assert match.entities == {"amenities": amenities}
+
+
+def test_a_typed_district_takes_the_gazetteer_spelling(extractor: FactExtractor) -> None:
+    """Observed live: a tenant's "Ekounou" never matched the "Ékounou" named
+    from the landlord's pin, and an exact match was offered as a near miss."""
+    facts = extractor.validate({"city": "Yaoundé", "neighbourhood": "Ekounou"})
+
+    assert facts.get("location")["neighbourhood"] == "Ékounou"
+
+
+def test_a_district_is_never_respelt_through_an_alias(extractor: FactExtractor) -> None:
+    """"Makepe" is a whole area; its alias names one part of it."""
+    facts = extractor.validate({"city": "Douala", "neighbourhood": "Makepe"})
+
+    assert facts.get("location")["neighbourhood"] == "Makepe"

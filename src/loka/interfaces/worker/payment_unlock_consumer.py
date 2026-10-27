@@ -21,13 +21,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from loka.bounded_contexts.ai.application.use_cases.present_payment_failure import (
+from loka.bounded_contexts.conversation.application.use_cases.present_payment_failure import (
     PresentPaymentFailureUseCase,
 )
-from loka.bounded_contexts.ai.infrastructure.composition import (
+from loka.bounded_contexts.conversation.infrastructure.composition import (
     reveal_unlocked_contact_use_case,
 )
-from loka.bounded_contexts.messaging.infrastructure.composition import (
+from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
 from loka.bounded_contexts.payment.infrastructure.composition import (

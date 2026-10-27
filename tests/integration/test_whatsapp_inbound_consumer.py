@@ -17,7 +17,7 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
 
-from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationSessionRow,
     InboundMessageRow,
 )

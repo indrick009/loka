@@ -13,28 +13,28 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
-from loka.bounded_contexts.messaging.application.use_cases.receive_inbound_message import (
+from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageCommand,
 )
-from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     SESSION_IDLE_TIMEOUT,
     FlowStep,
 )
-from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
+from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import (
     MessageKind,
 )
-from loka.bounded_contexts.messaging.infrastructure.composition import (
+from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     receive_inbound_message_use_case,
 )
-from loka.bounded_contexts.messaging.infrastructure.persistence.inbound_message_repository import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_message_repository import (  # noqa: E501
     SqlAlchemyInboundMessageRepository,
 )
-from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationSessionRow,
     InboundMessageRow,
 )
+from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.shared.domain.errors import ConcurrencyConflict
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
@@ -282,7 +282,7 @@ async def test_a_session_advances_under_optimistic_concurrency(
         stored.revision += 1
         await session.commit()
 
-    from loka.bounded_contexts.messaging.infrastructure.persistence import (
+    from loka.bounded_contexts.conversation.infrastructure.persistence import (
         conversation_session_repository,
     )
 

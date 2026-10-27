@@ -6,7 +6,14 @@ what Alembic autogeneration and ``create_all`` rely on.
 
 from __future__ import annotations
 
-from loka.bounded_contexts.ai.infrastructure.persistence.models import (
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
+    ConversationMetricsRow,
+    ConversationSessionRow,
+    ConversationTurnRow,
+    InboundMessageRow,
+    OutboundMessageRow,
+)
+from loka.bounded_contexts.conversation.infrastructure.persistence.models import (
     AiUsageLedgerRow,
     DecisionShadowRow,
 )
@@ -29,13 +36,6 @@ from loka.bounded_contexts.identity.infrastructure.persistence.models import (
     PhoneVerificationChallengeRow,
     RefreshTokenRow,
     UserRow,
-)
-from loka.bounded_contexts.messaging.infrastructure.persistence.models import (
-    ConversationMetricsRow,
-    ConversationSessionRow,
-    ConversationTurnRow,
-    InboundMessageRow,
-    OutboundMessageRow,
 )
 from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     PaymentCallbackRow,

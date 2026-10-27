@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
+    MESSAGING_REPOSITORY_FACTORIES,
+)
 from loka.bounded_contexts.fraud.application.use_cases.evaluate_risk import (
     EvaluateRiskUseCase,
 )
@@ -50,9 +53,6 @@ from loka.bounded_contexts.housing.application.use_cases.publish_property import
 from loka.bounded_contexts.housing.infrastructure.composition import (
     LANDLORD_DIRECTORY,
     PROPERTY_REPOSITORY_FACTORIES,
-)
-from loka.bounded_contexts.messaging.infrastructure.composition import (
-    MESSAGING_REPOSITORY_FACTORIES,
 )
 from loka.bounded_contexts.payment.application.ports import (
     PaymentGateway,

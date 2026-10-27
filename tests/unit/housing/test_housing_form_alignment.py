@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from loka.bounded_contexts.ai.domain.services.fact_extraction import (
+from loka.bounded_contexts.conversation.domain.services.fact_extraction import (
     PROPERTY_REQUIREMENTS,
     question_key_for,
 )

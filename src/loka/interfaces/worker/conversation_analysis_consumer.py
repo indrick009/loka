@@ -21,11 +21,11 @@ from typing import Any, Protocol
 
 from redis.asyncio import Redis
 
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message import (
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
     AnalysisReport,
 )
-from loka.bounded_contexts.ai.infrastructure.composition import (
+from loka.bounded_contexts.conversation.infrastructure.composition import (
     analyse_conversation_message_use_case,
 )
 from loka.shared.infrastructure.broker.consumer import (
