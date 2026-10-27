@@ -23,7 +23,6 @@ import uuid
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
 
 from loka.bounded_contexts.ai.application.ports import (
     AiUsageLedger,
@@ -46,14 +45,6 @@ from loka.bounded_contexts.ai.application.services.decision_shadow import Decisi
 from loka.bounded_contexts.ai.application.services.deterministic_classifier import (
     DeterministicClassifier,
 )
-from loka.bounded_contexts.ai.application.services.prompts import (
-    build_analysis_prompt,
-    collapse_repeats,
-)
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.flow_rules import (
-    known_facts,
-    target_flow,
-)
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.location import (  # noqa: E501
     shared_location,
 )
@@ -63,8 +54,8 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.turns import (  # noqa: E501
     HousingTurns,
 )
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.reply_fit import (
-    inline_reply_fits,
+from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.model_lane import (
+    ModelLane,
 )
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.reply_writer import (  # noqa: E501
     ReplyWriter,
@@ -77,17 +68,18 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     AnalysisReport,
     Reading,
     TurnCost,
-    Verdict,
+)
+from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.turn_applier import (  # noqa: E501
+    TurnApplier,
 )
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.turn_ledger import (  # noqa: E501
-    CallUsage,
     TurnLedger,
 )
-from loka.bounded_contexts.ai.domain.services.ai_provider import SUPPORTED_LANGUAGES
+from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.verdicts import (
+    Judge,
+)
 from loka.bounded_contexts.ai.domain.services.fact_extraction import (
-    MIN_ACCEPTED_CONFIDENCE,
     FactExtractor,
-    is_supported_intent,
 )
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -101,7 +93,6 @@ from loka.bounded_contexts.messaging.domain.repositories.inbound_message_reposit
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc
-from loka.shared.domain.errors import ExternalServiceUnavailable
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import ai_bypass_total
 
@@ -139,12 +130,10 @@ class AnalyseConversationMessageUseCase:
         self._sessions = sessions
         self._turns = turns
         self._classifier = classifier or DeterministicClassifier()
-        self._model = model
-        self._extractor = extractor or FactExtractor()
         self._search = search
         self._shadow = shadow
         self._ledger = TurnLedger(turns, usage, provider=provider_name, budget=budget)
-        self._replies = ReplyWriter(response_model)
+        self._judge = Judge(extractor or FactExtractor())
         self._writer = SessionWriter(uow, sessions)
         self._housing = HousingTurns(
             self._writer,
@@ -155,6 +144,20 @@ class AnalyseConversationMessageUseCase:
             unlock_payments=unlock_payments,
             demands=demands,
             follow_up=follow_up,
+        )
+        self._applier = TurnApplier(
+            uow, ledger=self._ledger, writer=self._writer, housing=self._housing
+        )
+        self._lane = (
+            ModelLane(
+                model,
+                classifier=self._classifier,
+                housing=self._housing,
+                judge=self._judge,
+                replies=ReplyWriter(response_model),
+            )
+            if model is not None
+            else None
         )
 
     async def execute(self, command: AnalysisCommand, *, now: datetime) -> AnalysisReport:
@@ -255,7 +258,7 @@ class AnalyseConversationMessageUseCase:
             )
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
-        if self._model is None:
+        if self._lane is None:
             return await self._without_a_model(
                 session, message_id=message_id, text=text, pending=pending_key, now=moment
             )
@@ -283,7 +286,7 @@ class AnalyseConversationMessageUseCase:
             reading = Reading(intent="UNKNOWN", confidence=0.0, reason=decision.reason)
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
-        return await self._with_the_model(
+        turn = await self._lane.read(
             session,
             message=message,
             message_id=message_id,
@@ -292,101 +295,17 @@ class AnalyseConversationMessageUseCase:
             thread=thread,
             now=moment,
         )
-
-    async def _with_the_model(
-        self,
-        session: ConversationSession,
-        *,
-        message: StoredInboundMessage,
-        message_id: uuid.UUID,
-        pending_key: str | None,
-        history: list[TurnSummary],
-        thread: list[Exchange],
-        now: datetime,
-    ) -> AnalysisReport:
-        assert self._model is not None
-        text = message.text or ""
-        ai_bypass_total.labels(stage="llm").inc()
-        # A cheap rule reading only picks which form the prompt shows; the model
-        # still chooses the intent. On an opening turn it is what tells a tenant
-        # the search fields instead of the landlord's.
-        hint = self._classifier.classify(text, pending=pending_key)
-        prompt_flow = target_flow(session, hint.intent) if hint is not None else session.flow
-        prompt = build_analysis_prompt(
-            text=message.text,
-            default_language=session.language,
-            history=history,
-            flow=prompt_flow,
-            step=session.step,
-            pending_question=pending_key,
-            known_facts=dict(session.context),
-            exchanges=thread,
-        )
-        try:
-            result = await self._model.understand_intent(prompt)
-        except ExternalServiceUnavailable as exc:
-            # The provider is down, timing out, or answering with something
-            # unusable. Letting this escape meant the broker retried the
-            # message and then parked it in the DLQ, and the user's message was
-            # never answered at all — the silence this pipeline exists to
-            # prevent. A worse reply beats no reply, and the turn is recorded
-            # so the outage stays measurable.
-            _logger.warning(
-                "analysis_degraded_to_rules",
-                session_id=str(session.id),
-                message_id=str(message_id),
-                error=exc.message,
-            )
-            ai_bypass_total.labels(stage="provider_down").inc()
+        if turn is None:
             return await self._without_a_model(
-                session, message_id=message_id, text=text, pending=pending_key, now=now
+                session, message_id=message_id, text=text, pending=pending_key, now=moment
             )
-        # The model read the message, so it is the one that knows which language
-        # the user is writing in. Adopting its answer keeps a bare "150000" in
-        # tomorrow's fallback in the right language instead of snapping to French.
-        if result.language in SUPPORTED_LANGUAGES:
-            session.language = result.language
-        entities = dict(result.entities)
-        # The locale shorthand ("50 mil") is a rule, not a guess: when the
-        # message spells one it overrides whatever number the model proposed,
-        # because the model's prior reads "mil" as a million.
-        shorthand = self._classifier.shorthand_amount(text)
-        if shorthand is not None:
-            entities["price"] = shorthand
-        intent, entities = self._housing.read_open_question(
-            pending_key=pending_key, hint=hint, intent=result.intent, entities=entities, text=text
-        )
-        verdict = self._verdict(
-            session, intent=intent, confidence=result.confidence, entities=entities, reason=None
-        )
-
-        # Preferred path: the classification call already wrote the reply in its
-        # JSON, so the whole turn costs one round-trip. Only a reply that does
-        # not ask what was decided pays for a second call, written before the
-        # write transaction opens.
-        reply_text: str | None = result.reply
-        if not inline_reply_fits(
-            prompt_flow, session=session, verdict=verdict, asking=result.asking
-        ):
-            reply_text = None
-        reply_usage = None
-        if reply_text is None:
-            reply_text, reply_usage = await self._replies.compose(
-                verdict=verdict, text=text, session=session, history=history, thread=thread
-            )
-
-        call = CallUsage.of(result.usage, reply_usage, model=self._model.model)
-        call.observe()
-        cost = TurnCost(
-            message_id=message_id,
-            confidence=result.confidence,
-            used_llm=True,
-            latency_ms=call.latency_ms,
-            cost_usd=call.cost_usd,
-            now=now,
-        )
-        return await self._apply(
-            session, verdict, cost, call=call, reply_text=reply_text, text=text
+        return await self._applier.apply(
+            session,
+            turn.verdict,
+            turn.cost,
+            call=turn.call,
+            reply_text=turn.reply_text,
+            text=text,
         )
 
     async def _without_a_model(
@@ -428,7 +347,7 @@ class AnalyseConversationMessageUseCase:
         ``text`` is the raw message, handed on so a step read by a rule alone —
         the 1 000 FCFA answer — can be decided without a model.
         """
-        verdict = self._verdict(
+        verdict = self._judge(
             session,
             intent=reading.intent,
             confidence=reading.confidence,
@@ -445,7 +364,7 @@ class AnalyseConversationMessageUseCase:
             cost_usd=Decimal("0"),
             now=now,
         )
-        return await self._apply(
+        return await self._applier.apply(
             session,
             verdict,
             cost,
@@ -453,123 +372,4 @@ class AnalyseConversationMessageUseCase:
             reply_text=reading.reply_text,
             media_burst_of=reading.media_burst_of,
             media_marker=reading.media_marker,
-        )
-
-    def _verdict(
-        self,
-        session: ConversationSession,
-        *,
-        intent: str,
-        confidence: float,
-        entities: dict[str, Any],
-        reason: str | None,
-    ) -> Verdict:
-        """Validate a proposal through the domain, before anything is written.
-
-        Kept apart from ``_apply`` so the reply can be written from the
-        *outcome* of the turn while the write transaction is still closed.
-        """
-        if not is_supported_intent(intent):
-            intent, reason = "UNKNOWN", reason or "unsupported_intent"
-        if reason is None and confidence < MIN_ACCEPTED_CONFIDENCE:
-            reason = "low_confidence"
-        facts = self._extractor.validate(self._housing.one_place(entities, session))
-        # The next step must consider the whole form, not just this message: a
-        # landlord who gives their city after naming the property type is one
-        # step further, not back at the type question. When this message opens a
-        # *new* flow, the old facts belong to the abandoned attempt and are
-        # deliberately ignored — matching the reset the session writer does.
-        next_step = (
-            self._extractor.next_step(
-                intent,
-                facts,
-                flow=target_flow(session, intent),
-                known=known_facts(session, intent),
-            )
-            if reason is None
-            else None
-        )
-        return Verdict(
-            intent=intent,
-            facts=facts,
-            accepted=reason is None,
-            reason=reason,
-            next_step=next_step,
-        )
-
-    async def _apply(
-        self,
-        session: ConversationSession,
-        verdict: Verdict,
-        cost: TurnCost,
-        *,
-        call: CallUsage | None = None,
-        reply_text: str | None = None,
-        text: str | None = None,
-        media_burst_of: uuid.UUID | None = None,
-        media_marker: str | None = None,
-    ) -> AnalysisReport:
-        """Record the turn, move the conversation, and stage the answer.
-
-        A rejected outcome is still recorded, so "the model was unsure" stays
-        measurable instead of being silently converted into a wrong listing.
-        """
-        await self._ledger.record(session, intent=verdict.intent, cost=cost, call=call)
-        # The model's sentence is swept for decoding loops here: the platform
-        # copy that may replace it needs no such handling.
-        reply_text = collapse_repeats(reply_text) if reply_text else reply_text
-
-        settled = await self._housing.settle(
-            session, text=text, intent=verdict.intent, now=cost.now
-        )
-        if settled is not None:
-            return await self._writer.close(session, settled, cost)
-
-        outcome = (
-            await self._housing.apply(
-                session, verdict, text=text, reply_text=reply_text, now=cost.now
-            )
-            if verdict.accepted
-            else self._housing.refused(session, intent=verdict.intent, reply_text=reply_text)
-        )
-        next_step = outcome.next_step if verdict.accepted else verdict.next_step
-
-        # Committed with the turn: an analysis the platform understood but never
-        # answered is a landlord staring at a silent thread, and no retry can
-        # notice a reply that was never staged.
-        self._writer.stage_reply(
-            session,
-            intent=verdict.intent,
-            reason=verdict.reason,
-            question_key=outcome.question,
-            text=outcome.reply_text,
-            now=cost.now,
-            # Stock copy goes out in the user's voice; a recap to confirm and
-            # the model's own sentence go out as they are. A photo's caption
-            # may be empty, and its acknowledgement is stock copy too, as is
-            # the fast lane's template ("1", "60mil", "6").
-            answering=(
-                (text or media_marker)
-                if media_marker is not None
-                else text
-                if (outcome.platform_text and outcome.reply_text == outcome.platform_text)
-                or outcome.reply_text is None
-                else None
-            ),
-            media_burst_of=media_burst_of,
-        )
-        await self._uow.commit()
-        return AnalysisReport(
-            session_id=session.id,
-            message_id=cost.message_id,
-            intent=verdict.intent,
-            confidence=cost.confidence,
-            used_llm=cost.used_llm,
-            accepted=verdict.accepted,
-            reason=verdict.reason,
-            facts=verdict.facts.as_context() if verdict.accepted else {},
-            rejected_facts=dict(verdict.facts.rejected),
-            next_step=next_step.value if next_step else None,
-            question_key=outcome.question,
-            cost_usd=cost.cost_usd,
         )

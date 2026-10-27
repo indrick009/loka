@@ -45,9 +45,6 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     PAYMENT_STEPS,
     PaymentTurn,
 )
-from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.places import (  # noqa: E501
-    one_place,
-)
 from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.reminder import (  # noqa: E501
     SearchReminder,
 )
@@ -90,9 +87,6 @@ class HousingTurns:
         self._search = TenantSearch(demands, availability_requests)
         self._payment = PaymentTurn(unlock_payments)
         self._reminder = SearchReminder(follow_up)
-
-    def one_place(self, entities: dict[str, Any], session: ConversationSession) -> dict[str, Any]:
-        return one_place(entities, session)
 
     def read_open_question(
         self,
