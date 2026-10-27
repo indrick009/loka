@@ -46,10 +46,6 @@ ANSWER_BY_INTENT: dict[str, AvailabilityAnswer] = {
 }
 
 
-def is_availability_answer(intent: str) -> bool:
-    return intent in ANSWER_BY_INTENT
-
-
 class ConversationAvailabilityAnswers:
     def __init__(self, uow: UnitOfWork, *, landlords: LandlordDirectory) -> None:
         self._uow = uow

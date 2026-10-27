@@ -31,9 +31,13 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     PHOTO_BURST_SECONDS,
     AnalyseConversationMessageUseCase,
     AnalysisCommand,
-    _confirms_the_summary,
-    _is_a_question,
-    _keeping_the_place,
+)
+from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.open_question import (  # noqa: E501
+    confirms_the_summary,
+    is_a_question,
+)
+from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message.housing.places import (  # noqa: E501
+    keeping_the_place,
 )
 from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (
     ConversationMediaResult,
@@ -498,7 +502,7 @@ class TestAPinAndADistrictAreOnePlace:
             context={"location": {"city": "Yaoundé", "latitude": 3.79, "longitude": 11.537}},
         )
 
-        merged = _keeping_the_place({"neighbourhood": "Odza"}, session)
+        merged = keeping_the_place({"neighbourhood": "Odza"}, session)
 
         assert merged == {
             "neighbourhood": "Odza",
@@ -514,7 +518,7 @@ class TestAPinAndADistrictAreOnePlace:
             context={"location": {"city": "Yaoundé", "neighbourhood": "Odza"}},
         )
 
-        merged = _keeping_the_place({"latitude": 3.79, "longitude": 11.537}, session)
+        merged = keeping_the_place({"latitude": 3.79, "longitude": 11.537}, session)
 
         assert merged["neighbourhood"] == "Odza"
 
@@ -525,7 +529,7 @@ class TestAPinAndADistrictAreOnePlace:
             context={"location": {"city": "Yaoundé", "neighbourhood": "Odza"}},
         )
 
-        merged = _keeping_the_place({"latitude": 4.05, "longitude": 9.70}, session)
+        merged = keeping_the_place({"latitude": 4.05, "longitude": 9.70}, session)
 
         assert "neighbourhood" not in merged
 
@@ -564,11 +568,11 @@ class TestWhatTheLiveTestShowed:
         ["Tu as retenu la localisation ?", "est-ce que la caution est notée", "pourquoi"],
     )
     def test_a_question_is_never_a_confirmation(self, text: str) -> None:
-        assert _is_a_question(text)
+        assert is_a_question(text)
 
     @pytest.mark.parametrize("text", ["oui", "Oui c'est bon publie", "ok vas-y"])
     def test_a_yes_is_still_a_yes(self, text: str) -> None:
-        assert not _is_a_question(text)
+        assert not is_a_question(text)
 
     async def test_the_photo_that_publishes_moves_the_thread_to_published(self) -> None:
         """Left on COLLECT_MEDIA, Kora kept asking for the photos it had."""
@@ -623,7 +627,7 @@ class TestAPlainYesToTheSummary:
         "text", ["oui c'est bon publie", "Ok vas-y", "c'est bon", "Oui", "d'accord publie"]
     )
     def test_a_plain_yes_confirms(self, text: str) -> None:
-        assert _confirms_the_summary(text)
+        assert confirms_the_summary(text)
 
     @pytest.mark.parametrize(
         "text",
@@ -636,7 +640,7 @@ class TestAPlainYesToTheSummary:
         ],
     )
     def test_a_yes_with_a_but_or_a_question_does_not(self, text: str) -> None:
-        assert not _confirms_the_summary(text)
+        assert not confirms_the_summary(text)
 
 
 class TestSeveralLodgings:
