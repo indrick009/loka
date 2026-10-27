@@ -159,7 +159,7 @@ async def test_inbound_message_external_id_is_unique(database, now) -> None:  # 
 
 
 async def test_partial_index_only_covers_active_properties(database, now) -> None:  # type: ignore[no-untyped-def]
-    from loka.bounded_contexts.property.infrastructure.persistence.models import PropertyRow
+    from loka.bounded_contexts.housing.infrastructure.persistence.models import PropertyRow
 
     async def insert(status: str, city: str) -> uuid.UUID:
         property_id = _new_id()
@@ -212,7 +212,7 @@ async def test_optimistic_locking_detects_concurrent_update(database, now) -> No
 
 
 async def _seed_property(database, now: datetime) -> uuid.UUID:  # type: ignore[no-untyped-def]
-    from loka.bounded_contexts.property.infrastructure.persistence.models import PropertyRow
+    from loka.bounded_contexts.housing.infrastructure.persistence.models import PropertyRow
 
     property_id = _new_id()
     async with database.session() as session:

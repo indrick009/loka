@@ -15,6 +15,7 @@ from datetime import datetime
 
 import structlog
 
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.payment.application.dto.payment_dto import PaymentStatusView
 from loka.bounded_contexts.payment.application.ports import (
     ListingAvailability,
@@ -34,7 +35,6 @@ from loka.bounded_contexts.payment.domain.repositories import (
     AccessGrantRepository,
     PaymentRepository,
 )
-from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.identifiers import new_id
 

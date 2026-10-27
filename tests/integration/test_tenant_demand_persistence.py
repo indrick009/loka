@@ -9,9 +9,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from loka.bounded_contexts.property.domain.entities.tenant_demand import TenantDemand
-from loka.bounded_contexts.property.domain.value_objects.money import Money
-from loka.bounded_contexts.property.infrastructure.persistence.tenant_demand_repository import (
+from loka.bounded_contexts.housing.domain.entities.tenant_demand import TenantDemand
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.persistence.tenant_demand_repository import (
     SqlAlchemyTenantDemandRepository,
 )
 

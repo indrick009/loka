@@ -22,7 +22,7 @@ from loka.bounded_contexts.ai.infrastructure.adapters.conversation_property_sear
     ConversationPropertySearch,
     budget_band,
 )
-from loka.bounded_contexts.property.application.queries.search_properties import (
+from loka.bounded_contexts.housing.application.queries.search_properties import (
     PropertySearchCriteria,
     PropertySearchResult,
 )

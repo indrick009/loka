@@ -25,6 +25,12 @@ from loka.bounded_contexts.ai.application.ports import (
 from loka.bounded_contexts.ai.application.services.listing_recap import (
     property_type_label,
 )
+from loka.bounded_contexts.housing.domain.repositories.property_repository import (
+    PropertyRepository,
+)
+from loka.bounded_contexts.housing.infrastructure.composition import (
+    PROPERTY_REPOSITORY,
+)
 from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
 from loka.bounded_contexts.messaging.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
@@ -37,12 +43,6 @@ from loka.bounded_contexts.payment.domain.exceptions import (
     AvailabilityNotConfirmed,
     PaymentAlreadySettled,
     PaymentGatewayError,
-)
-from loka.bounded_contexts.property.domain.repositories.property_repository import (
-    PropertyRepository,
-)
-from loka.bounded_contexts.property.infrastructure.composition import (
-    PROPERTY_REPOSITORY,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 

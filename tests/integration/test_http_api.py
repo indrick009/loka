@@ -16,16 +16,13 @@ import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy import select
 
-from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
-from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
-from loka.bounded_contexts.property.domain.entities.property import Property
-from loka.bounded_contexts.property.domain.entities.property_media import (
+from loka.bounded_contexts.housing.domain.entities.property import Property
+from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
     MediaStatus,
     PropertyMedia,
 )
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityWindow,
     BedroomCount,
     ChargingPolicy,
@@ -34,8 +31,11 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     RentMonths,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
+from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
+from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token
 from loka.shared.infrastructure.composition import unit_of_work

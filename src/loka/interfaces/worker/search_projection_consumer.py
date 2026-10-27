@@ -15,7 +15,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from loka.bounded_contexts.property.infrastructure.composition import (
+from loka.bounded_contexts.housing.infrastructure.composition import (
     PROPERTY_SEARCH_PROJECTOR,
 )
 from loka.shared.infrastructure.broker.consumer import ConsumerBase, PermanentHandlerError

@@ -13,12 +13,12 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, Query, Request, status
 from pydantic import BaseModel, Field, StrictBool
 
-from loka.bounded_contexts.property.application.queries.search_properties import (
+from loka.bounded_contexts.housing.application.queries.search_properties import (
     PropertySearchCriteria,
     PropertySearchQuery,
     SearchPropertiesUseCase,
 )
-from loka.bounded_contexts.property.application.use_cases.publish_property import (
+from loka.bounded_contexts.housing.application.use_cases.publish_property import (
     PublishPropertyCommand,
 )
 from loka.interfaces.http.auth import Principal, require_principal

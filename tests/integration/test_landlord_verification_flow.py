@@ -14,6 +14,26 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
+from loka.bounded_contexts.housing.application.use_cases.publish_property import (
+    PublishPropertyCommand,
+)
+from loka.bounded_contexts.housing.domain.entities.property import Property
+from loka.bounded_contexts.housing.domain.entities.property_media import (
+    MediaKind,
+    MediaStatus,
+    PropertyMedia,
+)
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
+    AvailabilityWindow,
+    BedroomCount,
+    ChargingPolicy,
+    Duration,
+    PropertyType,
+    RentMonths,
+    SurfaceArea,
+)
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.landlord.application.ports import VerificationEvidence
 from loka.bounded_contexts.landlord.application.use_cases.adjudicate_landlord_verification import (
     AdjudicateLandlordVerificationCommand,
@@ -46,26 +66,6 @@ from loka.bounded_contexts.landlord.infrastructure.persistence.models import (
     LandlordProfileRow,
     VerificationDocumentRow,
 )
-from loka.bounded_contexts.property.application.use_cases.publish_property import (
-    PublishPropertyCommand,
-)
-from loka.bounded_contexts.property.domain.entities.property import Property
-from loka.bounded_contexts.property.domain.entities.property_media import (
-    MediaKind,
-    MediaStatus,
-    PropertyMedia,
-)
-from loka.bounded_contexts.property.domain.value_objects.enums import (
-    AvailabilityWindow,
-    BedroomCount,
-    ChargingPolicy,
-    Duration,
-    PropertyType,
-    RentMonths,
-    SurfaceArea,
-)
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
 from loka.shared.domain.errors import ResourceNotFound
 from loka.shared.infrastructure.composition import (
     get_landlord_verification_status_use_case,

@@ -36,6 +36,20 @@ from loka.bounded_contexts.fraud.application.use_cases.submit_report import (
 from loka.bounded_contexts.fraud.infrastructure.composition import (
     FRAUD_REPOSITORY_FACTORIES,
 )
+from loka.bounded_contexts.housing.application.use_cases.check_availability import (
+    AnswerAvailabilityCheckUseCase,
+    ListingAvailabilityReader,
+    RequestAvailabilityCheckUseCase,
+)
+from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (
+    CreatePropertyFromConversationUseCase,
+)
+from loka.bounded_contexts.housing.application.use_cases.publish_property import (
+    PublishPropertyUseCase,
+)
+from loka.bounded_contexts.housing.infrastructure.composition import (
+    PROPERTY_REPOSITORY_FACTORIES,
+)
 from loka.bounded_contexts.landlord.application.use_cases.adjudicate_landlord_verification import (
     AdjudicateLandlordVerificationUseCase,
 )
@@ -84,20 +98,6 @@ from loka.bounded_contexts.payment.infrastructure.gateways.fapshi_gateway import
 )
 from loka.bounded_contexts.payment.infrastructure.gateways.mock_gateway import (
     MockPaymentGateway,
-)
-from loka.bounded_contexts.property.application.use_cases.check_availability import (
-    AnswerAvailabilityCheckUseCase,
-    ListingAvailabilityReader,
-    RequestAvailabilityCheckUseCase,
-)
-from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (
-    CreatePropertyFromConversationUseCase,
-)
-from loka.bounded_contexts.property.application.use_cases.publish_property import (
-    PublishPropertyUseCase,
-)
-from loka.bounded_contexts.property.infrastructure.composition import (
-    PROPERTY_REPOSITORY_FACTORIES,
 )
 from loka.bounded_contexts.reviews_complaints.application.use_cases.decide_complaint import (
     DecideComplaintUseCase,

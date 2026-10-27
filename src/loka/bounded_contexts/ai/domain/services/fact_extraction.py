@@ -21,11 +21,7 @@ from loka.bounded_contexts.ai.domain.knowledge.places import (
     district_centre,
     nearest_district,
 )
-from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
-    FlowName,
-    FlowStep,
-)
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     BedroomCount,
     ChargingPolicy,
     PropertyStanding,
@@ -33,11 +29,15 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     RentMonths,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import (
+from loka.bounded_contexts.housing.domain.value_objects.location import (
     Coordinates,
     Location,
 )
-from loka.bounded_contexts.property.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
+    FlowName,
+    FlowStep,
+)
 from loka.shared.domain.errors import DomainError, ValidationFailed
 
 # A rent below this is a misparse, not a negotiation: "150" for "150 000" is the

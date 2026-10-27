@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 
-from loka.bounded_contexts.property.application.use_cases.follow_up_tenant_demands import (
+from loka.bounded_contexts.housing.application.use_cases.follow_up_tenant_demands import (
     FollowUpTenantDemandsUseCase,
 )
 from loka.shared.infrastructure.composition import unit_of_work

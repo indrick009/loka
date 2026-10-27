@@ -28,11 +28,11 @@ from loka.bounded_contexts.ai.application.use_cases.present_match_proposals impo
     PresentMatchProposalsUseCase,
     TenantBusy,
 )
+from loka.bounded_contexts.housing.application.use_cases.match_tenant_demands import (
+    MatchTenantDemandsUseCase,
+)
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     CONVERSATION_SESSION_REPOSITORY,
-)
-from loka.bounded_contexts.property.application.use_cases.match_tenant_demands import (
-    MatchTenantDemandsUseCase,
 )
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,

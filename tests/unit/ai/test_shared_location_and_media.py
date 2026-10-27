@@ -35,6 +35,9 @@ from loka.bounded_contexts.ai.application.use_cases.analyse_conversation_message
     _is_a_question,
     _keeping_the_place,
 )
+from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (
+    ConversationMediaResult,
+)
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.messaging.domain.entities.conversation_session import (
     ConversationSession,
@@ -47,9 +50,6 @@ from loka.bounded_contexts.messaging.domain.repositories.inbound_message_reposit
 from loka.bounded_contexts.messaging.domain.value_objects.inbound_message import (
     MessageKind,
     SharedLocation,
-)
-from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (
-    ConversationMediaResult,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 

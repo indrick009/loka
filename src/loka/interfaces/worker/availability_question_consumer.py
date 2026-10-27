@@ -26,6 +26,10 @@ from loka.bounded_contexts.ai.application.services.negotiation_copy import (
     landlord_offer_text,
     naming_the_lodging,
 )
+from loka.bounded_contexts.housing.application.use_cases.check_availability import (
+    LANDLORD_QUESTION_KEY,
+)
+from loka.bounded_contexts.housing.domain.entities.property import Property
 from loka.bounded_contexts.landlord.infrastructure.composition import LANDLORD_DIRECTORY
 from loka.bounded_contexts.messaging.domain.events.message_events import (
     WhatsAppMessageSendRequested,
@@ -33,10 +37,6 @@ from loka.bounded_contexts.messaging.domain.events.message_events import (
 from loka.bounded_contexts.messaging.infrastructure.composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
-from loka.bounded_contexts.property.application.use_cases.check_availability import (
-    LANDLORD_QUESTION_KEY,
-)
-from loka.bounded_contexts.property.domain.entities.property import Property
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import ConsumerBase, PermanentHandlerError
 from loka.shared.infrastructure.broker.topology import Broker, QueueSpec

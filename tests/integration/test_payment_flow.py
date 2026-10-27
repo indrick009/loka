@@ -18,14 +18,14 @@ import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from loka.bounded_contexts.housing.infrastructure.persistence.models import (
+    AvailabilityCheckRow,
+    PropertyRow,
+)
 from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
 from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     ServiceAccessGrantRow,
     ServiceFeePaymentRow,
-)
-from loka.bounded_contexts.property.infrastructure.persistence.models import (
-    AvailabilityCheckRow,
-    PropertyRow,
 )
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token

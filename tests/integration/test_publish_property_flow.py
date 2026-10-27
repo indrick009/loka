@@ -13,19 +13,17 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy import select
 
-from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
-from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
-from loka.bounded_contexts.property.application.use_cases.publish_property import (
+from loka.bounded_contexts.housing.application.use_cases.publish_property import (
     PublishPropertyCommand,
 )
-from loka.bounded_contexts.property.domain.entities.property import Property
-from loka.bounded_contexts.property.domain.entities.property_media import (
+from loka.bounded_contexts.housing.domain.entities.property import Property
+from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
     MediaStatus,
     PropertyMedia,
 )
-from loka.bounded_contexts.property.domain.exceptions import PublicationBlocked
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.exceptions import PublicationBlocked
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityWindow,
     BedroomCount,
     ChargingPolicy,
@@ -34,11 +32,13 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     RentMonths,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
-from loka.bounded_contexts.property.infrastructure.persistence.property_repository import (
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
 )
+from loka.bounded_contexts.landlord.domain.entities.verification_request import VerificationStatus
+from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
 from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
 from loka.shared.infrastructure.composition import (
     publish_property_use_case,

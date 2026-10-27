@@ -19,6 +19,27 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from loka.bounded_contexts.housing.domain.entities.property import Property
+from loka.bounded_contexts.housing.domain.entities.property_media import (
+    MediaKind,
+    MediaStatus,
+    PropertyMedia,
+)
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
+    AvailabilityWindow,
+    BedroomCount,
+    ChargingPolicy,
+    Duration,
+    PropertyType,
+    RentMonths,
+    SurfaceArea,
+)
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.composition import (
+    PROPERTY_REPOSITORY,
+    PROPERTY_SEARCH_PROJECTOR,
+)
 from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.identity.infrastructure.persistence.models import (
     RefreshTokenRow,
@@ -28,27 +49,6 @@ from loka.bounded_contexts.landlord.domain.entities.verification_request import 
     VerificationStatus,
 )
 from loka.bounded_contexts.landlord.infrastructure.persistence.models import LandlordProfileRow
-from loka.bounded_contexts.property.domain.entities.property import Property
-from loka.bounded_contexts.property.domain.entities.property_media import (
-    MediaKind,
-    MediaStatus,
-    PropertyMedia,
-)
-from loka.bounded_contexts.property.domain.value_objects.enums import (
-    AvailabilityWindow,
-    BedroomCount,
-    ChargingPolicy,
-    Duration,
-    PropertyType,
-    RentMonths,
-    SurfaceArea,
-)
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
-from loka.bounded_contexts.property.infrastructure.composition import (
-    PROPERTY_REPOSITORY,
-    PROPERTY_SEARCH_PROJECTOR,
-)
 from loka.interfaces.http.auth import generate_token, hash_token
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings, get_settings

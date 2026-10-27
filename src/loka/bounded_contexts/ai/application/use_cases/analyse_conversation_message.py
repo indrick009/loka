@@ -155,7 +155,7 @@ from loka.shared.infrastructure.metrics import (
 )
 
 if TYPE_CHECKING:
-    from loka.bounded_contexts.property.application.use_cases.create_property_from_conversation import (  # noqa: E501
+    from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (  # noqa: E501
         ConversationMediaResult,
     )
 

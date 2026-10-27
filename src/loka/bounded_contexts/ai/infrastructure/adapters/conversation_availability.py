@@ -20,21 +20,21 @@ from datetime import datetime
 from typing import Any
 
 from loka.bounded_contexts.ai.application.ports import AvailabilityAnswerResult
-from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
-from loka.bounded_contexts.property.application.use_cases.check_availability import (
+from loka.bounded_contexts.housing.application.use_cases.check_availability import (
     AnswerAvailabilityCheckCommand,
     AnswerAvailabilityCheckUseCase,
     RequestAvailabilityCheckCommand,
     RequestAvailabilityCheckUseCase,
 )
-from loka.bounded_contexts.property.domain.services.negotiation import (
+from loka.bounded_contexts.housing.domain.services.negotiation import (
     OfferOutcome,
     OfferReply,
 )
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityAnswer,
     PropertyStatus,
 )
+from loka.bounded_contexts.landlord.application.ports import LandlordDirectory
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import ResourceNotFound
 

@@ -8,14 +8,14 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from loka.bounded_contexts.property.domain.entities.availability_check import AvailabilityCheck
-from loka.bounded_contexts.property.domain.services.negotiation import (
+from loka.bounded_contexts.housing.domain.entities.availability_check import AvailabilityCheck
+from loka.bounded_contexts.housing.domain.services.negotiation import (
     Offer,
     OfferOutcome,
     OfferReply,
 )
-from loka.bounded_contexts.property.domain.value_objects.enums import AvailabilityAnswer
-from loka.bounded_contexts.property.infrastructure.persistence.availability_check_repository import (  # noqa: E501
+from loka.bounded_contexts.housing.domain.value_objects.enums import AvailabilityAnswer
+from loka.bounded_contexts.housing.infrastructure.persistence.availability_check_repository import (
     SqlAlchemyAvailabilityCheckRepository,
 )
 

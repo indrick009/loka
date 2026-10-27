@@ -7,20 +7,20 @@ from datetime import date, datetime, timedelta
 
 import pytest
 
-from loka.bounded_contexts.property.domain.entities.property import (
+from loka.bounded_contexts.housing.domain.entities.property import (
     ChargingPolicy,
     DataQualityIssue,
     Property,
 )
-from loka.bounded_contexts.property.domain.entities.property_media import (
+from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
     MediaStatus,
     PropertyMedia,
 )
-from loka.bounded_contexts.property.domain.exceptions.property_errors import (
+from loka.bounded_contexts.housing.domain.exceptions.property_errors import (
     PublicationBlocked,
 )
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityAnswer,
     AvailabilityWindow,
     BedroomCount,
@@ -29,8 +29,8 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     PropertyType,
     RentMonths,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import InvariantViolation
 
 

@@ -12,10 +12,10 @@ import uuid
 from datetime import datetime
 
 from loka.bounded_contexts.ai.application.ports import ConversationSearchQuery
-from loka.bounded_contexts.property.application.use_cases.follow_up_tenant_demands import (
+from loka.bounded_contexts.housing.application.use_cases.follow_up_tenant_demands import (
     FollowUpTenantDemandsUseCase,
 )
-from loka.bounded_contexts.property.application.use_cases.record_tenant_demand import (
+from loka.bounded_contexts.housing.application.use_cases.record_tenant_demand import (
     RecordTenantDemandCommand,
     RecordTenantDemandUseCase,
 )

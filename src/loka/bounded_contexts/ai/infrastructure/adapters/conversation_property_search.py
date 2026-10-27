@@ -15,7 +15,7 @@ from loka.bounded_contexts.ai.application.ports import (
     ConversationPropertyHit,
     ConversationSearchQuery,
 )
-from loka.bounded_contexts.property.application.queries.search_properties import (
+from loka.bounded_contexts.housing.application.queries.search_properties import (
     PropertySearchCriteria,
     PropertySearchQuery,
     SearchPropertiesUseCase,

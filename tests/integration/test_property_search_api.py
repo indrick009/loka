@@ -16,13 +16,13 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from loka.bounded_contexts.property.domain.entities.property import Property
-from loka.bounded_contexts.property.domain.entities.property_media import (
+from loka.bounded_contexts.housing.domain.entities.property import Property
+from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
     MediaStatus,
     PropertyMedia,
 )
-from loka.bounded_contexts.property.domain.value_objects.enums import (
+from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityWindow,
     BedroomCount,
     ChargingPolicy,
@@ -31,12 +31,12 @@ from loka.bounded_contexts.property.domain.value_objects.enums import (
     RentMonths,
     SurfaceArea,
 )
-from loka.bounded_contexts.property.domain.value_objects.location import Location
-from loka.bounded_contexts.property.domain.value_objects.money import Money
-from loka.bounded_contexts.property.infrastructure.persistence.property_repository import (
+from loka.bounded_contexts.housing.domain.value_objects.location import Location
+from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.bounded_contexts.housing.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
 )
-from loka.bounded_contexts.property.infrastructure.persistence.search_projector import (
+from loka.bounded_contexts.housing.infrastructure.persistence.search_projector import (
     SqlAlchemySearchProjector,
 )
 from loka.interfaces.http.app import create_app

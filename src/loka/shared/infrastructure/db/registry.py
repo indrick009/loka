@@ -17,6 +17,13 @@ from loka.bounded_contexts.fraud.infrastructure.persistence.models import (
     RiskProfileRow,
     TrustProfileRow,
 )
+from loka.bounded_contexts.housing.infrastructure.persistence.models import (
+    AvailabilityCheckRow,
+    PropertyDataQualityIssueRow,
+    PropertyMediaRow,
+    PropertyRow,
+    TenantDemandRow,
+)
 from loka.bounded_contexts.identity.infrastructure.persistence.models import (
     PhoneVerificationChallengeRow,
     RefreshTokenRow,
@@ -38,13 +45,6 @@ from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     PaymentCallbackRow,
     ServiceAccessGrantRow,
     ServiceFeePaymentRow,
-)
-from loka.bounded_contexts.property.infrastructure.persistence.models import (
-    AvailabilityCheckRow,
-    PropertyDataQualityIssueRow,
-    PropertyMediaRow,
-    PropertyRow,
-    TenantDemandRow,
 )
 from loka.bounded_contexts.reviews_complaints.infrastructure.persistence.models import (
     ProviderComplaintRow,
