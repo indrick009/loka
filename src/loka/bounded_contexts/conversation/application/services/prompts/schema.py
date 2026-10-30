@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.registry import SPECS
 from loka.bounded_contexts.conversation.application.services.prompts.system import (
     ALLOWED_INTENTS,
 )
@@ -95,3 +96,8 @@ RESPONSE_SCHEMA: dict[str, Any] = {
         },
     },
 }
+
+# Each plugged domain adds the entities it reads; a name two domains share
+# ("description") means the same thing to the model in both.
+for _spec in SPECS:
+    RESPONSE_SCHEMA["properties"]["entities"]["properties"].update(_spec.entities)

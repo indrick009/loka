@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    SPECS,
+    SUPPORTED_INTENTS,
+)
 from loka.bounded_contexts.conversation.application.services.prompts.persona import (
     DIGRESSION_RULE,
     PERSONA,
     PRICE_REFERENCE_RULE,
 )
-from loka.bounded_contexts.housing.conversation.facts import (
-    SUPPORTED_INTENTS,
-)
 
 SYSTEM_PROMPT = (
     f"{PERSONA} "
-    "You classify WhatsApp messages for a Cameroonian real-estate platform. "
+    "You classify WhatsApp messages for Kora, a Cameroonian platform with four "
+    "services: housing, food, dating and found documents. "
     "Reply with one JSON object and nothing else. "
     "Never invent a value that is not in the message: use null when unsure. "
     "Amounts are in XAF. Numbers must be plain integers."
@@ -56,6 +58,9 @@ SYSTEM_PROMPT = (
     "when the reply asks no question: it is how the platform checks the sentence "
     "asks the question it decided on."
     f" {PRICE_REFERENCE_RULE}"
+    " Housing: a landlord offering a lodging is CREATE_PROPERTY; a tenant "
+    "looking for one is PROPERTY_SEARCH."
+    + "".join(spec.rules for spec in SPECS)
 )
 
 

@@ -20,10 +20,14 @@ whether they are good enough to move the conversation forward. What a turn
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
+from loka.bounded_contexts.conversation.application.plugs.registry import PLUG_FLOWS
+from loka.bounded_contexts.conversation.application.plugs.turn import DomainTurns
 from loka.bounded_contexts.conversation.application.ports import (
     AiUsageLedger,
     AvailabilityAnswers,
@@ -86,6 +90,7 @@ from loka.bounded_contexts.housing.conversation.turns.location import (
     shared_location,
 )
 from loka.bounded_contexts.housing.conversation.turns.media import (
+    media_marker,
     refused_media,
 )
 from loka.bounded_contexts.housing.conversation.turns.turns import (
@@ -123,6 +128,7 @@ class AnalyseConversationMessageUseCase:
         search: PropertySearchGateway | None = None,
         shadow: DecisionShadow | None = None,
         exchanges: ConversationExchanges | None = None,
+        plugs: Mapping[str, DomainTurns] | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -146,7 +152,12 @@ class AnalyseConversationMessageUseCase:
             follow_up=follow_up,
         )
         self._applier = TurnApplier(
-            uow, ledger=self._ledger, writer=self._writer, housing=self._housing
+            uow,
+            ledger=self._ledger,
+            writer=self._writer,
+            housing=self._housing,
+            plugs=dict(plugs or {}),
+            desk=ConversationDesk(uow, sessions),
         )
         self._lane = (
             ModelLane(
@@ -247,6 +258,21 @@ class AnalyseConversationMessageUseCase:
             ai_bypass_total.labels(stage="media").inc()
             reading = refused_media(session, kind=message.kind, refused=message.media_refused)
             return await self._finish(session, message_id, reading, now=moment, text=text)
+        if message.media_object_key is not None and session.flow in PLUG_FLOWS:
+            # A plugged domain decides what a photo is for: a profile picture,
+            # a found document, a proof of ownership.
+            ai_bypass_total.labels(stage="media").inc()
+            reading = Reading(
+                intent="COLLECT_MEDIA",
+                confidence=1.0,
+                entities={
+                    "media_key": message.media_object_key,
+                    "media_kind": message.kind.value,
+                },
+                media_burst_of=message_id,
+                media_marker=media_marker(message.kind),
+            )
+            return await self._finish(session, message_id, reading, now=moment, text=text)
         if message.media_object_key is not None:
             ai_bypass_total.labels(stage="media").inc()
             reading = await self._housing.media.read(
@@ -267,7 +293,11 @@ class AnalyseConversationMessageUseCase:
         # model could not improve ("oui", "250 000 fcfa") skip the call. The open
         # question is passed along so a bare "non" answers "moderne ou non"
         # instead of being read as a refusal.
-        shortcut = self._classifier.shortcut(text, pending=pending_key)
+        shortcut = (
+            self._classifier.shortcut(text, pending=pending_key)
+            if session.flow not in PLUG_FLOWS
+            else None
+        )
         if shortcut is not None:
             ai_bypass_total.labels(stage="regex").inc()
             intent, entities = self._housing.read_open_question(

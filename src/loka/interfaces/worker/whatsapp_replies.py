@@ -272,12 +272,16 @@ _CLARIFY_TEXT_EN = (
 # introduces a tenant to a landlord and stops there. Naming it here is how a
 # user ends up waiting for a visit nobody will arrange.
 SUPPORT_TEXT = (
-    "Je peux vous aider à publier un logement ou à en trouver un. "
+    "Je peux vous aider pour un logement (en trouver ou en publier), pour "
+    "manger (trouver un plat du jour ou publier le menu de votre restaurant), "
+    "pour les rencontres, ou pour un document perdu ou trouvé. "
     "Dites-moi simplement ce dont vous avez besoin."
 )
 
 _SUPPORT_TEXT_EN = (
-    "I can help you list a property or find one. Just tell me what you need."
+    "I can help with housing (find or list a place), food (find today's dish "
+    "or publish your restaurant's menu), dating, or a lost or found document. "
+    "Just tell me what you need."
 )
 
 # Intents where the platform understood the message but has no question to ask:

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    is_supported_intent,
+    spec_for,
+)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     known_facts,
     target_flow,
@@ -17,7 +21,6 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.housing.conversation.facts import (
     MIN_ACCEPTED_CONFIDENCE,
     FactExtractor,
-    is_supported_intent,
 )
 from loka.bounded_contexts.housing.conversation.turns.places import (
     one_place,
@@ -47,6 +50,18 @@ class Judge:
             intent, reason = "UNKNOWN", reason or "unsupported_intent"
         if reason is None and confidence < MIN_ACCEPTED_CONFIDENCE:
             reason = "low_confidence"
+        flow = target_flow(session, intent)
+        spec = spec_for(flow)
+        if spec is not None:
+            # A plugged domain validates its own facts and walks its own form.
+            facts = spec.validate(dict(entities), flow)
+            return Verdict(
+                intent=intent,
+                facts=facts,
+                accepted=reason is None,
+                reason=reason,
+                next_step=None,
+            )
         facts = self._extractor.validate(one_place(entities, session))
         # The next step must consider the whole form, not just this message: a
         # landlord who gives their city after naming the property type is one

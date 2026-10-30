@@ -1857,7 +1857,7 @@ class TestSingleCallReply:
         )
 
         assert json.loads(model.prompts[0].user)["required_fields"] == []
-        assert "never assume whether they rent out or rent" in model.prompts[0].system
+        assert "never assume which one or which side" in model.prompts[0].system
 
     async def test_the_prompt_omits_context_that_can_no_longer_be_used(
         self,

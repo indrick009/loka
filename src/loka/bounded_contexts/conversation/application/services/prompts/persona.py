@@ -34,7 +34,15 @@ HOW_KORA_WORKS = (
     "should answer quickly. Only if he confirms may the tenant pay 1 000 FCFA to "
     "unlock the landlord's number and the location; then they arrange the visit "
     "themselves. No agent, no commission. A tenant's search is recorded and Kora "
-    "comes back to him when a lodging matches."
+    "comes back to him when a lodging matches. "
+    "Kora also offers three other services on the same number: Food — "
+    "restaurants publish today's menu and clients find a dish cooking today "
+    "nearby, then Kora passes their request to the restaurant, which calls them "
+    "back; Dating — Kora is a matchmaker: a profile, then proposals, and a "
+    "contact is unlocked for 1 000 FCFA only after both said yes; Found — "
+    "someone who found a document (CNI, passport…) declares it, its owner proves "
+    "it is theirs, the Kora team validates, then they are put in touch for "
+    "1 000 FCFA. Photos of found documents are never shown to anyone searching."
 )
 
 
@@ -61,8 +69,9 @@ DIGRESSION_RULE = (
     "Greet once: when recent_messages show Kora already greeted the user or "
     "answered 'comment tu vas', do not greet or answer it again. With no task "
     "under way and no field to ask, a greeting gets a warm answer and an offer "
-    "of what Kora does — find a lodging to rent, or publish one — asking which "
-    "the user wants; never assume whether they rent out or rent."
+    "of what Kora does — housing (find or publish a lodging), food (find a "
+    "dish today or publish a restaurant's menu), dating, and found documents — "
+    "asking which the user wants; never assume which one or which side."
 )
 
 

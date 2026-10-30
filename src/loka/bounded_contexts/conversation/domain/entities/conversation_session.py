@@ -29,6 +29,9 @@ class FlowName(StrEnum):
     # client looking for a dish cooking today.
     FOOD_RESTAURANT = "FOOD_RESTAURANT"
     FOOD_SEARCH = "FOOD_SEARCH"
+    DATING_PROFILE = "DATING_PROFILE"
+    FOUND_DECLARE = "FOUND_DECLARE"
+    FOUND_CLAIM = "FOUND_CLAIM"
 
 
 class FlowStep(StrEnum):
@@ -70,9 +73,11 @@ class FlowStep(StrEnum):
     AWAITING_PAYMENT = "AWAITING_PAYMENT"
     COLLECT_ACQUISITION_SOURCE = "COLLECT_ACQUISITION_SOURCE"
     DONE = "DONE"
-    COLLECT_RESTAURANT_NAME = "COLLECT_RESTAURANT_NAME"
-    COLLECT_MENU = "COLLECT_MENU"
-    COLLECT_DISH_CHOICE = "COLLECT_DISH_CHOICE"
+    # The steps of the domains plugged into the engine (food, dating, found):
+    # which field is awaited is the open question key, not the step.
+    COLLECT_FIELD = "COLLECT_FIELD"
+    COLLECT_CHOICE = "COLLECT_CHOICE"
+    AWAITING_REVIEW = "AWAITING_REVIEW"
 
 
 class SessionStatus(StrEnum):

@@ -11,8 +11,11 @@ one failure mode a cost guard exists to prevent.
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 from typing import Any
+
+from sqlalchemy import select
 
 from loka.bounded_contexts.conversation.application.ports import BudgetPolicy
 from loka.bounded_contexts.conversation.application.services.decision_shadow import DecisionShadow
@@ -33,6 +36,12 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
     SqlAlchemyConversationTurnRepository,
     SqlAlchemyDecisionShadowLog,
 )
+from loka.bounded_contexts.dating.conversation.turns import DatingTurns
+from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
+from loka.bounded_contexts.food.conversation.turns import FoodTurns
+from loka.bounded_contexts.food.infrastructure.store import SqlAlchemyFoodStore
+from loka.bounded_contexts.found.conversation.turns import FoundTurns
+from loka.bounded_contexts.found.infrastructure.store import SqlAlchemyFoundStore
 from loka.bounded_contexts.housing.conversation.adapters.conversation_availability import (
     ConversationAvailabilityAnswers,
     ConversationAvailabilityRequests,
@@ -52,6 +61,7 @@ from loka.bounded_contexts.housing.conversation.use_cases.reveal_unlocked_contac
     RevealUnlockedContactUseCase,
 )
 from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
+from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,
@@ -155,7 +165,23 @@ def analyse_conversation_message_use_case(
         shadow=decision_shadow(uow, settings=settings),
         # The last lines of the thread, so the model reads what was said.
         exchanges=SqlAlchemyConversationExchanges(uow.session),
+        # The domains plugged into the engine: each receives its own turns.
+        plugs=domain_turns(uow),
     )
+
+
+def domain_turns(uow: SqlAlchemyUnitOfWork) -> dict[str, Any]:
+    """Food, Dating and Found, each over its own store."""
+
+    async def first_name(user_id: uuid.UUID) -> str | None:
+        name = await uow.session.scalar(select(UserRow.display_name).where(UserRow.id == user_id))
+        return str(name).split()[0] if name else None
+
+    return {
+        "food": FoodTurns(SqlAlchemyFoodStore(uow.session), name_of=first_name),
+        "dating": DatingTurns(SqlAlchemyDatingStore(uow.session)),
+        "found": FoundTurns(SqlAlchemyFoundStore(uow.session)),
+    }
 
 
 def voice_platform_reply_use_case(

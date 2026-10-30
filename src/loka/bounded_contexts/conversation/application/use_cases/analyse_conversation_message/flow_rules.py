@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    OPENING_INTENTS as FLOW_BY_OPENING_INTENT,
+)
+from loka.bounded_contexts.conversation.application.plugs.registry import domain_of
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
     FlowStep,
 )
 from loka.bounded_contexts.housing.conversation.facts import (
-    FLOW_BY_OPENING_INTENT,
     LISTING_FLOWS,
     PROPERTY_REQUIREMENTS,
     SEARCH_REQUIREMENTS,
@@ -36,6 +39,10 @@ def opens_new_flow(session: ConversationSession, intent: str) -> bool:
     opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
     if opening_flow is None:
         return False
+    if domain_of(session.flow) not in (None, domain_of(opening_flow)):
+        # Another service altogether: "au fait je veux manger" mid-listing is
+        # the user's explicit choice, never a misread verb.
+        return True
     if session.flow is opening_flow:
         # The same flow opened again once its task is over is a new task:
         # observed live, "j'ai encore un autre studio" after a publication

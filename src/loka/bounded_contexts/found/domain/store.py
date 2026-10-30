@@ -1,0 +1,29 @@
+"""The port Found persists through."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Protocol
+
+from loka.bounded_contexts.found.domain.documents import Claim, Declaration
+
+
+class FoundStore(Protocol):
+    async def add_declaration(self, declaration: Declaration) -> None: ...
+
+    async def declaration(self, declaration_id: uuid.UUID) -> Declaration | None: ...
+
+    async def add_photo(self, declaration_id: uuid.UUID, key: str) -> None: ...
+
+    async def open_declarations(self, document_type: str) -> list[Declaration]: ...
+
+    async def save_claim(self, claim: Claim) -> None: ...
+
+    async def claim(self, claim_id: uuid.UUID) -> Claim | None: ...
+
+    async def searching_claims(self, document_type: str) -> list[Claim]: ...
+
+    async def claims_today(self, owner_user_id: uuid.UUID, *, now: datetime) -> int: ...
+
+    async def claims_to_review(self) -> list[Claim]: ...

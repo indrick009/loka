@@ -6,6 +6,9 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    OPENING_INTENTS as FLOW_BY_OPENING_INTENT,
+)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     carried_question,
     facts_worth_carrying,
@@ -27,7 +30,6 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
     ConversationSessionRepository,
 )
 from loka.bounded_contexts.housing.conversation.facts import (
-    FLOW_BY_OPENING_INTENT,
     ExtractedFacts,
     question_to_ask,
 )

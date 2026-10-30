@@ -17,6 +17,13 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.models import
     AiUsageLedgerRow,
     DecisionShadowRow,
 )
+from loka.bounded_contexts.dating.infrastructure.models import DatingAnswerRow, DatingProfileRow
+from loka.bounded_contexts.food.infrastructure.models import (
+    FoodDailyMenuRow,
+    FoodRequestRow,
+    FoodRestaurantRow,
+)
+from loka.bounded_contexts.found.infrastructure.models import FoundClaimRow, FoundDeclarationRow
 from loka.bounded_contexts.fraud.infrastructure.persistence.models import (
     FraudSignalRow,
     MediaHashRow,
@@ -60,7 +67,14 @@ __all__ = [
     "ConversationMetricsRow",
     "ConversationSessionRow",
     "ConversationTurnRow",
+    "DatingAnswerRow",
+    "DatingProfileRow",
     "DecisionShadowRow",
+    "FoodDailyMenuRow",
+    "FoodRequestRow",
+    "FoodRestaurantRow",
+    "FoundClaimRow",
+    "FoundDeclarationRow",
     "FraudSignalRow",
     "IdempotencyKey",
     "InboundMessageRow",

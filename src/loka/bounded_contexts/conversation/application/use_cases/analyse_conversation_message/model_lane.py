@@ -6,6 +6,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    PLUG_FLOWS,
+    spec_for,
+)
 from loka.bounded_contexts.conversation.application.ports import Exchange, IntentModel, TurnSummary
 from loka.bounded_contexts.conversation.application.services.prompts import build_analysis_prompt
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
@@ -96,7 +100,11 @@ class ModelLane:
         # A cheap rule reading only picks which form the prompt shows; the model
         # still chooses the intent. On an opening turn it is what tells a tenant
         # the search fields instead of the landlord's.
-        hint = self._classifier.classify(text, pending=pending_key)
+        hint = (
+            self._classifier.classify(text, pending=pending_key)
+            if session.flow not in PLUG_FLOWS
+            else None
+        )
         prompt_flow = target_flow(session, hint.intent) if hint is not None else session.flow
         prompt = build_analysis_prompt(
             text=message.text,
@@ -143,12 +151,13 @@ class ModelLane:
         # not ask what was decided pays for a second call, written before the
         # write transaction opens.
         reply_text: str | None = result.reply
-        if not inline_reply_fits(
+        plugged = spec_for(target_flow(session, verdict.intent)) is not None
+        if not plugged and not inline_reply_fits(
             prompt_flow, session=session, verdict=verdict, asking=result.asking
         ):
             reply_text = None
         reply_usage = None
-        if reply_text is None:
+        if reply_text is None and not plugged:
             reply_text, reply_usage = await self._replies.compose(
                 verdict=verdict, text=text, session=session, history=history, thread=thread
             )
