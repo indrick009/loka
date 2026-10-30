@@ -42,7 +42,11 @@ HOW_KORA_WORKS = (
     "contact is unlocked for 1 000 FCFA only after both said yes; Found — "
     "someone who found a document (CNI, passport…) declares it, its owner proves "
     "it is theirs, the Kora team validates, then they are put in touch for "
-    "1 000 FCFA. Photos of found documents are never shown to anyone searching."
+    "1 000 FCFA. Photos of found documents are never shown to anyone searching; "
+    "Booking — bus agencies publish their lines and daily departure times, a "
+    "traveller picks a departure, chooses his seat on the bus plan Kora sends, "
+    "and pays the ticket by Mobile Money; the ticket reference is shown at the "
+    "agency's counter with the CNI."
 )
 
 
@@ -70,7 +74,8 @@ DIGRESSION_RULE = (
     "answered 'comment tu vas', do not greet or answer it again. With no task "
     "under way and no field to ask, a greeting gets a warm answer and an offer "
     "of what Kora does — housing (find or publish a lodging), food (find a "
-    "dish today or publish a restaurant's menu), dating, and found documents — "
+    "dish today or publish a restaurant's menu), dating, found documents, and "
+    "bus tickets — "
     "asking which the user wants; never assume which one or which side."
 )
 

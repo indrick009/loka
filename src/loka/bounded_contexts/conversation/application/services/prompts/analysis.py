@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from loka.bounded_contexts.ai.domain.ai_provider import (
@@ -37,6 +38,8 @@ from loka.bounded_contexts.housing.conversation.texts.question_topics import (
     question_topic,
 )
 
+DOUALA = timezone(timedelta(hours=1))
+
 
 def _plug_topic(spec: DomainSpec, flow: FlowName, key: str | None) -> str | None:
     name = spec.field_of(key)
@@ -68,6 +71,8 @@ def build_analysis_prompt(
     spec = spec_for(flow)
     payload: dict[str, Any] = {
         "message": text or "",
+        # "Demain", "samedi": a date said relatively needs today's date.
+        "today": datetime.now(DOUALA).date().isoformat(),
         # The language of the *message* is the model's to read; this is only the
         # stand-in it keeps when the message is too short to tell.
         "default_language": (

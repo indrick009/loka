@@ -15,6 +15,11 @@ from loka.bounded_contexts.auth.infrastructure.persistence.models import (
     RefreshTokenRow,
     UserRow,
 )
+from loka.bounded_contexts.booking.infrastructure.models import (
+    BookingAgencyRow,
+    BookingLineRow,
+    BookingReservationRow,
+)
 from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationMetricsRow,
     ConversationSessionRow,
@@ -64,6 +69,9 @@ __all__ = [
     "AuditLog",
     "AvailabilityCheckRow",
     "Base",
+    "BookingAgencyRow",
+    "BookingLineRow",
+    "BookingReservationRow",
     "ConversationMetricsRow",
     "ConversationSessionRow",
     "ConversationTurnRow",

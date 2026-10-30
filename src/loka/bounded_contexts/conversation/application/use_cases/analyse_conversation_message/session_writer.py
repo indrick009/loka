@@ -81,6 +81,7 @@ class SessionWriter:
         text: str | None = None,
         answering: str | None = None,
         media_burst_of: uuid.UUID | None = None,
+        media_object_key: str | None = None,
     ) -> None:
         """Request the one reply this turn owes the user.
 
@@ -106,6 +107,7 @@ class SessionWriter:
                     language=session.language,
                     answering=answering or None,
                     media_burst_of=media_burst_of,
+                    media_object_key=media_object_key,
                     # Long enough for the rest of an album to arrive: only the
                     # last photo of a burst is answered (see the outbound layer).
                     not_before=(

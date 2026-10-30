@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugTurn, Steer
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
@@ -19,6 +20,7 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
 )
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.domain.errors import DomainError
 
 
 class ConversationDesk:
@@ -81,6 +83,41 @@ class ConversationDesk:
             correlation_id=current_context().get("correlation_id") or "unknown",
         )
         return True
+
+    async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool:
+        """Write to a number that is not a user, such as an agency's, on the
+        thread it last used with Kora. ``False`` when it never wrote."""
+        try:
+            number = PhoneNumber.normalize(phone)
+        except DomainError:
+            return False
+        session = await self._sessions.latest_by_phone(number)
+        if session is None:
+            return False
+        self._stage(session, text, now=now, question_key=None)
+        return True
+
+    def _stage(
+        self, session: ConversationSession, text: str, *, now: datetime, question_key: str | None
+    ) -> None:
+        self._uow.events.stage(
+            [
+                WhatsAppMessageSendRequested(
+                    aggregate_type="ConversationSession",
+                    aggregate_id=session.id,
+                    aggregate_version=session.revision,
+                    occurred_at=now,
+                    session_id=session.id,
+                    recipient_phone=session.phone.e164,
+                    reply_kind="QUESTION" if question_key else "ACK",
+                    question_key=question_key,
+                    text=text,
+                    intent="NOTIFY",
+                    language=session.language,
+                )
+            ],
+            correlation_id=current_context().get("correlation_id") or "unknown",
+        )
 
     async def _move(
         self,

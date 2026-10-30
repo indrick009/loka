@@ -274,13 +274,15 @@ _CLARIFY_TEXT_EN = (
 SUPPORT_TEXT = (
     "Je peux vous aider pour un logement (en trouver ou en publier), pour "
     "manger (trouver un plat du jour ou publier le menu de votre restaurant), "
-    "pour les rencontres, ou pour un document perdu ou trouvé. "
+    "pour les rencontres, pour un document perdu ou trouvé, ou pour réserver "
+    "votre place de bus. "
     "Dites-moi simplement ce dont vous avez besoin."
 )
 
 _SUPPORT_TEXT_EN = (
     "I can help with housing (find or list a place), food (find today's dish "
-    "or publish your restaurant's menu), dating, or a lost or found document. "
+    "or publish your restaurant's menu), dating, a lost or found document, or "
+    "a bus seat. "
     "Just tell me what you need."
 )
 

@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kora Booking — Agences</title>
+<style>
+  :root { --bg:#f6f7f5; --card:#fff; --ink:#1d2320; --muted:#5f6b66; --line:#dfe4e1;
+          --brand:#1f7a4d; --brand-ink:#fff; --danger:#b3261e; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#121614; --card:#1b201e; --ink:#e8ece9; --muted:#9aa6a0; --line:#2c3330;
+            --brand:#3fae74; --brand-ink:#0d1210; --danger:#f2766d; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+         font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  header { padding:20px 16px; border-bottom:1px solid var(--line); background:var(--card); }
+  header h1 { margin:0; font-size:20px; } header p { margin:4px 0 0; color:var(--muted); }
+  main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:16px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  h2 { margin:0 0 12px; font-size:17px; }
+  form { display:grid; gap:10px; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); }
+  label { display:grid; gap:4px; font-size:13px; color:var(--muted); }
+  input, select { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line);
+                  border-radius:8px; padding:8px 10px; width:100%; }
+  button { font:inherit; font-weight:600; background:var(--brand); color:var(--brand-ink);
+           border:0; border-radius:8px; padding:10px 14px; cursor:pointer; align-self:end; }
+  button.ghost { background:transparent; color:var(--brand); border:1px solid var(--brand); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .note { color:var(--muted); font-size:14px; margin:8px 0 0; }
+  .error { color:var(--danger); font-size:14px; min-height:1em; margin:8px 0 0; }
+  .key { font-family:ui-monospace,monospace; font-size:18px; padding:8px 12px; background:var(--bg);
+         border:1px dashed var(--brand); border-radius:8px; display:inline-block; }
+  .scroll { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kora Booking — Espace agence</h1>
+  <p>Publiez vos lignes et vos horaires : les voyageurs réservent leur place sur WhatsApp.</p>
+</header>
+<main>
+  <section id="auth">
+    <h2>Se connecter</h2>
+    <form id="login">
+      <label>Numéro WhatsApp de l'agence<input name="phone" required placeholder="6 99 12 34 56"></label>
+      <label>Clé d'accès<input name="key" required></label>
+      <button>Se connecter</button>
+    </form>
+    <p class="error" id="login-error"></p>
+    <h2 style="margin-top:20px">Inscrire mon agence</h2>
+    <form id="register">
+      <label>Nom de l'agence<input name="name" required placeholder="Ex. Express Voyages"></label>
+      <label>Numéro WhatsApp<input name="phone" required placeholder="6 99 12 34 56"></label>
+      <button class="ghost">Inscrire</button>
+    </form>
+    <p class="error" id="register-error"></p>
+    <div id="new-key" class="hidden">
+      <p class="note">Votre clé d'accès (elle est aussi envoyée sur WhatsApp si ce numéro a déjà écrit à Kora) :</p>
+      <span class="key" id="key-value"></span>
+    </div>
+  </section>
+
+  <section id="space" class="hidden">
+    <div class="row" style="justify-content:space-between">
+      <h2 id="agency-name" style="margin:0"></h2>
+      <button class="ghost" id="logout">Se déconnecter</button>
+    </div>
+    <p class="note" id="agency-meta"></p>
+  </section>
+
+  <section id="lines" class="hidden">
+    <h2>Mes lignes</h2>
+    <form id="add-line">
+      <label>Départ<input name="origin" required placeholder="Yaoundé"></label>
+      <label>Arrivée<input name="destination" required placeholder="Bafoussam"></label>
+      <label>Classe<select name="bus_class"><option value="CLASSIQUE">Classique</option><option value="VIP">VIP</option></select></label>
+      <label>Prix (FCFA)<input name="price_xaf" type="number" min="500" required placeholder="5000"></label>
+      <label>Places dans le bus<input name="seats" type="number" min="8" max="90" required placeholder="70"></label>
+      <label>Disposition<select name="layout"><option value="2+2">2 + 2</option><option value="2+1">2 + 1 (VIP)</option></select></label>
+      <label>Heures de départ<input name="times" required placeholder="05:00, 07:30, 13:00"></label>
+      <button>Ajouter la ligne</button>
+    </form>
+    <p class="error" id="line-error"></p>
+    <div class="scroll"><table>
+      <thead><tr><th>Trajet</th><th>Classe</th><th>Prix</th><th>Places</th><th>Départs</th></tr></thead>
+      <tbody id="lines-body"></tbody>
+    </table></div>
+  </section>
+
+  <section id="reservations" class="hidden">
+    <h2>Réservations</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Référence</th><th>Trajet</th><th>Départ</th><th>Places</th><th>Voyageurs</th><th>Montant</th><th>Statut</th></tr></thead>
+      <tbody id="reservations-body"></tbody>
+    </table></div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const money = (n) => new Intl.NumberFormat("fr-FR").format(n) + " FCFA";
+  let creds = null;
+  try { creds = JSON.parse(localStorage.getItem("kora-agency") || "null"); } catch (_) {}
+
+  async function call(path, options = {}) {
+    const headers = { "Content-Type": "application/json" };
+    if (creds) { headers["X-Agency-Phone"] = creds.phone; headers["X-Agency-Key"] = creds.key; }
+    const response = await fetch(path, { ...options, headers });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail?.message || body.message || body.detail || "Erreur");
+    return body;
+  }
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+  async function load() {
+    const me = await call("/agencies/me");
+    $("auth").classList.add("hidden");
+    ["space", "lines", "reservations"].forEach((id) => $(id).classList.remove("hidden"));
+    $("agency-name").textContent = me.name;
+    $("agency-meta").textContent = `${me.phone} · commission Kora : ${money(me.commission_xaf)} par place`;
+    $("lines-body").innerHTML = me.lines.map((l) => `<tr><td>${esc(l.origin)} → ${esc(l.destination)}</td>
+      <td>${esc(l.bus_class)}</td><td>${money(l.price_xaf)}</td><td>${l.seats} (${esc(l.layout)})</td>
+      <td>${l.times.map(esc).join(", ")}</td></tr>`).join("") || `<tr><td colspan="5">Aucune ligne pour l'instant.</td></tr>`;
+    $("reservations-body").innerHTML = me.reservations.map((r) => `<tr><td>${esc(r.reference)}</td>
+      <td>${esc(r.route)}</td><td>${esc(r.departs)}</td><td>${r.seats.join(", ")}</td>
+      <td>${r.passengers.map(esc).join(", ")}</td><td>${money(r.amount_xaf)}</td>
+      <td>${r.status === "PAID" ? "Payée" : "Paiement en cours"}</td></tr>`).join("") || `<tr><td colspan="7">Aucune réservation pour l'instant.</td></tr>`;
+  }
+
+  $("login").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target));
+    creds = { phone: data.phone, key: data.key.trim() };
+    try { await load(); localStorage.setItem("kora-agency", JSON.stringify(creds)); $("login-error").textContent = ""; }
+    catch (error) { creds = null; $("login-error").textContent = error.message; }
+  });
+
+  $("register").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target));
+    try {
+      const made = await call("/agencies/register", { method: "POST", body: JSON.stringify(data) });
+      $("key-value").textContent = made.key; $("new-key").classList.remove("hidden");
+      $("register-error").textContent = "";
+      creds = { phone: made.phone, key: made.key };
+      localStorage.setItem("kora-agency", JSON.stringify(creds));
+      setTimeout(load, 1500);
+    } catch (error) { $("register-error").textContent = error.message; }
+  });
+
+  $("add-line").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(event.target));
+    const line = { ...data, price_xaf: Number(data.price_xaf), seats: Number(data.seats),
+                   times: data.times.split(/[,;\s]+/).filter(Boolean) };
+    try { await call("/agencies/lines", { method: "POST", body: JSON.stringify(line) });
+          event.target.reset(); $("line-error").textContent = ""; await load(); }
+    catch (error) { $("line-error").textContent = error.message; }
+  });
+
+  $("logout").addEventListener("click", () => {
+    creds = null; localStorage.removeItem("kora-agency"); location.reload();
+  });
+
+  if (creds) load().catch(() => { creds = null; localStorage.removeItem("kora-agency"); });
+</script>
+</body>
+</html>

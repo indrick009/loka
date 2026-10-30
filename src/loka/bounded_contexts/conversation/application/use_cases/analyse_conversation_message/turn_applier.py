@@ -198,6 +198,7 @@ class TurnApplier:
                 else None
             ),
             media_burst_of=media_burst_of,
+            media_object_key=outcome.media_object_key,
         )
         await self._uow.commit()
         return AnalysisReport(

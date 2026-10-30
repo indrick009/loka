@@ -21,6 +21,10 @@ from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
 from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
+from loka.bounded_contexts.booking.conversation.turns import BookingTurns
+from loka.bounded_contexts.booking.infrastructure.payments import GatewayTicketPayments
+from loka.bounded_contexts.booking.infrastructure.seat_maps import StoredSeatMaps
+from loka.bounded_contexts.booking.infrastructure.store import SqlAlchemyBookingStore
 from loka.bounded_contexts.conversation.application.ports import BudgetPolicy
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
@@ -66,9 +70,11 @@ from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,
     initiate_service_fee_use_case,
+    payment_gateway,
 )
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
+from loka.shared.infrastructure.object_storage.media import S3MediaStorage
 
 
 class PipelineMisconfigured(RuntimeError):
@@ -166,12 +172,12 @@ def analyse_conversation_message_use_case(
         # The last lines of the thread, so the model reads what was said.
         exchanges=SqlAlchemyConversationExchanges(uow.session),
         # The domains plugged into the engine: each receives its own turns.
-        plugs=domain_turns(uow),
+        plugs=domain_turns(uow, settings),
     )
 
 
-def domain_turns(uow: SqlAlchemyUnitOfWork) -> dict[str, Any]:
-    """Food, Dating and Found, each over its own store."""
+def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
+    """Food, Dating, Found and Booking, each over its own store."""
 
     async def first_name(user_id: uuid.UUID) -> str | None:
         name = await uow.session.scalar(select(UserRow.display_name).where(UserRow.id == user_id))
@@ -181,6 +187,11 @@ def domain_turns(uow: SqlAlchemyUnitOfWork) -> dict[str, Any]:
         "food": FoodTurns(SqlAlchemyFoodStore(uow.session), name_of=first_name),
         "dating": DatingTurns(SqlAlchemyDatingStore(uow.session)),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session)),
+        "booking": BookingTurns(
+            SqlAlchemyBookingStore(uow.session),
+            payments=GatewayTicketPayments(payment_gateway(settings)),
+            maps=StoredSeatMaps(S3MediaStorage(settings.object_storage)),
+        ),
     }
 
 

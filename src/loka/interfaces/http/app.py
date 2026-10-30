@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loka.interfaces.http.auth import BearerTokenAuthenticator
 from loka.interfaces.http.container import Container
 from loka.interfaces.http.errors import register_error_handlers
+from loka.interfaces.http.routers import agencies as agencies_router
 from loka.interfaces.http.routers import found as found_router
 from loka.interfaces.http.routers import fraud as fraud_router
 from loka.interfaces.http.routers import payments as payments_router
@@ -166,6 +167,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(reports_router.router)
     app.include_router(fraud_router.router)
     app.include_router(found_router.router)
+    app.include_router(agencies_router.router)
     app.include_router(whatsapp_router.router)
 
     @app.get("/", include_in_schema=False)

@@ -67,6 +67,8 @@ class PlugDesk(Protocol):
         self, user_id: uuid.UUID, text: str, *, now: datetime, steer: Steer | None = None
     ) -> bool: ...
 
+    async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool: ...
+
 
 class DomainTurns(Protocol):
     """A photo reaches ``apply`` too, as the facts ``media_key`` and ``media_kind``."""

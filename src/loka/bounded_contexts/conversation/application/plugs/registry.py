@@ -6,6 +6,7 @@ Found are plugged in here. Adding a domain is one line in ``SPECS``.
 
 from __future__ import annotations
 
+from loka.bounded_contexts.booking.conversation.spec import BOOKING
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.bounded_contexts.dating.conversation.spec import DATING
@@ -18,7 +19,7 @@ from loka.bounded_contexts.housing.conversation.facts import (
     SUPPORTED_INTENTS as HOUSING_INTENTS,
 )
 
-SPECS: tuple[DomainSpec, ...] = (FOOD, DATING, FOUND)
+SPECS: tuple[DomainSpec, ...] = (FOOD, DATING, FOUND, BOOKING)
 
 _BY_FLOW = {flow: spec for spec in SPECS for flow in spec.flows}
 

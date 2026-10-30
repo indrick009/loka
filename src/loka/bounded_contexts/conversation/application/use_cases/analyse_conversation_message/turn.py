@@ -98,3 +98,5 @@ class TurnOutcome:
     next_step: FlowStep | None
     reply_text: str | None
     platform_text: str | None
+    # An image sent with the reply, the text as its caption: a bus plan.
+    media_object_key: str | None = None

@@ -32,6 +32,7 @@ class FlowName(StrEnum):
     DATING_PROFILE = "DATING_PROFILE"
     FOUND_DECLARE = "FOUND_DECLARE"
     FOUND_CLAIM = "FOUND_CLAIM"
+    BOOKING_TRIP = "BOOKING_TRIP"
 
 
 class FlowStep(StrEnum):
