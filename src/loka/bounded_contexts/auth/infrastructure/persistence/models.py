@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from loka.bounded_contexts.identity.domain.entities.user import AccountStatus, Role
+from loka.bounded_contexts.auth.domain.entities.user import AccountStatus, Role
 from loka.shared.infrastructure.db.base import Base
 
 

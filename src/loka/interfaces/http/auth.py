@@ -22,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
+from loka.bounded_contexts.auth.infrastructure.persistence.models import RefreshTokenRow
 from loka.interfaces.http.container import get_container
 from loka.shared.domain.errors import AuthorizationDenied, Unauthenticated
 from loka.shared.infrastructure.db.engine import Database

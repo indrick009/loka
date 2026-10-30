@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition

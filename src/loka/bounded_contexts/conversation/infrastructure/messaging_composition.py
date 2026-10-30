@@ -9,15 +9,15 @@ from __future__ import annotations
 
 from typing import Any
 
+from loka.bounded_contexts.auth.infrastructure.persistence.user_repository import (
+    SqlAlchemyUserRepository,
+)
 from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageUseCase,
 )
 from loka.bounded_contexts.conversation.infrastructure.persistence import (
     conversation_session_repository,
     inbound_message_repository,
-)
-from loka.bounded_contexts.identity.infrastructure.persistence.user_repository import (
-    SqlAlchemyUserRepository,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork

@@ -12,6 +12,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -21,7 +22,6 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationSessionRow,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.errors import ConcurrencyConflict
 
 

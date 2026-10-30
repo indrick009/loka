@@ -19,6 +19,11 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.infrastructure.persistence.models import (
+    RefreshTokenRow,
+    UserRow,
+)
 from loka.bounded_contexts.housing.domain.entities.property import Property
 from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
@@ -41,11 +46,6 @@ from loka.bounded_contexts.housing.infrastructure.composition import (
     PROPERTY_SEARCH_PROJECTOR,
 )
 from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import (
-    RefreshTokenRow,
-    UserRow,
-)
 from loka.interfaces.http.auth import generate_token, hash_token
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings, get_settings

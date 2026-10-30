@@ -25,6 +25,7 @@ from dataclasses import replace
 from datetime import datetime
 from decimal import Decimal
 
+from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.application.plugs.registry import PLUG_FLOWS
 from loka.bounded_contexts.conversation.application.plugs.turn import DomainTurns
@@ -45,7 +46,6 @@ from loka.bounded_contexts.conversation.application.ports import (
     TurnSummary,
     UnlockPayments,
 )
-from loka.bounded_contexts.conversation.application.services.decision_shadow import DecisionShadow
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
 )

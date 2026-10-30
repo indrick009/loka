@@ -28,6 +28,7 @@ from datetime import UTC, datetime
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -37,7 +38,6 @@ from loka.bounded_contexts.housing.conversation.facts import (
     question_key_for,
     question_to_ask,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.interfaces.worker.whatsapp_replies import render_reply
 
 pytestmark = pytest.mark.unit

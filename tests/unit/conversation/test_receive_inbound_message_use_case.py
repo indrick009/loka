@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageCommand,
     ReceiveInboundMessageUseCase,
@@ -26,7 +27,6 @@ from loka.bounded_contexts.conversation.domain.value_objects.inbound_message imp
     InboundMessage,
     MessageKind,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import InvariantViolation, ValidationFailed
 

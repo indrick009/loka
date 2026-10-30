@@ -1,7 +1,7 @@
 """Ports of the AI context.
 
 ``IntentModel`` is intentionally narrower than
-:class:`~loka.bounded_contexts.conversation.domain.services.ai_provider.AIProvider`: the
+:class:`~loka.bounded_contexts.ai.domain.ai_provider.AIProvider`: the
 analysis pipeline needs intent understanding and nothing else. Depending on the
 narrow port keeps every test double honest about what is actually used.
 """
@@ -16,7 +16,7 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol
 
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
+from loka.bounded_contexts.ai.domain.ai_provider import (
     IntentResult,
     LlmResponse,
     Prompt,

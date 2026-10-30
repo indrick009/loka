@@ -16,6 +16,10 @@ from decimal import Decimal
 from sqlalchemy import func, literal, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loka.bounded_contexts.ai.infrastructure.models import (
+    AiUsageLedgerRow,
+    DecisionShadowRow,
+)
 from loka.bounded_contexts.conversation.application.ports import (
     ConversationTurn,
     Exchange,
@@ -27,10 +31,6 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_mod
     ConversationTurnRow,
     InboundMessageRow,
     OutboundMessageRow,
-)
-from loka.bounded_contexts.conversation.infrastructure.persistence.models import (
-    AiUsageLedgerRow,
-    DecisionShadowRow,
 )
 from loka.shared.domain.clock import ensure_utc
 

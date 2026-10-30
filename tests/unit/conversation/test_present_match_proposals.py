@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -30,7 +31,6 @@ from loka.bounded_contexts.housing.conversation.use_cases.present_match_proposal
     PresentMatchProposalsUseCase,
     TenantBusy,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork
 
 pytestmark = pytest.mark.unit

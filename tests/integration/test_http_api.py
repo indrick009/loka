@@ -16,6 +16,7 @@ import pytest_asyncio
 from fastapi import FastAPI
 from sqlalchemy import select
 
+from loka.bounded_contexts.auth.infrastructure.persistence.models import RefreshTokenRow
 from loka.bounded_contexts.housing.domain.entities.property import Property
 from loka.bounded_contexts.housing.domain.entities.property_media import (
     MediaKind,
@@ -34,7 +35,6 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
 from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
-from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token
 from loka.shared.infrastructure.composition import unit_of_work

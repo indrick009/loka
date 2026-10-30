@@ -25,16 +25,18 @@ from tests.unit.conversation.test_analyse_conversation_message import (
     build,
 )
 
+from loka.bounded_contexts.ai.application.decision_shadow import (
+    TURN_QUESTIONS,
+    DecisionShadow,
+    turn_state,
+)
+from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.ports import (
     ChoiceAnswer,
     ChoiceQuestion,
     Decisions,
     ShadowDecision,
-)
-from loka.bounded_contexts.conversation.application.services.decision_shadow import (
-    TURN_QUESTIONS,
-    DecisionShadow,
-    turn_state,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
@@ -44,8 +46,6 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.conversation.infrastructure.jev import JevDecisionModel
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.errors import ExternalServiceUnavailable
 from loka.shared.infrastructure.config.settings import AISettings
 

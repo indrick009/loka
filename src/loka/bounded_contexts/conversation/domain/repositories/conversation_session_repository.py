@@ -5,10 +5,10 @@ from __future__ import annotations
 import uuid
 from typing import Protocol
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 
 
 class ConversationSessionRepository(Protocol):

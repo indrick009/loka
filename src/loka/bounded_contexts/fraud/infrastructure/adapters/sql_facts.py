@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.fraud.domain.value_objects.facts import (
     LandlordFacts,
     PropertyFacts,
@@ -24,7 +25,6 @@ from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     PropertyMediaRow,
     PropertyRow,
 )
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     ServiceFeePaymentRow,
 )

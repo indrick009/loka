@@ -23,6 +23,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
+from loka.bounded_contexts.auth.application.ports import UserProvisioning
+from loka.bounded_contexts.auth.domain.entities.user import whatsapp_name
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -43,9 +46,6 @@ from loka.bounded_contexts.conversation.domain.value_objects.inbound_message imp
     MessageKind,
     SharedLocation,
 )
-from loka.bounded_contexts.identity.application.ports import UserProvisioning
-from loka.bounded_contexts.identity.domain.entities.user import whatsapp_name
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.clock import ensure_utc

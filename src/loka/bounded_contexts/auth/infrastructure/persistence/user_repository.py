@@ -15,9 +15,9 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from loka.bounded_contexts.identity.domain.entities.user import Role, User
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
+from loka.bounded_contexts.auth.domain.entities.user import Role, User
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.crypto.blind_index import blind_index
 

@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.housing.domain.value_objects.enums import (
     AvailabilityWindow,
     BedroomCount,
@@ -17,7 +18,6 @@ from loka.bounded_contexts.housing.domain.value_objects.location import (
     Location,
 )
 from loka.bounded_contexts.housing.domain.value_objects.money import Money
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.errors import InvariantViolation
 
 

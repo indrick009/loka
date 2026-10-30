@@ -6,6 +6,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
+from loka.bounded_contexts.ai.domain.ai_provider import SUPPORTED_LANGUAGES
 from loka.bounded_contexts.conversation.application.plugs.registry import (
     PLUG_FLOWS,
     spec_for,
@@ -37,7 +38,6 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repository import (
     StoredInboundMessage,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import SUPPORTED_LANGUAGES
 from loka.bounded_contexts.housing.conversation.rules import (
     DeterministicClassifier,
 )

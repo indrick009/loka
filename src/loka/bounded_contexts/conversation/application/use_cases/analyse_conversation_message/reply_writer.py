@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from loka.bounded_contexts.ai.domain.ai_provider import LlmUsage
 from loka.bounded_contexts.conversation.application.ports import (
     Exchange,
     ResponseModel,
@@ -19,7 +20,6 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import LlmUsage
 from loka.bounded_contexts.housing.conversation.facts import question_to_ask
 from loka.shared.domain.errors import DomainError
 from loka.shared.infrastructure.logging import get_logger

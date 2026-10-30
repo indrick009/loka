@@ -14,6 +14,11 @@ from decimal import Decimal
 
 import pytest
 
+from loka.bounded_contexts.ai.domain.ai_provider import (
+    LlmResponse,
+    LlmUsage,
+    Prompt,
+)
 from loka.bounded_contexts.conversation.application.ports import Exchange, UsageEntry
 from loka.bounded_contexts.conversation.application.services.conversation_voice import (
     build_voice_prompt,
@@ -29,11 +34,6 @@ from loka.bounded_contexts.conversation.application.use_cases.voice_platform_rep
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
-)
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
-    LlmResponse,
-    LlmUsage,
-    Prompt,
 )
 from loka.shared.domain.errors import ExternalServiceUnavailable
 

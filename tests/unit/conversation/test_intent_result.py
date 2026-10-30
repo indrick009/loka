@@ -22,7 +22,7 @@ from typing import Any
 
 import pytest
 
-from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
+from loka.bounded_contexts.ai.domain.ai_provider import IntentResult
 from loka.shared.domain.errors import ExternalServiceUnavailable
 
 pytestmark = pytest.mark.unit

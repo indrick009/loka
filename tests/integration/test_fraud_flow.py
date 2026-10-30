@@ -18,7 +18,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from loka.bounded_contexts.identity.infrastructure.persistence.models import RefreshTokenRow
+from loka.bounded_contexts.auth.infrastructure.persistence.models import RefreshTokenRow
 from loka.interfaces.http.app import create_app
 from loka.interfaces.http.auth import hash_token
 from loka.shared.infrastructure.config.settings import Settings

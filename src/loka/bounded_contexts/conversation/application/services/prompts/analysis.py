@@ -5,6 +5,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from loka.bounded_contexts.ai.domain.ai_provider import (
+    SUPPORTED_LANGUAGES,
+    Prompt,
+)
 from loka.bounded_contexts.conversation.application.plugs.registry import spec_for
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec
 from loka.bounded_contexts.conversation.application.ports import Exchange, TurnSummary
@@ -26,10 +30,6 @@ from loka.bounded_contexts.conversation.application.services.prompts.system impo
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
     FlowStep,
-)
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
-    SUPPORTED_LANGUAGES,
-    Prompt,
 )
 from loka.bounded_contexts.housing.conversation.texts.question_topics import (
     _FIELD_FOR_QUESTION,

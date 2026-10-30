@@ -17,19 +17,20 @@ from typing import Any
 
 from sqlalchemy import select
 
+from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
+from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
+from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.application.ports import BudgetPolicy
-from loka.bounded_contexts.conversation.application.services.decision_shadow import DecisionShadow
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
 from loka.bounded_contexts.conversation.application.use_cases.voice_platform_reply import (
     VoicePlatformReplyUseCase,
 )
-from loka.bounded_contexts.conversation.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
-from loka.bounded_contexts.conversation.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.conversation.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
     SqlAlchemyConversationExchanges,
@@ -61,7 +62,6 @@ from loka.bounded_contexts.housing.conversation.use_cases.reveal_unlocked_contac
     RevealUnlockedContactUseCase,
 )
 from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,

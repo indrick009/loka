@@ -12,12 +12,12 @@ from datetime import UTC, datetime
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import (
     InboundMessage,
     MessageKind,
     SharedLocation,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.errors import ValidationFailed
 
 NOW = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)

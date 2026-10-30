@@ -13,6 +13,8 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_message import (
     ReceiveInboundMessageCommand,
 )
@@ -33,8 +35,6 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_mod
     ConversationSessionRow,
     InboundMessageRow,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.shared.domain.errors import ConcurrencyConflict
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings

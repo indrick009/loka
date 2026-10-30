@@ -20,6 +20,7 @@ from tests.unit.conversation.test_analyse_conversation_message import (
     FakeUnitOfWork,
 )
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.ports import UnlockRequestOutcome
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
@@ -37,7 +38,6 @@ from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
     PAYMENT_QUESTION_KEY,
     UNLOCK_KEY,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 
 pytestmark = pytest.mark.unit
 

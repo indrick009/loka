@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from loka.bounded_contexts.ai.domain.ai_provider import LlmUsage
 from loka.bounded_contexts.conversation.application.ports import (
     AiUsageLedger,
     BudgetDecision,
@@ -21,7 +22,6 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import LlmUsage
 from loka.shared.infrastructure.metrics import (
     llm_calls_total,
     llm_cost_usd_total,

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loka.bounded_contexts.conversation.domain.services.ai_provider import IntentResult
+from loka.bounded_contexts.ai.domain.ai_provider import IntentResult
 from loka.bounded_contexts.housing.conversation.facts import (
     MIN_PLAUSIBLE_RENT_XAF,
 )

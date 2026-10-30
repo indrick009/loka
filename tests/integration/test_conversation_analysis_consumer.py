@@ -20,6 +20,8 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import func, select
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
 )
@@ -34,8 +36,6 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_mod
     ConversationSessionRow,
     ConversationTurnRow,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.interfaces.worker.conversation_analysis_consumer import (
     AI_REQUEST_QUEUE,
     ConversationAnalysisConsumer,

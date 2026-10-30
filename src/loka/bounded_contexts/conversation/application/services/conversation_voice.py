@@ -16,13 +16,13 @@ from __future__ import annotations
 import json
 import re
 
+from loka.bounded_contexts.ai.domain.ai_provider import Prompt
 from loka.bounded_contexts.conversation.application.ports import Exchange
 from loka.bounded_contexts.conversation.application.services.prompts import (
     DIGRESSION_RULE,
     PERSONA,
     exchanges_as_json,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import Prompt
 
 VOICE_SYSTEM_PROMPT = (
     f"{PERSONA} You receive the user's last message, the recent messages of the "

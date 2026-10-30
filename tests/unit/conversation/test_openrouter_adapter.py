@@ -13,8 +13,8 @@ from typing import Any
 import httpx
 import pytest
 
-from loka.bounded_contexts.conversation.domain.services.ai_provider import Prompt
-from loka.bounded_contexts.conversation.infrastructure.openrouter import OpenRouterIntentModel
+from loka.bounded_contexts.ai.domain.ai_provider import Prompt
+from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.shared.domain.errors import ExternalServiceUnavailable, RateLimited
 from loka.shared.infrastructure.config.settings import AISettings, ModelPricing
 

@@ -6,6 +6,10 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from loka.bounded_contexts.ai.domain.ai_provider import (
+    SUPPORTED_LANGUAGES,
+    Prompt,
+)
 from loka.bounded_contexts.conversation.application.ports import Exchange, TurnSummary
 from loka.bounded_contexts.conversation.application.services.prompts.state import (
     _turns_as_json,
@@ -17,10 +21,6 @@ from loka.bounded_contexts.conversation.application.services.prompts.system impo
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     FlowName,
-)
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
-    SUPPORTED_LANGUAGES,
-    Prompt,
 )
 from loka.bounded_contexts.housing.conversation.texts.question_topics import (
     _FLOW_ROLES,

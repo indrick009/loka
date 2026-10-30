@@ -62,7 +62,7 @@ async def test_rollback_discards_staged_events(database, dummy_factory, now) -> 
 
 async def test_repositories_share_one_transaction(database, dummy_factory, now) -> None:  # type: ignore[no-untyped-def]
     """A rollback in one repository must undo every repository's work."""
-    from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
+    from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 
     async with SqlAlchemyUnitOfWork(database.sessions) as unit:
         unit.session.add(

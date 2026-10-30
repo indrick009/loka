@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
+from loka.bounded_contexts.ai.domain.ai_provider import (
     IntentResult,
     LlmResponse,
     LlmUsage,

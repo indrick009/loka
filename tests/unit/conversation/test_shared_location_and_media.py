@@ -21,6 +21,7 @@ from typing import Any
 
 import pytest
 
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.ports import (
     ConversationTurn,
     TurnSummary,
@@ -54,7 +55,6 @@ from loka.bounded_contexts.housing.conversation.turns.open_question import (
 from loka.bounded_contexts.housing.conversation.turns.places import (
     keeping_the_place,
 )
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork
 
 pytestmark = pytest.mark.unit

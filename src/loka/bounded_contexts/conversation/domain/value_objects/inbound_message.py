@@ -20,7 +20,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.domain.errors import ValidationFailed
 
 MAX_EXTERNAL_MESSAGE_ID = 180

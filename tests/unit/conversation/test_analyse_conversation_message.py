@@ -18,6 +18,13 @@ from typing import Any
 
 import pytest
 
+from loka.bounded_contexts.ai.domain.ai_provider import (
+    IntentResult,
+    LlmResponse,
+    LlmUsage,
+    Prompt,
+)
+from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
 from loka.bounded_contexts.conversation.application.ports import (
     AvailabilityAnswerResult,
     BudgetPolicy,
@@ -44,13 +51,6 @@ from loka.bounded_contexts.conversation.domain.events.message_events import (
 from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repository import (
     StoredInboundMessage,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
-    IntentResult,
-    LlmResponse,
-    LlmUsage,
-    Prompt,
-)
-from loka.bounded_contexts.identity.domain.value_objects.phone_number import PhoneNumber
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import (
     ConcurrencyConflict,

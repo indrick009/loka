@@ -15,6 +15,13 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import func, select
 
+from loka.bounded_contexts.ai.domain.ai_provider import (
+    IntentResult,
+    LlmUsage,
+    Prompt,
+)
+from loka.bounded_contexts.ai.infrastructure.models import AiUsageLedgerRow
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.application.ports import (
     BudgetPolicy,
     ConversationTurn,
@@ -29,11 +36,6 @@ from loka.bounded_contexts.conversation.application.use_cases.receive_inbound_me
     ReceiveInboundMessageCommand,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowStep
-from loka.bounded_contexts.conversation.domain.services.ai_provider import (
-    IntentResult,
-    LlmUsage,
-    Prompt,
-)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     receive_inbound_message_use_case,
 )
@@ -42,12 +44,10 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_mod
     ConversationTurnRow,
     InboundMessageRow,
 )
-from loka.bounded_contexts.conversation.infrastructure.persistence.models import AiUsageLedgerRow
 from loka.bounded_contexts.conversation.infrastructure.persistence.repositories import (
     SqlAlchemyAiUsageLedger,
     SqlAlchemyConversationTurnRepository,
 )
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.shared.domain.errors import ConcurrencyConflict
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings

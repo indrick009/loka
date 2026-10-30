@@ -22,13 +22,13 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import select
 
+from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     ConversationSessionRow,
 )
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     LandlordProfileRow,
 )
-from loka.bounded_contexts.identity.infrastructure.persistence.models import UserRow
 from loka.interfaces.worker.availability_question_consumer import (
     AVAILABILITY_QUESTION_QUEUE,
     AvailabilityQuestionConsumer,

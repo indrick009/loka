@@ -14,6 +14,7 @@ from decimal import Decimal
 
 import structlog
 
+from loka.bounded_contexts.ai.domain.ai_provider import Prompt
 from loka.bounded_contexts.conversation.application.ports import (
     AiUsageLedger,
     ConversationExchanges,
@@ -25,7 +26,6 @@ from loka.bounded_contexts.conversation.application.services.conversation_voice 
     keeps_the_facts,
     numbers_in,
 )
-from loka.bounded_contexts.conversation.domain.services.ai_provider import Prompt
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
 
