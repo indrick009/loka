@@ -86,7 +86,8 @@ def validated(language: str) -> str:
         return (
             "Bonne nouvelle : l'équipe Kora a validé que ce document est bien à toi. "
             "La mise en relation avec la personne qui l'a trouvé coûte 1 000 FCFA, "
-            "seuls frais à payer : le paiement ouvre très bientôt, je te préviens. "
+            "seuls frais à payer : réponds PAYER (Mobile Money sur ce numéro), ou "
+            "envoie le numéro à utiliser. "
             "La restitution se fera dans un lieu public ou au commissariat, et rien "
             "d'autre ne peut t'être demandé — signale-nous toute demande d'argent."
         )
@@ -107,3 +108,22 @@ def refused(language: str) -> str:
         "The Kora team could not confirm this document is yours. "
         "Send other proof if you have it."
     )
+
+
+def unlock_sent(phone: str) -> str:
+    return (
+        f"J'ai envoyé la demande de paiement de 1 000 FCFA au {phone}. Valide-la sur ton "
+        "téléphone : je te mets en relation dès que c'est fait."
+    )
+
+
+def pay_or_not() -> str:
+    return "Réponds PAYER pour être mis en relation (1 000 FCFA), ou NON."
+
+
+def unlock_later() -> str:
+    return "D'accord. Réponds PAYER quand tu veux être mis en relation."
+
+
+def unlock_failed() -> str:
+    return "Le paiement n'a pas pu être lancé. Envoie un autre numéro Mobile Money."

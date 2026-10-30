@@ -1,4 +1,7 @@
-"""Ticket payments over the platform's payment gateway (Fapshi in production)."""
+"""Mobile Money payments over the platform's gateway (Fapshi in production).
+
+Shared by every paid step outside housing: a bus ticket, a contact unlocked.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +15,7 @@ from loka.shared.infrastructure.logging import get_logger
 _logger = get_logger(__name__)
 
 
-class GatewayTicketPayments:
+class MobileMoneyPayments:
     def __init__(self, gateway: PaymentGateway) -> None:
         self._gateway = gateway
 

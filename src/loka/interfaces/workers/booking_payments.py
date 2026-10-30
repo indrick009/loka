@@ -12,12 +12,12 @@ from datetime import UTC, datetime
 
 from loka.bounded_contexts.booking.conversation import texts
 from loka.bounded_contexts.booking.domain.reservation import EXPIRED
-from loka.bounded_contexts.booking.infrastructure.payments import GatewayTicketPayments
 from loka.bounded_contexts.booking.infrastructure.store import SqlAlchemyBookingStore
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
+from loka.bounded_contexts.payment.infrastructure.mobile_money import MobileMoneyPayments
 from loka.shared.infrastructure.composition import payment_gateway, unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
@@ -29,7 +29,7 @@ SWEEP_INTERVAL_SECONDS = 10.0
 
 
 async def settle_once(database: Database, settings: Settings) -> None:
-    payments = GatewayTicketPayments(payment_gateway(settings))
+    payments = MobileMoneyPayments(payment_gateway(settings))
     now = datetime.now(UTC)
     async with unit_of_work(database) as uow:
         store = SqlAlchemyBookingStore(uow.session)

@@ -18,9 +18,13 @@ from loka.bounded_contexts.dating.conversation.spec import DATING
 from loka.bounded_contexts.dating.domain.matching import best_candidates
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
+from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
+from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
 
 PROPOSED_KEY = "_proposed"
 LIKE_KEY = DATING.question_key("like")
+UNLOCK_KEY = DATING.question_key("unlock")
+MATCH_KEY = "_match"
 _YES = ("oui", "yes", "ok", "d'accord", "dac", "volontiers", "bien sûr", "carrément")
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
@@ -39,8 +43,9 @@ def _answer(turn: PlugTurn) -> bool | None:
 
 
 class DatingTurns:
-    def __init__(self, store: DatingStore) -> None:
+    def __init__(self, store: DatingStore, *, unlock: UnlockContact | None = None) -> None:
         self._store = store
+        self._unlock = unlock
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         user, lang = turn.session.user_id, turn.language
@@ -49,6 +54,9 @@ class DatingTurns:
         member = await self._store.profile_of(user)
         if member is None:
             return await self._register(turn, desk, user)
+        matched = turn.session.context.get(MATCH_KEY)
+        if not turn.fresh and turn.session.context.get("next_question") == UNLOCK_KEY and matched:
+            return await self._pay(turn, desk, member, uuid.UUID(str(matched)))
         proposed = turn.session.context.get(PROPOSED_KEY)
         if not turn.fresh and turn.session.context.get("next_question") == LIKE_KEY and proposed:
             return await self._answer(turn, desk, member, uuid.UUID(str(proposed)))
@@ -129,8 +137,24 @@ class DatingTurns:
         their_answer = await self._store.likes(other.profile_id, member.profile_id)
         if their_answer:
             # Consent on both sides: the only moment a match exists.
-            await desk.notify(other.user_id, texts.match(member, "fr"), now=turn.now)
-            return await self._close(turn, desk, texts.match(other, lang))
+            await desk.notify(
+                other.user_id,
+                texts.match(member, "fr"),
+                now=turn.now,
+                steer=Steer(
+                    flow=FlowName.DATING_PROFILE,
+                    step=FlowStep.COLLECT_CHOICE,
+                    question_key=UNLOCK_KEY,
+                    context={MATCH_KEY: str(member.profile_id)},
+                ),
+            )
+            await desk.settle(
+                turn,
+                step=FlowStep.COLLECT_CHOICE,
+                question_key=UNLOCK_KEY,
+                context={MATCH_KEY: str(other.profile_id)},
+            )
+            return say(texts.match(other, lang), question=UNLOCK_KEY, voiced=False)
         if their_answer is None:
             await desk.notify(
                 other.user_id,
@@ -144,3 +168,27 @@ class DatingTurns:
                 ),
             )
         return await self._propose(turn, desk, member, prefix=texts.liked(lang))
+
+    async def _pay(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, matched: uuid.UUID
+    ) -> TurnOutcome:
+        """The 1 000 FCFA unlock, only ever offered after both said yes."""
+        other = await self._store.profile(matched)
+        if other is None or self._unlock is None:
+            return await self._propose(turn, desk, member, prefix="")
+        payer = payer_answer(turn.text, turn.session.phone.e164)
+        if payer is None:
+            return say(texts.pay_or_not(), question=UNLOCK_KEY, voiced=False)
+        if payer == "":
+            return await self._close(turn, desk, texts.unlock_later())
+        asked = await self._unlock.request(
+            payer_user_id=member.user_id,
+            target_user_id=other.user_id,
+            purpose=DATING_PURPOSE,
+            subject_id=other.profile_id,
+            payer_phone=payer,
+            now=turn.now,
+        )
+        if not asked:
+            return say(texts.unlock_failed(), question=UNLOCK_KEY, voiced=False)
+        return await self._close(turn, desk, texts.unlock_sent(payer))

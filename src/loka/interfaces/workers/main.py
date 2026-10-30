@@ -11,7 +11,7 @@ import contextlib
 import signal
 
 from loka.bounded_contexts.conversation.infrastructure.composition import validate_ai_settings
-from loka.interfaces.workers import booking_payments
+from loka.interfaces.workers import booking_payments, unlock_payments
 from loka.interfaces.workers.demand_follow_up import sweep_forever
 from loka.interfaces.workers.registry import handler_registry
 from loka.shared.infrastructure.broker.topology import Broker
@@ -66,11 +66,15 @@ async def run() -> None:
     booking_task = asyncio.create_task(
         booking_payments.sweep_forever(database, settings), name="booking-payments"
     )
+    # A validated 1 000 FCFA unlock hands over the two contacts.
+    unlock_task = asyncio.create_task(
+        unlock_payments.sweep_forever(database, settings), name="unlock-payments"
+    )
 
     try:
         await stop.wait()
     finally:
-        for task in (dispatch_task, follow_up_task, booking_task):
+        for task in (dispatch_task, follow_up_task, booking_task, unlock_task):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

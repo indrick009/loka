@@ -19,15 +19,19 @@ from loka.bounded_contexts.found.conversation import texts
 from loka.bounded_contexts.found.conversation.spec import FOUND
 from loka.bounded_contexts.found.domain.documents import (
     MAX_CLAIMS_PER_DAY,
+    VALIDATED,
     Claim,
     Declaration,
     could_be,
 )
 from loka.bounded_contexts.found.domain.store import FoundStore
+from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
+from loka.bounded_contexts.payment.domain.contact_unlock import FOUND as FOUND_PURPOSE
 
 DECLARATION_KEY = "_declaration"
 CLAIM_KEY = "_claim"
 PROOFS_KEY = FOUND.question_key("proofs")
+UNLOCK_KEY = FOUND.question_key("unlock")
 
 
 def say(text: str, **kwargs: Any) -> TurnOutcome:
@@ -37,8 +41,9 @@ def say(text: str, **kwargs: Any) -> TurnOutcome:
 
 
 class FoundTurns:
-    def __init__(self, store: FoundStore) -> None:
+    def __init__(self, store: FoundStore, *, unlock: UnlockContact | None = None) -> None:
         self._store = store
+        self._unlock = unlock
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         if turn.session.user_id is None:
@@ -113,6 +118,8 @@ class FoundTurns:
     async def _claim(self, turn: PlugTurn, desk: PlugDesk, owner: uuid.UUID) -> TurnOutcome:
         lang = turn.language
         open_claim = turn.session.context.get(CLAIM_KEY)
+        if open_claim and not turn.fresh and turn.open_field == "unlock":
+            return await self._pay(turn, desk, uuid.UUID(str(open_claim)))
         if open_claim and not turn.fresh:
             return await self._proof(turn, desk, uuid.UUID(str(open_claim)))
         if turn.fresh and await self._store.claims_today(owner, now=turn.now) >= MAX_CLAIMS_PER_DAY:
@@ -180,3 +187,31 @@ class FoundTurns:
             context={CLAIM_KEY: str(claim.claim_id)},
         )
         return say(texts.proof_received(lang), question=PROOFS_KEY, step=FlowStep.AWAITING_REVIEW)
+
+    async def _pay(self, turn: PlugTurn, desk: PlugDesk, claim_id: uuid.UUID) -> TurnOutcome:
+        """Only a claim the Kora team validated is ever offered the unlock."""
+        claim = await self._store.claim(claim_id)
+        declaration = (
+            await self._store.declaration(claim.declaration_id)
+            if claim is not None and claim.declaration_id
+            else None
+        )
+        if claim is None or claim.status != VALIDATED or declaration is None or not self._unlock:
+            return say(texts.proof_received(turn.language))
+        payer = payer_answer(turn.text, turn.session.phone.e164)
+        if payer is None:
+            return say(texts.pay_or_not(), question=UNLOCK_KEY)
+        if payer == "":
+            return say(texts.unlock_later(), question=UNLOCK_KEY)
+        asked = await self._unlock.request(
+            payer_user_id=claim.owner_user_id,
+            target_user_id=declaration.finder_user_id,
+            purpose=FOUND_PURPOSE,
+            subject_id=claim.claim_id,
+            payer_phone=payer,
+            now=turn.now,
+        )
+        if not asked:
+            return say(texts.unlock_failed(), question=UNLOCK_KEY)
+        await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})
+        return say(texts.unlock_sent(payer), step=FlowStep.PUBLISHED)

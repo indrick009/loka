@@ -22,7 +22,6 @@ from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.booking.conversation.turns import BookingTurns
-from loka.bounded_contexts.booking.infrastructure.payments import GatewayTicketPayments
 from loka.bounded_contexts.booking.infrastructure.seat_maps import StoredSeatMaps
 from loka.bounded_contexts.booking.infrastructure.store import SqlAlchemyBookingStore
 from loka.bounded_contexts.conversation.application.ports import BudgetPolicy
@@ -66,6 +65,9 @@ from loka.bounded_contexts.housing.conversation.use_cases.reveal_unlocked_contac
     RevealUnlockedContactUseCase,
 )
 from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DIRECTORY
+from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact
+from loka.bounded_contexts.payment.infrastructure.mobile_money import MobileMoneyPayments
+from loka.bounded_contexts.payment.infrastructure.unlock_store import SqlAlchemyUnlockStore
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,
@@ -183,13 +185,16 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
         name = await uow.session.scalar(select(UserRow.display_name).where(UserRow.id == user_id))
         return str(name).split()[0] if name else None
 
+    unlock = UnlockContact(
+        MobileMoneyPayments(payment_gateway(settings)), SqlAlchemyUnlockStore(uow.session)
+    )
     return {
         "food": FoodTurns(SqlAlchemyFoodStore(uow.session), name_of=first_name),
-        "dating": DatingTurns(SqlAlchemyDatingStore(uow.session)),
-        "found": FoundTurns(SqlAlchemyFoundStore(uow.session)),
+        "dating": DatingTurns(SqlAlchemyDatingStore(uow.session), unlock=unlock),
+        "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(
             SqlAlchemyBookingStore(uow.session),
-            payments=GatewayTicketPayments(payment_gateway(settings)),
+            payments=MobileMoneyPayments(payment_gateway(settings)),
             maps=StoredSeatMaps(S3MediaStorage(settings.object_storage)),
         ),
     }

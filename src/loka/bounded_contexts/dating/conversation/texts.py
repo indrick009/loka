@@ -72,10 +72,29 @@ def match(other: Profile, language: str) -> str:
         return (
             f"C'est un match ! {other.first_name} ({other.age} ans, {other.city}) a dit oui "
             "aussi. Kora ne donne jamais un contact sans l'accord des deux : c'est le "
-            "cas. Le déblocage du contact (1 000 FCFA) arrive très bientôt, je te "
-            "préviens dès qu'il est ouvert."
+            "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : 1 000 FCFA par "
+            "Mobile Money sur ce numéro, ou envoie le numéro à utiliser."
         )
     return (
         f"It's a match! {other.first_name} ({other.age}, {other.city}) said yes too. "
-        "Unlocking the contact (1,000 FCFA) opens very soon; I will let you know."
+        "Reply PAY to get their WhatsApp number: 1,000 FCFA by Mobile Money."
     )
+
+
+def unlock_sent(phone: str) -> str:
+    return (
+        f"J'ai envoyé la demande de paiement de 1 000 FCFA au {phone}. Valide-la sur ton "
+        "téléphone : je t'envoie son numéro dès que c'est fait."
+    )
+
+
+def unlock_failed() -> str:
+    return "Le paiement n'a pas pu être lancé. Envoie un autre numéro Mobile Money."
+
+
+def unlock_later() -> str:
+    return "D'accord. Réponds PAYER quand tu veux obtenir son numéro."
+
+
+def pay_or_not() -> str:
+    return "Réponds PAYER pour obtenir son numéro (1 000 FCFA), ou NON."

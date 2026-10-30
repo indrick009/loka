@@ -13,10 +13,16 @@ from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, Field
 
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
+from loka.bounded_contexts.conversation.application.plugs.turn import Steer
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
+    FlowName,
+    FlowStep,
+)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
 from loka.bounded_contexts.found.conversation import texts
+from loka.bounded_contexts.found.conversation.spec import FOUND
 from loka.bounded_contexts.found.domain.documents import REJECTED, VALIDATED
 from loka.bounded_contexts.found.infrastructure.store import SqlAlchemyFoundStore
 from loka.interfaces.http.auth import Principal, require_admin
@@ -87,6 +93,14 @@ async def decide(
             claim.owner_user_id,
             texts.validated("fr") if body.validated else texts.refused("fr"),
             now=now,
+            # Validated, his next message answers the unlock offer; refused,
+            # it is read as more proof for the same claim.
+            steer=Steer(
+                flow=FlowName.FOUND_CLAIM,
+                step=FlowStep.COLLECT_CHOICE,
+                question_key=FOUND.question_key("unlock" if body.validated else "proofs"),
+                context={"_claim": str(claim.claim_id)},
+            ),
         )
         await uow.commit()
     return {"claim_id": str(claim_id), "status": claim.status}
