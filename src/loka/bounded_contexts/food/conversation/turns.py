@@ -55,7 +55,7 @@ class FoodTurns:
             turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(turn.known)
         )
         text = f"{prefix}\n{field.ask(turn.language)}".strip()
-        return say(text, question=key, step=FlowStep.COLLECT_FIELD)
+        return say(text, question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
 
     async def _done(
         self, turn: PlugTurn, desk: PlugDesk, text: str, voiced: bool = True

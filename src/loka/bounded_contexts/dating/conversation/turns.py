@@ -78,7 +78,7 @@ class DatingTurns:
                 turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(known)
             )
             text = f"{prefix}\n{field.ask(lang)}".strip()
-            return say(text, question=key, step=FlowStep.COLLECT_FIELD)
+            return say(text, question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
         member = Profile.create(
             user_id=user,
             now=turn.now,

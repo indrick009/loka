@@ -60,6 +60,9 @@ SYSTEM_PROMPT = (
     f" {PRICE_REFERENCE_RULE}"
     " Housing: a landlord offering a lodging is CREATE_PROPERTY; a tenant "
     "looking for one is PROPERTY_SEARCH."
+    + " In food, dating and found, a place (the required field 'place') is "
+    "given through 'city' and 'neighbourhood' ('vers le marché Mokolo à Yaoundé' "
+    "is city Yaoundé, neighbourhood Mokolo)."
     + "".join(spec.rules for spec in SPECS)
 )
 
