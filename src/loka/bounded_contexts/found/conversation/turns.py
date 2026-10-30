@@ -56,7 +56,7 @@ class FoundTurns:
         await desk.settle(
             turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(turn.known)
         )
-        return say(field.ask(turn.language), question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
+        return say(field.ask(turn.language), question=key, step=FlowStep.COLLECT_FIELD)
 
     async def _declare(self, turn: PlugTurn, desk: PlugDesk, finder: uuid.UUID) -> TurnOutcome:
         lang = turn.language
