@@ -68,7 +68,13 @@ class FoundTurns:
             document_type=str(known["document_type"]),
             place=known.get("place"),
             found_on=str(known["found_on"]),
-            description=str(known["description"]),
+            # The name read on the document is what an owner's search is
+            # compared with, so it is kept with the description.
+            description=" — ".join(
+                part
+                for part in (str(known["description"]), str(known.get("full_name") or ""))
+                if part
+            ),
             photos=[str(known["photo"])],
             created_at=turn.now,
         )

@@ -66,8 +66,8 @@ CLAIM_FORM = (
 RULES = (
     " Found: someone who found a document or an object is FOUND_DECLARE; "
     "someone who lost one is FOUND_CLAIM. 'document_type' is one of CNI, "
-    "PASSEPORT, PERMIS, CARTE_ETUDIANT, AUTRE; the name on the lost document goes "
-    "in 'full_name'; dates as said ('hier', '12 octobre') in 'found_on' or "
+    "PASSEPORT, PERMIS, CARTE_ETUDIANT, AUTRE; the name written on the document, "
+    "found or lost, goes in 'full_name'; dates as said ('hier', '12 octobre') in 'found_on' or "
     "'lost_on'; 'description' in their own words. What an owner writes to prove "
     "the document is his (a document number, his birth date and place…) goes in "
     "'proof_text'. Never suggest a proof, never confirm a name or say a document "
