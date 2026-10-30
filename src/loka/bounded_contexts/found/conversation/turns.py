@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from loka.bounded_contexts.conversation.application.plugs.forms import say, stored
+from loka.bounded_contexts.conversation.application.plugs.forms import say as _say
+from loka.bounded_contexts.conversation.application.plugs.forms import stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
@@ -26,6 +28,12 @@ from loka.bounded_contexts.found.domain.store import FoundStore
 DECLARATION_KEY = "_declaration"
 CLAIM_KEY = "_claim"
 PROOFS_KEY = FOUND.question_key("proofs")
+
+
+def say(text: str, **kwargs: Any) -> TurnOutcome:
+    """Found's sentences go out exactly as written: a rewrite here could hint
+    at a name, suggest a proof, or replace "a possible match exists"."""
+    return _say(text, **{**kwargs, "voiced": False})
 
 
 class FoundTurns:
