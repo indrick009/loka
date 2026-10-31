@@ -18,7 +18,13 @@ class StoredSeatMaps:
         self._storage = storage
 
     async def draw(
-        self, *, line: Line, agency: str, departs_at: datetime, taken: set[int]
+        self,
+        *,
+        line: Line,
+        agency: str,
+        departs_at: datetime,
+        taken: set[int],
+        chosen: set[int] | None = None,
     ) -> str | None:
         when = departs_at.astimezone(DOUALA).strftime("%d/%m à %Hh%M")
         png = await asyncio.to_thread(
@@ -28,6 +34,7 @@ class StoredSeatMaps:
             seats=line.seats,
             layout=line.layout,
             taken=taken,
+            chosen=chosen or set(),
         )
         try:
             stored = await self._storage.put(

@@ -160,7 +160,21 @@ class BookingTurns:
         await self._settle(
             turn, desk, key="names", context={RESERVATION_KEY: str(reservation.reservation_id)}
         )
-        return say(texts.names(passengers), question=BOOKING.question_key("names"), voiced=False)
+        # The plan again, his seat in blue: he sees what he holds.
+        image = await self._maps.draw(
+            line=line,
+            agency=str(trip.get("agency") or ""),
+            departs_at=departs_at,
+            taken=taken,
+            chosen=set(seats),
+        )
+        return TurnOutcome(
+            question=BOOKING.question_key("names"),
+            next_step=FlowStep.COLLECT_CHOICE,
+            reply_text=texts.names(passengers),
+            platform_text=None,
+            media_object_key=image,
+        )
 
     async def _reservation(self, turn: PlugTurn) -> Reservation | None:
         raw = turn.session.context.get(RESERVATION_KEY)

@@ -21,6 +21,12 @@ class TicketPayments(Protocol):
 
 class SeatMaps(Protocol):
     async def draw(
-        self, *, line: Line, agency: str, departs_at: datetime, taken: set[int]
+        self,
+        *,
+        line: Line,
+        agency: str,
+        departs_at: datetime,
+        taken: set[int],
+        chosen: set[int] | None = None,
     ) -> str | None:
         """The stored image's object key, ``None`` if it could not be stored."""
