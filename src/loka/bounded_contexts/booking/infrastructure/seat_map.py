@@ -29,27 +29,34 @@ def seat_map_png(*, title: str, subtitle: str, seats: int, layout: str, taken: s
     left, right = LAYOUTS[layout]
     per_row = left + right
     rows = -(-seats // per_row)
-    width = _MARGIN * 2 + per_row * (_SEAT + _GAP) + _AISLE
+    bus_width = per_row * (_SEAT + _GAP) + _AISLE
+    width = max(_MARGIN * 2 + bus_width, 600)
+    offset = (width - bus_width) // 2
     height = _HEADER + _MARGIN * 2 + (rows + 1) * (_SEAT + _GAP) + 40
     image = Image.new("RGB", (width, height), _BG)
     draw = ImageDraw.Draw(image)
-    draw.text((_MARGIN, 18), title, fill=_INK, font=_font(26))
-    draw.text((_MARGIN, 56), subtitle, fill=_INK, font=_font(20))
+    draw.text((_MARGIN, 18), title, fill=_INK, font=_font(24))
+    draw.text((_MARGIN, 56), subtitle, fill=_INK, font=_font(18))
     draw.text(
         (_MARGIN, 86), "Vert = libre   Gris = occupé", fill=(90, 90, 90), font=_font(18)
     )
     top = _HEADER + _MARGIN
     draw.rounded_rectangle(
-        (width - _MARGIN - _SEAT, top, width - _MARGIN, top + _SEAT), 12, outline=_INK, width=3
+        (offset + bus_width - _SEAT - _GAP, top, offset + bus_width - _GAP, top + _SEAT),
+        12,
+        outline=_INK,
+        width=3,
     )
-    draw.text((width - _MARGIN - _SEAT + 6, top + 22), "Chauf.", fill=_INK, font=_font(16))
+    draw.text(
+        (offset + bus_width - _SEAT - _GAP + 6, top + 22), "Chauf.", fill=_INK, font=_font(16)
+    )
     number, font = 1, _font(24)
     for row in range(rows):
         y = top + (row + 1) * (_SEAT + _GAP)
         for column in range(per_row):
             if number > seats:
                 break
-            x = _MARGIN + column * (_SEAT + _GAP) + (_AISLE if column >= left else 0)
+            x = offset + column * (_SEAT + _GAP) + (_AISLE if column >= left else 0)
             colour = _TAKEN if number in taken else _FREE
             draw.rounded_rectangle((x, y, x + _SEAT, y + _SEAT), 12, fill=colour)
             label = str(number)

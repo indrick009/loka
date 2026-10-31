@@ -23,8 +23,8 @@ class StoredSeatMaps:
         when = departs_at.astimezone(DOUALA).strftime("%d/%m à %Hh%M")
         png = await asyncio.to_thread(
             seat_map_png,
-            title=f"{agency} — {line.origin} → {line.destination}",
-            subtitle=f"Départ le {when} · {line.bus_class} · {line.seats} places",
+            title=f"{agency} · {line.origin} → {line.destination}",
+            subtitle=f"Départ le {when} · {line.bus_class.lower()} · {line.seats} places",
             seats=line.seats,
             layout=line.layout,
             taken=taken,
