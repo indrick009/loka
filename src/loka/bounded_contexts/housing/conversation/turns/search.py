@@ -30,6 +30,7 @@ from loka.bounded_contexts.housing.conversation.texts.conversation_copy import (
 from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
     SHOWN_LISTINGS_KEY,
 )
+from loka.bounded_contexts.housing.conversation.turns.browse import asks_to_browse, browse_text
 
 
 def nth_listing(shown: Any, choice: int) -> uuid.UUID | None:
@@ -131,6 +132,33 @@ class TenantSearch:
         if not recorded:
             return search_unavailable_text(session.language), FlowStep.COLLECT_SEARCH_CRITERIA
         return demand_recorded_text(session.language), FlowStep.AWAITING_MATCH
+
+    async def browse(
+        self,
+        session: ConversationSession,
+        *,
+        text: str | None,
+        intent: str,
+        next_step: FlowStep | None,
+        now: datetime,
+    ) -> str | None:
+        """His « il y a quelque chose ? » while his demand waits: show the town."""
+        if (
+            session.step is not FlowStep.AWAITING_MATCH
+            or next_step is not None
+            or opens_new_flow(session, intent)
+            or not asks_to_browse(text)
+            or self._demands is None
+            or session.user_id is None
+        ):
+            return None
+        query = search_query(session.context)
+        if query is None:
+            return None
+        count = await self._demands.browse(tenant_id=session.user_id, now=now)
+        if count is None:
+            return None
+        return browse_text(count, query.city, session.language)
 
     async def choose_listing(
         self,

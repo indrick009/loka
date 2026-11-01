@@ -23,6 +23,7 @@ proposed too.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -94,6 +95,50 @@ class MatchTenantDemandsUseCase:
             demand_id=str(demand.id),
             proposals=len(proposals),
             trigger="demand",
+        )
+        return len(proposals)
+
+    async def for_zone(self, tenant_id: uuid.UUID, *, now: datetime) -> int | None:
+        """What his town has right now, when he asks to see it.
+
+        Observed live: « il y a quelque chose à Bafoussam ? » got the waiting
+        sentence while a studio in the next district was on the catalogue. The
+        whole town is searched, held to the same type and the §8 bar, and only
+        the ``MAX_PROPOSALS`` closest to his budget are sent — a phone reads
+        five lodgings, not a hundred. ``None``: he has no search running.
+        """
+        demands: TenantDemandRepository = self._uow.repository("tenant_demand")
+        watching = await demands.watching_for_tenant(tenant_id)
+        if not watching:
+            return None
+        demand = max(watching, key=lambda d: d.updated_at)
+        criteria = _criteria(demand, gap=True)
+        search: PropertySearch = self._uow.repository(SEARCH_REPOSITORY)
+        result = await search.search(
+            replace(criteria, neighbourhoods=(), near=None), limit=MAX_PROPOSALS
+        )
+        proposals = []
+        for item in result.items:
+            found = _from_search(item)
+            exact = found["neighbourhood"] in demand.neighbourhoods and demand.accepts(
+                property_type=found["property_type"],
+                city=found["city"],
+                neighbourhood=found["neighbourhood"],
+                rent_xaf=found["rent_xaf"],
+                advance_months=found["advance_months"],
+            )
+            proposals.append(found if exact else _as_gap(demand, found))
+        if not proposals:
+            return 0
+        demand.mark_answered(now=now, proposals=proposals)
+        await demands.save(demand)
+        self._uow.collect(demand)
+        await self._uow.commit()
+        self._logger.info(
+            "tenant_demand_matched",
+            demand_id=str(demand.id),
+            proposals=len(proposals),
+            trigger="browse",
         )
         return len(proposals)
 

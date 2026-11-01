@@ -15,6 +15,9 @@ from loka.bounded_contexts.conversation.application.ports import ConversationSea
 from loka.bounded_contexts.housing.application.use_cases.follow_up_tenant_demands import (
     FollowUpTenantDemandsUseCase,
 )
+from loka.bounded_contexts.housing.application.use_cases.match_tenant_demands import (
+    MatchTenantDemandsUseCase,
+)
 from loka.bounded_contexts.housing.application.use_cases.record_tenant_demand import (
     RecordTenantDemandCommand,
     RecordTenantDemandUseCase,
@@ -51,6 +54,9 @@ class ConversationTenantDemands:
             # happen, and the turn is never lost to a silence.
             return False
         return True
+
+    async def browse(self, *, tenant_id: uuid.UUID, now: datetime) -> int | None:
+        return await MatchTenantDemandsUseCase(self._uow).for_zone(tenant_id, now=now)
 
 
 class ConversationDemandFollowUp:

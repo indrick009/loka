@@ -109,6 +109,10 @@ class TenantDemands(Protocol):
         self, *, tenant_id: uuid.UUID, query: ConversationSearchQuery, now: datetime
     ) -> bool: ...
 
+    async def browse(self, *, tenant_id: uuid.UUID, now: datetime) -> int | None:
+        """Send him what his town has now; how many, or ``None`` if no search runs."""
+        ...
+
 
 class DemandFollowUp(Protocol):
     """His answer to "cherchez-vous toujours ?": renew the watch, or end it.

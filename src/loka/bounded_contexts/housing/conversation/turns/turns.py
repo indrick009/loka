@@ -161,7 +161,10 @@ class HousingTurns:
         )
         # Read before the session moves: it is where he *was* that says his
         # message is a follow-up on a demand already waiting.
-        waiting_text = while_waiting(session, intent=intent, next_step=next_step)
+        browse_text = await self._search.browse(
+            session, text=text, intent=intent, next_step=next_step, now=now
+        )
+        waiting_text = browse_text or while_waiting(session, intent=intent, next_step=next_step)
         question = await self._writer.advance(
             session, intent, facts, next_step, now=now, attach_property_id=listing_id
         )

@@ -65,6 +65,10 @@ SYSTEM_PROMPT = (
     + " In food, dating and found, a place (the required field 'place') is "
     "given through 'city' and 'neighbourhood' ('vers le marché Mokolo à Yaoundé' "
     "is city Yaoundé, neighbourhood Mokolo)."
+    " Fill 'city' only with a town the user named: never deduce it from a "
+    "neighbourhood (the platform knows which town a district is in, and asks when "
+    "it is unknown or in several towns), and never name a town in 'reply' that "
+    "is neither in the message nor in the context."
     + "".join(spec.rules for spec in SPECS)
 )
 
