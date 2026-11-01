@@ -62,7 +62,10 @@ PROPERTY_TYPE_PATTERNS: dict[str, re.Pattern[str]] = {
     "LOFT": re.compile(r"\b(lofts?)\b", re.I),
     "ROOM": re.compile(
         r"\b(chambres?\s+(?:meubl[ée]e?s?|a\s+louer|à\s+louer|d'etudiant|"
-        r"d'[ée]tudiant|d'[ée]tage|partag[ée]e?s?)|chambres?\s+hote?s?)\b",
+        r"d'[ée]tudiant|d'[ée]tage|partag[ée]e?s?)|chambres?\s+hote?s?"
+        # « ch moderne », « chbre simple »: how a room is written in a post.
+        r"|(?:chambres?|chbres?|chbr|ch)\s+(?:modernes?|simples?|standards?|"
+        r"ordinaires?|propres?|self)|self[\s-]?contained|une\s+chambre)\b",
         re.I,
     ),
     "COMMERCIAL": re.compile(
