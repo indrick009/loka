@@ -139,13 +139,24 @@ class TenantSearch:
         *,
         text: str | None,
         intent: str,
-        next_step: FlowStep | None,
+        facts: ExtractedFacts,
         now: datetime,
     ) -> str | None:
-        """His « il y a quelque chose ? » while his demand waits: show the town."""
+        """His « il y a quelque chose ? » while his demand waits: show the town.
+
+        Checked before his search is re-recorded. Observed live: the model read
+        the question as PROPERTY_SEARCH, the demand was recorded again and he
+        got the same acknowledgement. Asking to see names no new criterion; a
+        message that does is a new search and is recorded as one.
+        """
+        stated = facts.as_context()
+        changed = any(
+            name in stated and stated[name] != session.context.get(name)
+            for name, _ in SEARCH_REQUIREMENTS
+        )
         if (
             session.step is not FlowStep.AWAITING_MATCH
-            or next_step is not None
+            or changed
             or opens_new_flow(session, intent)
             or not asks_to_browse(text)
             or self._demands is None
