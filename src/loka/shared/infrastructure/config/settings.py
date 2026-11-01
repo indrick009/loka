@@ -89,6 +89,15 @@ class AISettings(BaseModel):
     decision_shadow_enabled: bool = False
     decision_model: str = "~typesafe/jev-latest"
     decision_timeout_seconds: float = 5.0
+    # The backup lane (OmniRoute's free models), asked only when OpenRouter
+    # cannot answer — no credit, expired key, outage. Empty URL: no backup.
+    # After a failure OpenRouter is skipped for ``backup_cooldown_seconds`` so
+    # each message does not first wait on a provider known to be down.
+    backup_base_url: str = ""
+    backup_api_key: SecretStr = SecretStr("")
+    backup_model: str = "auto"
+    backup_timeout_seconds: float = 30.0
+    backup_cooldown_seconds: float = 120.0
 
     def pricing_for(self, model: str) -> ModelPricing | None:
         return self.model_pricing_usd_per_million.get(model)

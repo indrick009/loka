@@ -194,6 +194,22 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # The backup lane: an OpenAI-compatible gateway in front of free models,
+  # asked only when OpenRouter cannot answer (no credit, outage). Free tiers
+  # are slow and rate-limited, which is fine for a spare, not for the main road.
+  omniroute:
+    image: diegosouzapw/omniroute:3.8.52
+    environment:
+      PORT: "20128"
+      # Dashboard password on first boot; every /v1 call needs a key made there.
+      INITIAL_PASSWORD: ${OMNIROUTE_PASSWORD:-}
+      REQUIRE_API_KEY: "true"
+    volumes:
+      - omniroute-data:/app/data
+    ports: ["127.0.0.1:20128:20128"]
+    stop_grace_period: 40s
+    restart: unless-stopped
+
   test:
     <<: *app
     build:
@@ -213,3 +229,4 @@ volumes:
   rabbitmq-data:
   minio-data:
   baileys-auth:
+  omniroute-data:

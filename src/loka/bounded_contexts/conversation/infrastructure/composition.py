@@ -18,6 +18,10 @@ from typing import Any
 from sqlalchemy import select
 
 from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
+from loka.bounded_contexts.ai.infrastructure.failover import (
+    FailoverIntentModel,
+    backup_settings,
+)
 from loka.bounded_contexts.ai.infrastructure.jev import JevDecisionModel
 from loka.bounded_contexts.ai.infrastructure.openrouter import OpenRouterIntentModel
 from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
@@ -121,7 +125,16 @@ def intent_model(settings: Settings) -> Any | None:
     if not settings.ai.pipeline_enabled:
         return None
     validate_ai_settings(settings)
-    return OpenRouterIntentModel(settings.ai)
+    primary = OpenRouterIntentModel(settings.ai)
+    if not settings.ai.backup_base_url:
+        return primary
+    # OpenRouter out of credit or down: OmniRoute's free models answer instead
+    # of the rules lane.
+    return FailoverIntentModel(
+        primary,
+        OpenRouterIntentModel(backup_settings(settings.ai)),
+        cooldown=settings.ai.backup_cooldown_seconds,
+    )
 
 
 def analyse_conversation_message_use_case(
