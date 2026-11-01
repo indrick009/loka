@@ -67,11 +67,16 @@ PROFILE_FORM = (
         "description",
         "a description of themselves and of the love they look for",
         {
-            "fr": "Présente-toi en quelques phrases, et surtout dis clairement quel "
-            "type d'amour tu recherches : c'est ce que Kora regarde en premier pour "
-            "te proposer quelqu'un.",
-            "en": "Describe yourself in a few sentences, and above all say clearly "
-            "what kind of love you are looking for: it is what Kora reads first.",
+            "fr": "Maintenant le plus important : ta description. Présente-toi et dis "
+            "clairement quel type d'amour tu recherches, ce que tu aimes, ce que tu "
+            "attends de l'autre. Elle n'est lue que par Kora pour te trouver la bonne "
+            "personne : elle ne sera jamais montrée à personne. Alors dis tout, plus "
+            "tu es précis, meilleur sera le match.",
+            "en": "Now the most important part: your description. Tell me about yourself "
+            "and say clearly what kind of love you are looking for, what you like and "
+            "what you expect from the other person. Only Kora reads it, to find you "
+            "the right person: it is never shown to anyone. So say everything, the "
+            "more precise you are, the better the match.",
         },
     ),
     FormField(
@@ -93,7 +98,8 @@ RULES = (
     "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). Set "
     "'seeking' (HOMME or FEMME) only when the description says whom they want "
     "to meet. Set 'inappropriate' to true when the description is sexual, "
-    "offensive or commercial. To a profile Kora proposed, 'oui' is AFFIRMATIVE "
+    "offensive or commercial. A description is private: never quote or sum it up "
+    "to another member. To a profile Kora proposed, 'oui' is AFFIRMATIVE "
     "and 'non' is NEGATIVE."
 )
 

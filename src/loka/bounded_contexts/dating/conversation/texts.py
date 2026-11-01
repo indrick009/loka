@@ -17,8 +17,8 @@ def minor(language: str) -> str:
 
 def inappropriate(language: str) -> str:
     if _fr(language):
-        return "Ta description ne peut pas être publiée telle quelle. Reformule-la simplement."
-    return "Your description cannot be published as it is. Please rephrase it simply."
+        return "Ta description ne peut pas être acceptée telle quelle. Reformule-la simplement."
+    return "Your description cannot be accepted as it is. Please rephrase it simply."
 
 
 def ready(language: str) -> str:
@@ -28,16 +28,18 @@ def ready(language: str) -> str:
 
 
 def proposal(other: Profile, language: str) -> str:
+    # Never the description: members write it for Kora's matching alone, on the
+    # promise that nobody else reads it.
     where = f"{other.city} ({other.country})"
     if _fr(language):
         return (
             f"Voici quelqu'un qui pourrait te plaire : {other.first_name}, {other.age} ans, "
-            f"{other.profession}, {where}.\n« {other.description} »\n\n"
+            f"{other.profession}, {where}. Vos descriptions vont bien ensemble.\n\n"
             "Tu aimerais faire sa connaissance ? Réponds OUI ou NON."
         )
     return (
         f"Here is someone you might like: {other.first_name}, {other.age}, "
-        f"{other.profession}, {where}.\n\"{other.description}\"\n\n"
+        f"{other.profession}, {where}. Your descriptions fit well together.\n\n"
         "Would you like to meet? Reply YES or NO."
     )
 
