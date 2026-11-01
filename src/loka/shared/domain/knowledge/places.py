@@ -8,6 +8,7 @@ network call, no position leaving the platform.
 
 from __future__ import annotations
 
+from loka.shared.domain.knowledge import national
 from loka.shared.domain.knowledge.districts import (
     ALIASES,
     DISTRICTS,
@@ -42,7 +43,8 @@ def district_centre(name: str, *, city: str | None = None) -> tuple[float, float
         if city is None or normalize(district.city) == normalize(city)
     ]
     if len({district.city for district in candidates}) != 1:
-        return None
+        found = national.quarter(name, city=city) if not candidates else None
+        return (found[1], found[2]) if found else None
     return candidates[0].latitude, candidates[0].longitude
 
 
@@ -61,7 +63,8 @@ def canonical_district(name: str, *, city: str | None = None) -> str | None:
         if city is None or normalize(district.city) == normalize(city)
     ]
     if len({district.city for district in candidates}) != 1:
-        return None
+        found = national.quarter(name, city=city) if not candidates else None
+        return found[0] if found else None
     return candidates[0].name
 
 

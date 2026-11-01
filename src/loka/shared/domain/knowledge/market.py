@@ -22,6 +22,10 @@ import unicodedata
 from dataclasses import dataclass
 from enum import StrEnum
 
+from loka.shared.domain.knowledge import national
+from loka.shared.domain.knowledge.districts import ALIASES as DISTRICT_ALIASES
+from loka.shared.domain.knowledge.districts import DISTRICTS
+
 
 class Confidence(StrEnum):
     """How much a fact may be trusted. Drives whether it is a rule or a hint."""
@@ -308,19 +312,54 @@ _PREMIUM_NEIGHBOURHOODS = frozenset(
 )
 
 
+def _canonical(city: str) -> str:
+    """Kora's own spelling of a city the national index names (« Buéa » → « Buea »)."""
+    return CITY_ALIASES.get(normalize(city), city)
+
+
+# Douala and Yaoundé district names, which beat a town of the same name
+# elsewhere: « Bali » typed in Douala is the district, not the town near Bamenda.
+_DISTRICT_NAMES: dict[str, set[str]] = {}
+for _district in DISTRICTS:
+    _DISTRICT_NAMES.setdefault(normalize(_district.name), set()).add(_district.city)
+for _alias, _target in DISTRICT_ALIASES.items():
+    _DISTRICT_NAMES.setdefault(normalize(_alias), set()).update(
+        _DISTRICT_NAMES.get(normalize(_target), set())
+    )
+
+
 def resolve_city(text: str) -> str | None:
-    """The canonical city for a city name or alias, else ``None``."""
-    return CITY_ALIASES.get(normalize(text))
+    """The canonical city for a city name or alias, else ``None``.
+
+    The 14 market cities first; then any town of the national index
+    (``national``), unless the name is a Douala or Yaoundé district.
+    """
+    key = normalize(text)
+    if key in CITY_ALIASES:
+        return CITY_ALIASES[key]
+    if key in _DISTRICT_NAMES:
+        return None
+    town = national.city_named(text)
+    return _canonical(town) if town else None
 
 
 def resolve_neighbourhood(text: str) -> str | None:
     """The city a district belongs to, else ``None``.
 
     Only a *known* district resolves. An unknown hint stays a hint: promoting
-    "Zzzville" to a city is exactly how a wrong listing enters search.
+    "Zzzville" to a city is exactly how a wrong listing enters search. Known
+    means: the pricing list, then the Douala/Yaoundé gazetteer, then the
+    national one — each only when the name belongs to a single city.
     """
-    entry = _CITY_BY_NEIGHBOURHOOD.get(normalize(text))
-    return entry.city if entry is not None else None
+    key = normalize(text)
+    entry = _CITY_BY_NEIGHBOURHOOD.get(key)
+    if entry is not None:
+        return entry.city
+    cities = _DISTRICT_NAMES.get(key)
+    if cities:
+        return next(iter(cities)) if len(cities) == 1 else None
+    city = national.quarter_city(text)
+    return _canonical(city) if city else None
 
 
 def canonical_neighbourhood(text: str) -> str | None:

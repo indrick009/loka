@@ -10,22 +10,41 @@ from loka.bounded_contexts.conversation.application.plugs.forms import common_fa
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec, FormField
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.bounded_contexts.conversation.domain.services.extracted_facts import ExtractedFacts
-from loka.shared.domain.knowledge import market
+from loka.shared.domain.knowledge import market, national
 
 TRIP_FORM = (
-    FormField("origin", "the city the traveller leaves from", {
-        "fr": "Tu pars de quelle ville ?", "en": "Which city are you leaving from?",
-    }),
-    FormField("destination", "the city the traveller goes to", {
-        "fr": "Et tu vas où ?", "en": "And where are you going?",
-    }),
-    FormField("travel_date", "the travel date", {
-        "fr": "Tu voyages quel jour ? Par exemple : demain, samedi, ou le 15/11.",
-        "en": "Which day are you travelling? For example: tomorrow, Saturday, or 15/11.",
-    }),
-    FormField("passengers", "how many travellers", {
-        "fr": "Combien de places faut-il réserver ?", "en": "How many seats should I book?",
-    }),
+    FormField(
+        "origin",
+        "the city the traveller leaves from",
+        {
+            "fr": "Tu pars de quelle ville ?",
+            "en": "Which city are you leaving from?",
+        },
+    ),
+    FormField(
+        "destination",
+        "the city the traveller goes to",
+        {
+            "fr": "Et tu vas où ?",
+            "en": "And where are you going?",
+        },
+    ),
+    FormField(
+        "travel_date",
+        "the travel date",
+        {
+            "fr": "Tu voyages quel jour ? Par exemple : demain, samedi, ou le 15/11.",
+            "en": "Which day are you travelling? For example: tomorrow, Saturday, or 15/11.",
+        },
+    ),
+    FormField(
+        "passengers",
+        "how many travellers",
+        {
+            "fr": "Combien de places faut-il réserver ?",
+            "en": "How many seats should I book?",
+        },
+    ),
 )
 
 RULES = (
@@ -51,10 +70,26 @@ ENTITIES: dict[str, Any] = {
 
 
 def city(raw: Any) -> str | None:
+    """The city named, even inside a voice note's fillers (« donc yaoundé eh »)."""
     text = text_of(raw, longest=60)
     if not text:
         return None
-    return market.resolve_city(text) or market.resolve_neighbourhood(text) or text.title()
+    # A bus goes to a town: « Mokolo » is the town in the Far North here, not
+    # the Yaoundé market of the same name.
+    found = (
+        market.resolve_city(text) or national.city_named(text) or market.resolve_neighbourhood(text)
+    )
+    if found:
+        return found
+    words = market.normalize(text).replace(",", " ").split()
+    for size in (3, 2, 1):
+        for start in range(len(words) - size + 1):
+            named = market.resolve_city(" ".join(words[start : start + size]))
+            if named:
+                return named
+    # An unknown town is kept as typed only when it is just a name: a sentence
+    # stored as a city would never match a line.
+    return text.title() if len(words) <= 2 else None
 
 
 def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
@@ -102,4 +137,11 @@ BOOKING = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
+    cues={
+        "BOOKING_TRIP": (
+            r"\b(je (vais|pars|descends|go) (a|de|pour|sur) |billets?|tickets?|bus|"
+            r"cars? pour|voyager|reserver (une |un )?(place|billet)|"
+            r"book (me )?(bus|seats?)|travel|depart pour)\b"
+        ),
+    },
 )

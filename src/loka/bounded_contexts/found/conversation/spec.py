@@ -16,51 +16,84 @@ _TYPE = FormField(
     {
         "fr": "De quel document s'agit-il ? CNI, passeport, permis de conduire, carte "
         "d'étudiant, ou autre ?",
-        "en": "Which document is it? ID card, passport, driving licence, student card, "
-        "or other?",
+        "en": "Which document is it? ID card, passport, driving licence, student card, or other?",
     },
 )
 _SHARE = "Partage la position WhatsApp, ou donne la ville et le quartier."
 
 DECLARE_FORM = (
     _TYPE,
-    FormField("place", "where it was found", {
-        "fr": f"Où l'as-tu trouvé ? {_SHARE}",
-        "en": "Where did you find it? Share the location, or give the city and district.",
-    }),
-    FormField("found_on", "when it was found", {
-        "fr": "Quand l'as-tu trouvé ?", "en": "When did you find it?",
-    }),
-    FormField("description", "a full description, including the name written on it", {
-        "fr": "Décris-le le plus complètement possible, avec le nom qui y figure.",
-        "en": "Describe it as fully as you can, including the name written on it.",
-    }),
-    FormField("photo", "photos of the document", {
-        "fr": "Envoie maintenant des photos du document. Elles ne seront jamais "
-        "publiées ni montrées aux personnes qui cherchent : elles servent "
-        "uniquement à vérifier qui en est le vrai propriétaire.",
-        "en": "Now send photos of the document. They will never be published or "
-        "shown to anyone searching: they are only used to verify the real owner.",
-    }),
+    FormField(
+        "place",
+        "where it was found",
+        {
+            "fr": f"Où l'as-tu trouvé ? {_SHARE}",
+            "en": "Where did you find it? Share the location, or give the city and district.",
+        },
+    ),
+    FormField(
+        "found_on",
+        "when it was found",
+        {
+            "fr": "Quand l'as-tu trouvé ?",
+            "en": "When did you find it?",
+        },
+    ),
+    FormField(
+        "description",
+        "a full description, including the name written on it",
+        {
+            "fr": "Décris-le le plus complètement possible, avec le nom qui y figure.",
+            "en": "Describe it as fully as you can, including the name written on it.",
+        },
+    ),
+    FormField(
+        "photo",
+        "photos of the document",
+        {
+            "fr": "Envoie maintenant des photos du document. Elles ne seront jamais "
+            "publiées ni montrées aux personnes qui cherchent : elles servent "
+            "uniquement à vérifier qui en est le vrai propriétaire.",
+            "en": "Now send photos of the document. They will never be published or "
+            "shown to anyone searching: they are only used to verify the real owner.",
+        },
+    ),
 )
 
 CLAIM_FORM = (
     _TYPE,
-    FormField("full_name", "the full name written on the lost document", {
-        "fr": "Quel est le nom complet écrit sur le document ?",
-        "en": "What is the full name written on the document?",
-    }),
-    FormField("place", "where it was lost, approximately", {
-        "fr": f"Où l'as-tu perdu, à peu près ? {_SHARE}",
-        "en": "Where did you lose it, roughly? Share the location, or give the city.",
-    }),
-    FormField("lost_on", "when it was lost, approximately", {
-        "fr": "Quand l'as-tu perdu, à peu près ?", "en": "When did you lose it, roughly?",
-    }),
-    FormField("description", "a description of the lost document", {
-        "fr": "Décris-le : couleur, état, ce qu'il y avait avec…",
-        "en": "Describe it: colour, condition, what was with it…",
-    }),
+    FormField(
+        "full_name",
+        "the full name written on the lost document",
+        {
+            "fr": "Quel est le nom complet écrit sur le document ?",
+            "en": "What is the full name written on the document?",
+        },
+    ),
+    FormField(
+        "place",
+        "where it was lost, approximately",
+        {
+            "fr": f"Où l'as-tu perdu, à peu près ? {_SHARE}",
+            "en": "Where did you lose it, roughly? Share the location, or give the city.",
+        },
+    ),
+    FormField(
+        "lost_on",
+        "when it was lost, approximately",
+        {
+            "fr": "Quand l'as-tu perdu, à peu près ?",
+            "en": "When did you lose it, roughly?",
+        },
+    ),
+    FormField(
+        "description",
+        "a description of the lost document",
+        {
+            "fr": "Décris-le : couleur, état, ce qu'il y avait avec…",
+            "en": "Describe it: colour, condition, what was with it…",
+        },
+    ),
 )
 
 RULES = (
@@ -86,6 +119,17 @@ ENTITIES: dict[str, Any] = {
 
 def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
     facts, rejected = common_facts(entities)
+    if "place" in rejected:
+        # « à la gare routière de Pomla Petel »: a landmark the gazetteer does
+        # not know is still where the document was. Kept as said, without a
+        # city — matching ignores a missing city — instead of asking the same
+        # question for ever (replay of 1 Nov 2026).
+        landmark = text_of(
+            " ".join(str(entities.get(k) or "") for k in ("neighbourhood", "city")), longest=120
+        )
+        if landmark:
+            facts["place"] = {"city": None, "neighbourhood": None, "landmark": landmark}
+            rejected.pop("place")
     if entities.get("document_type") in DOCUMENT_TYPES:
         facts["document_type"] = entities["document_type"]
     for name, longest in (("full_name", 120), ("found_on", 60), ("lost_on", 60)):
@@ -118,4 +162,15 @@ FOUND = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
+    cues={
+        "FOUND_CLAIM": (
+            r"\b(j ai perdu|perdu (ma|mon)|on m a (vole|kick)|je ne trouve plus|"
+            r"i (don )?lose|lost my|dem don tif|was stolen)\b"
+        ),
+        "FOUND_DECLARE": (
+            r"\b(j ai (ramasse|trouve|tcha)|quelqu un a oublie|i (don )?find|"
+            r"i found|someone left|i see)\b.*\b(cni|carte|permis|passeport|passport|"
+            r"recepisse|document|papiers?|id|licence|diplome|acte)\b"
+        ),
+    },
 )

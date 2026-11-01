@@ -134,4 +134,16 @@ FOOD = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
+    cues={
+        "CREATE_RESTAURANT": (
+            r"\b(mon (restaurant|resto|tourne dos|chantier|maquis|snack|boukarou)|"
+            r"je suis (une )?restaurat(eur|rice)|je vends (a manger|des plats)|"
+            r"inscrire mon (restaurant|resto)|chop house|my (restaurant|eatery))\b"
+        ),
+        "FOOD_SEARCH": (
+            r"\b(manger|faim|ndole|eru|okok|koki|achu|mbongo|poulet dg|"
+            r"poisson braise|soya|beignets?|chop|djaff\w*|tchop|tourne dos|"
+            r"restaurant|resto|maquis|plat du jour)\b"
+        ),
+    },
 )

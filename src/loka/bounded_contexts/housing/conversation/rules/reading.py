@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from loka.bounded_contexts.ai.domain.ai_provider import IntentResult
 from loka.bounded_contexts.housing.conversation.facts import (
     MIN_PLAUSIBLE_RENT_XAF,
@@ -91,10 +93,16 @@ def classify(text: str, *, pending: str | None = None) -> DeterministicMatch | N
         entities["property_type"] = property_type
 
     wants_to_list = bool(
-        LISTING_INTENT_PATTERN.search(normalized)
-        or _LANDLORD_OWNERSHIP_PATTERN.search(normalized)
+        LISTING_INTENT_PATTERN.search(normalized) or _LANDLORD_OWNERSHIP_PATTERN.search(normalized)
     )
-    wants_to_search = bool(SEARCH_INTENT_PATTERN.search(normalized))
+    # « je veux aller à Maroua », « je veux m'inscrire »: the verb alone says
+    # nothing about a lodging, and taking it for a search sent travellers and
+    # members through the tenant's form (replay of 1 Nov 2026).
+    wants_to_search = bool(SEARCH_INTENT_PATTERN.search(normalized)) and bool(
+        property_type
+        or _LODGING_WORD.search(normalized)
+        or {"neighbourhood", "location_hint", "price"} & entities.keys()
+    )
 
     # A tenant asking for a flat is never asking to publish one: the two
     # intents open different flows and confusing them would send a tenant
@@ -102,23 +110,15 @@ def classify(text: str, *, pending: str | None = None) -> DeterministicMatch | N
     # ("je veux louer mon studio" is a landlord), so listing is tested here
     # only when the message claims ownership or uses a publishing verb.
     if wants_to_search and not wants_to_list:
-        return DeterministicMatch(
-            intent="PROPERTY_SEARCH", confidence=0.85, entities=entities
-        )
+        return DeterministicMatch(intent="PROPERTY_SEARCH", confidence=0.85, entities=entities)
     if property_type and (wants_to_list or "price" in entities or "bedrooms" in entities):
-        return DeterministicMatch(
-            intent="CREATE_PROPERTY", confidence=0.9, entities=entities
-        )
+        return DeterministicMatch(intent="CREATE_PROPERTY", confidence=0.9, entities=entities)
     if property_type:
-        return DeterministicMatch(
-            intent="COLLECT_PROPERTY_TYPE", confidence=0.9, entities=entities
-        )
+        return DeterministicMatch(intent="COLLECT_PROPERTY_TYPE", confidence=0.9, entities=entities)
     if "price" in entities:
         return DeterministicMatch(intent="COLLECT_PRICE", confidence=0.92, entities=entities)
     if {"bedrooms", "bathrooms", "surface_area"} & entities.keys():
-        return DeterministicMatch(
-            intent="COLLECT_FEATURES", confidence=0.9, entities=entities
-        )
+        return DeterministicMatch(intent="COLLECT_FEATURES", confidence=0.9, entities=entities)
 
     standing = _standing_reply(normalized, pending)
     if standing is not None:
@@ -127,18 +127,14 @@ def classify(text: str, *, pending: str | None = None) -> DeterministicMatch | N
     if denial is not None:
         return denial
     if "standing" in entities:
-        return DeterministicMatch(
-            intent="COLLECT_STANDING", confidence=0.9, entities=entities
-        )
+        return DeterministicMatch(intent="COLLECT_STANDING", confidence=0.9, entities=entities)
 
     # A place name with nothing else is a location answer, not noise: the
     # open location question is what it closes. Without this the rule set
     # stays silent on "Bastos" and a deployment without a model would ask
     # the same question for ever.
     if {"city", "neighbourhood", "location_hint"} & entities.keys():
-        return DeterministicMatch(
-            intent="COLLECT_LOCATION", confidence=0.9, entities=entities
-        )
+        return DeterministicMatch(intent="COLLECT_LOCATION", confidence=0.9, entities=entities)
 
     if normalized in AFFIRMATIVE:
         yes = _yes_to_a_form_question(normalized, pending)
@@ -157,8 +153,10 @@ def classify(text: str, *, pending: str | None = None) -> DeterministicMatch | N
     return None
 
 
-def shortcut(text: str, *, pending: str | None = None
-) -> DeterministicMatch | None:
+_LODGING_WORD = re.compile(r"\b(logements?|louer|location|loyer|bailleur|colocation)\b")
+
+
+def shortcut(text: str, *, pending: str | None = None) -> DeterministicMatch | None:
     """The unambiguous replies that must never cost a model call.
 
     Strictly narrower than :meth:`classify`: when a model is available the

@@ -26,6 +26,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
+from loka.bounded_contexts.conversation.application.plugs import fallback
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.application.plugs.registry import PLUG_FLOWS
 from loka.bounded_contexts.conversation.application.plugs.turn import DomainTurns
@@ -313,7 +314,9 @@ class AnalyseConversationMessageUseCase:
         decision = await self._ledger.budget(session, now=moment)
         if not decision.allowed:
             ai_bypass_total.labels(stage="budget").inc()
-            reading = Reading(intent="UNKNOWN", confidence=0.0, reason=decision.reason)
+            reading = self._plug_by_rules(
+                session, text=text, pending=pending_key, now=moment
+            ) or Reading(intent="UNKNOWN", confidence=0.0, reason=decision.reason)
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
         turn = await self._lane.read(
@@ -352,6 +355,10 @@ class AnalyseConversationMessageUseCase:
         An unresolved message still records its turn and asks the user to
         rephrase instead of leaving the thread silent.
         """
+        plugged = self._plug_by_rules(session, text=text, pending=pending, now=now)
+        if plugged is not None:
+            ai_bypass_total.labels(stage="regex").inc()
+            return await self._finish(session, message_id, plugged, now=now, text=text)
         match = self._classifier.classify(text, pending=pending)
         if match is not None:
             ai_bypass_total.labels(stage="regex").inc()
@@ -362,6 +369,25 @@ class AnalyseConversationMessageUseCase:
         ai_bypass_total.labels(stage="budget").inc()
         reading = Reading(intent="UNKNOWN", confidence=0.0, reason="no_model_configured")
         return await self._finish(session, message_id, reading, now=now, text=text)
+
+    @staticmethod
+    def _plug_by_rules(
+        session: ConversationSession, *, text: str, pending: str | None, now: datetime
+    ) -> Reading | None:
+        """A plugged service's turn read without a model (see ``plugs.fallback``)."""
+        if session.flow in PLUG_FLOWS:
+            read = fallback.answer(session.flow, pending, text, now=now)
+            if read is not None:
+                return Reading(intent=read[0], confidence=0.9, entities=read[1])
+        opened = fallback.opening(text, now=now)
+        if opened is not None:
+            return Reading(intent=opened[0], confidence=0.9, entities=opened[1])
+        if session.flow in PLUG_FLOWS and not fallback.has_lodging_words(text):
+            # Unread inside a plugged task: ask its open question again rather
+            # than let the housing rules turn « je veux une femme sérieuse »
+            # into a lodging search.
+            return Reading(intent="UNKNOWN", confidence=0.0, reason="no_model_configured")
+        return None
 
     async def _finish(
         self,

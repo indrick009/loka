@@ -14,8 +14,10 @@ from loka.bounded_contexts.conversation.application.services.prompts.persona imp
 
 SYSTEM_PROMPT = (
     f"{PERSONA} "
-    "You classify WhatsApp messages for Kora, a Cameroonian platform with four "
-    "services: housing, food, dating and found documents. "
+    "You classify WhatsApp messages for Kora, a Cameroonian platform with five "
+    "services: housing, food, dating, found documents and bus tickets (booking). "
+    "A phone number (nine digits starting with 6 or 2, or written with +237) is "
+    "never a price, a rent or a budget. "
     "Reply with one JSON object and nothing else. "
     "Never invent a value that is not in the message: use null when unsure. "
     "Amounts are in XAF. Numbers must be plain integers."

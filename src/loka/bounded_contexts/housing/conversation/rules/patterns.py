@@ -185,8 +185,14 @@ _LANDLORD_OWNERSHIP_PATTERN = re.compile(
 
 
 SEARCH_INTENT_PATTERN = re.compile(
-    r"\b(je\s+(?:cherche|recherche|veux|voudrais)\s+(?:un|une|des)?|"
-    r"avez[-\s]?vous\s+(?:un|une)|vous\s+avez\s+(?:un|une|des))\b",
+    r"\b(je\s+(?:cherche|recherche|veux|voudrais|wanda)\s+(?:un|une|des)?|"
+    r"avez[-\s]?vous\s+(?:un|une)|vous\s+avez\s+(?:un|une|des)|"
+    # How Cameroonians ask on WhatsApp (replay of 1 Nov 2026): « besoin d'un
+    # studio », « on m'a dit que vous trouvez les appartements », « I di find
+    # room », « una get self contain? ».
+    r"(?:j'?\s*ai\s+)?besoin\s+d'?\s*(?:un|une)|il\s+me\s+faut|aidez[-\s]?moi\s+[àa]\s+trouver|"
+    r"trouve[rz]?[-\s]?moi|vous\s+trouvez|je\s+dois\s+long|"
+    r"i\s+di\s+find|i\s+(?:need|want)\s+(?:a|one)?|looking\s+for|do\s+you\s+have|una\s+get)\b",
     re.I,
 )
 

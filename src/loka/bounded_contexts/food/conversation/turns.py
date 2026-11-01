@@ -203,4 +203,7 @@ class FoodTurns:
             ),
             now=turn.now,
         )
-        return await self._done(turn, desk, texts.request_sent(offer["restaurant"], lang))
+        # Platform words, never rewritten: the voice once confirmed another dish
+        # than the one passed on to the restaurant (replay of 1 Nov 2026).
+        sent = texts.request_sent(offer["restaurant"], offer["dish"], lang)
+        return await self._done(turn, desk, sent, voiced=False)

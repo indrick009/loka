@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from loka.bounded_contexts.ai.domain.ai_provider import SUPPORTED_LANGUAGES
+from loka.bounded_contexts.conversation.application.plugs import fallback
 from loka.bounded_contexts.conversation.application.plugs.registry import (
     PLUG_FLOWS,
     spec_for,
@@ -100,12 +101,20 @@ class ModelLane:
         # A cheap rule reading only picks which form the prompt shows; the model
         # still chooses the intent. On an opening turn it is what tells a tenant
         # the search fields instead of the landlord's.
+        # A message that names another service without doubt (« je veux un
+        # billet pour Maroua », « j'ai perdu ma CNI ») shows the model that
+        # service's form, not the housing one: the housing rules read « je veux
+        # aller à Maroua » as a lodging search (replay of 1 Nov 2026).
+        plugged_opening = fallback.opening_intent(text) if session.flow not in PLUG_FLOWS else None
         hint = (
             self._classifier.classify(text, pending=pending_key)
-            if session.flow not in PLUG_FLOWS
+            if session.flow not in PLUG_FLOWS and plugged_opening is None
             else None
         )
-        prompt_flow = target_flow(session, hint.intent) if hint is not None else session.flow
+        opening_intent = plugged_opening or (hint.intent if hint is not None else None)
+        prompt_flow = (
+            target_flow(session, opening_intent) if opening_intent is not None else session.flow
+        )
         prompt = build_analysis_prompt(
             text=message.text,
             default_language=session.language,

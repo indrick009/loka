@@ -9,7 +9,7 @@ never knows what a restaurant or a profile is.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
@@ -38,6 +38,10 @@ class DomainSpec:
     rules: str
     entities: Mapping[str, Any]
     validate: Callable[[dict[str, Any], FlowName], ExtractedFacts]
+    # Opening intent → a regex over the folded message (accents, case and
+    # punctuation removed, apostrophes as spaces). Read only when no model is
+    # available: the words that name this service without any doubt.
+    cues: Mapping[str, str] = field(default_factory=dict)
 
     @property
     def flows(self) -> frozenset[FlowName]:

@@ -21,31 +21,59 @@ PHOTO_RULE = {
 }
 
 PROFILE_FORM = (
-    FormField("first_name", "the member's first name", {
-        "fr": "Bienvenue sur Kora Rencontres ! Quel est ton prénom ?",
-        "en": "Welcome to Kora Dating! What is your first name?",
-    }),
+    FormField(
+        "first_name",
+        "the member's first name",
+        {
+            "fr": "Bienvenue sur Kora Rencontres ! Quel est ton prénom ?",
+            "en": "Welcome to Kora Dating! What is your first name?",
+        },
+    ),
     FormField("age", "the member's age", {"fr": "Quel âge as-tu ?", "en": "How old are you?"}),
-    FormField("sex", "the member's sex (homme or femme)", {
-        "fr": "Tu es un homme ou une femme ?", "en": "Are you a man or a woman?",
-    }),
-    FormField("profession", "the member's profession", {
-        "fr": "Que fais-tu dans la vie ?", "en": "What do you do for a living?",
-    }),
-    FormField("country", "the country the member lives in", {
-        "fr": "Dans quel pays vis-tu ?", "en": "Which country do you live in?",
-    }),
-    FormField("city", "the city the member lives in", {
-        "fr": "Et dans quelle ville ?", "en": "And which city?",
-    }),
+    FormField(
+        "sex",
+        "the member's sex (homme or femme)",
+        {
+            "fr": "Tu es un homme ou une femme ?",
+            "en": "Are you a man or a woman?",
+        },
+    ),
+    FormField(
+        "profession",
+        "the member's profession",
+        {
+            "fr": "Que fais-tu dans la vie ?",
+            "en": "What do you do for a living?",
+        },
+    ),
+    FormField(
+        "country",
+        "the country the member lives in",
+        {
+            "fr": "Dans quel pays vis-tu ?",
+            "en": "Which country do you live in?",
+        },
+    ),
+    FormField(
+        "city",
+        "the city the member lives in",
+        {
+            "fr": "Et dans quelle ville ?",
+            "en": "And which city?",
+        },
+    ),
     FormField("photo", "a photo of the member (sent as an image)", PHOTO_RULE),
-    FormField("description", "a description of themselves and of the love they look for", {
-        "fr": "Présente-toi en quelques phrases, et surtout dis clairement quel "
-        "type d'amour tu recherches : c'est ce que Kora regarde en premier pour "
-        "te proposer quelqu'un.",
-        "en": "Describe yourself in a few sentences, and above all say clearly "
-        "what kind of love you are looking for: it is what Kora reads first.",
-    }),
+    FormField(
+        "description",
+        "a description of themselves and of the love they look for",
+        {
+            "fr": "Présente-toi en quelques phrases, et surtout dis clairement quel "
+            "type d'amour tu recherches : c'est ce que Kora regarde en premier pour "
+            "te proposer quelqu'un.",
+            "en": "Describe yourself in a few sentences, and above all say clearly "
+            "what kind of love you are looking for: it is what Kora reads first.",
+        },
+    ),
     FormField(
         "looking",
         "where they look for love: quartier, ville, pays, etranger or peu importe",
@@ -132,4 +160,12 @@ DATING = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
+    cues={
+        "DATING_PROFILE": (
+            r"\b(quelqu un de serieux|rencontres?|ame s(oe)?ur|l amour|celibataire|"
+            r"relation serieuse|"
+            r"me caser|ma moitie|go serieuse|dating|marry|serious (man|woman|"
+            r"relationship))\b"
+        ),
+    },
 )

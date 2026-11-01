@@ -119,16 +119,16 @@ def pick_a_number(count: int, language: str) -> str:
     return f"Reply with the dish number, between 1 and {count}."
 
 
-def request_sent(restaurant: str, language: str) -> str:
+def request_sent(restaurant: str, dish: str, language: str) -> str:
     if _fr(language):
         return (
-            f"J'ai transmis ta demande à {restaurant}, avec ton prénom et ce numéro "
-            "WhatsApp. Le restaurant va te contacter sur ce numéro d'ici peu. Si ce "
+            f"J'ai transmis ta demande pour « {dish} » à {restaurant}, avec ton prénom et ce "
+            "numéro WhatsApp. Le restaurant va te contacter sur ce numéro d'ici peu. Si ce "
             "n'est pas le cas, reviens me le dire."
         )
     return (
-        f"I passed your request to {restaurant}, with your first name and this "
-        "WhatsApp number. The restaurant will contact you on this number shortly. If "
+        f"I passed your request for « {dish} » to {restaurant}, with your first name and "
+        "this WhatsApp number. The restaurant will contact you on this number shortly. If "
         "it does not, come back and tell me."
     )
 

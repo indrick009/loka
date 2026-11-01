@@ -35,7 +35,7 @@ HOW_KORA_WORKS = (
     "unlock the landlord's number and the location; then they arrange the visit "
     "themselves. No agent, no commission. A tenant's search is recorded and Kora "
     "comes back to him when a lodging matches. "
-    "Kora also offers three other services on the same number: Food — "
+    "Kora also offers four other services on the same number: Food — "
     "restaurants publish today's menu and clients find a dish cooking today "
     "nearby, then Kora passes their request to the restaurant, which calls them "
     "back; Dating — Kora is a matchmaker: a profile, then proposals, and a "
