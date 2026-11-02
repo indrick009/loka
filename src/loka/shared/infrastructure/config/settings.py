@@ -237,6 +237,8 @@ class Settings(BaseSettings):
         default=SecretStr("Zm9yLWRldi1vbmx5LTMyLWJ5dGVzLWtleS0zMmJ5dGVzLWtleSE=")
     )
     outbound_webhook_signing_secret: SecretStr = SecretStr("change-me")
+    # DEMO ONLY: lets the WhatsApp message "_empty_all_data" wipe everything.
+    demo_reset_enabled: bool = False
 
     @property
     def is_production(self) -> bool:

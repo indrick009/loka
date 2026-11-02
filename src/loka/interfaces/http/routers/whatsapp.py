@@ -27,6 +27,7 @@ from fastapi import APIRouter, Header, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from loka.interfaces.http.container import get_container
+from loka.interfaces.http.demo_reset import is_demo_reset, reset_everything
 from loka.shared.application.context import current_context, new_id
 from loka.shared.domain.errors import (
     ExternalServiceUnavailable,
@@ -154,6 +155,10 @@ async def receive_gateway_event(
             "a gateway delivery must carry text, a media object or a location",
             context={"message_kind": body.message_kind},
         )
+
+    if is_demo_reset(container, body.text):  # DEMO ONLY, see demo_reset.py
+        await reset_everything(container, body.sender_phone)
+        return {"accepted": True, "external_message_id": body.external_message_id}
 
     envelope = _envelope(body)
     try:
