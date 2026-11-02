@@ -14,6 +14,7 @@ from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+import httpx
 import pytest
 import pytest_asyncio
 from pydantic import SecretStr
@@ -40,17 +41,44 @@ def integration_settings() -> Settings:
     developer's model budget because their ``.env`` happened to be switched on.
     """
     base = Settings()
+    broker_url = _own_vhost(base.broker.url.get_secret_value(), TEST_VHOST)
     return base.model_copy(
         update={
             "environment": "test",
             "database": base.database.model_copy(
                 update={"database": "loka_test", "pool_size": 5, "max_overflow": 2}
             ),
+            "broker": base.broker.model_copy(update={"url": SecretStr(broker_url)}),
             "redis_url": _redis_db_url(base.redis_url, db=1),
             "encryption_key": SecretStr("integration-test-key-material-32-bytes!!"),
             "ai": base.ai.model_copy(update={"pipeline_enabled": False}),
         }
     )
+
+
+TEST_VHOST = "loka_test"
+
+
+def _own_vhost(url: str, vhost: str) -> str:
+    """The broker URL on a vhost of its own, created when missing.
+
+    On the shared vhost the development worker, when it runs, consumed the
+    messages these tests publish: 17 tests failed on queues found empty.
+    """
+    parsed = urlparse(url)
+    auth = (parsed.username or "guest", parsed.password or "guest")
+    api = f"http://{parsed.hostname}:15672/api"
+    try:
+        httpx.put(f"{api}/vhosts/{vhost}", auth=auth, timeout=5).raise_for_status()
+        httpx.put(
+            f"{api}/permissions/{vhost}/{auth[0]}",
+            json={"configure": ".*", "write": ".*", "read": ".*"},
+            auth=auth,
+            timeout=5,
+        ).raise_for_status()
+    except httpx.HTTPError:
+        return url  # no management API: keep the shared vhost
+    return urlunparse(parsed._replace(path=f"/{vhost}"))
 
 
 def _redis_db_url(url: str, db: int) -> str:

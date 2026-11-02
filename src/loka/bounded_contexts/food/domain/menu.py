@@ -9,7 +9,7 @@ midnight whatever the restaurateur forgot. Closing is his call: one dish
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -26,12 +26,22 @@ def menu_day(now: datetime) -> date:
     return now.astimezone(DOUALA).date()
 
 
+MAX_MEDIA_PER_DISH = 3
+
+
 @dataclass(frozen=True, slots=True)
 class MenuDish:
+    """``media``: the photos or short videos of the plate, stored object keys.
+
+    Optional: a dish without one is still on the menu. Kept when a menu is
+    republished ("même menu qu'hier"), so a plate is photographed once.
+    """
+
     name: str
     price_xaf: int
     key: str | None = None
     available: bool = True
+    media: tuple[str, ...] = ()
 
     @classmethod
     def of(cls, name: Any, price: Any) -> MenuDish:
@@ -50,6 +60,7 @@ class MenuDish:
             "price": self.price_xaf,
             "key": self.key,
             "available": self.available,
+            "media": list(self.media),
         }
 
     @classmethod
@@ -59,6 +70,7 @@ class MenuDish:
             price_xaf=int(raw["price"]),
             key=raw.get("key"),
             available=bool(raw.get("available", True)),
+            media=tuple(str(key) for key in raw.get("media") or ()),
         )
 
     def is_named(self, said: str) -> bool:
@@ -106,7 +118,7 @@ class DailyMenu:
         for dish in self.dishes:
             if dish.available and any(dish.is_named(name) for name in said):
                 closed.append(dish.name)
-                updated.append(MenuDish(dish.name, dish.price_xaf, dish.key, available=False))
+                updated.append(replace(dish, available=False))
             else:
                 updated.append(dish)
         self.dishes = updated
@@ -116,3 +128,19 @@ class DailyMenu:
 
     def close(self, *, now: datetime) -> None:
         self.closed_at = self.closed_at or now
+
+    def attach(self, media_key: str, said: list[str]) -> MenuDish | None:
+        """Put a photo on a dish: the first one named in ``said`` (caption, or
+        what the picture shows), else the first dish still without one.
+        ``None`` when every dish is already full."""
+        named = [dish for dish in self.dishes if any(dish.is_named(name) for name in said)]
+        waiting = [dish for dish in self.dishes if not dish.media]
+        candidates = named or waiting
+        target = next(
+            (dish for dish in candidates if len(dish.media) < MAX_MEDIA_PER_DISH), None
+        )
+        if target is None or media_key in target.media:
+            return None
+        updated = replace(target, media=(*target.media, media_key))
+        self.dishes = [updated if dish is target else dish for dish in self.dishes]
+        return updated

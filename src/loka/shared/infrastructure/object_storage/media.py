@@ -145,6 +145,19 @@ class S3MediaStorage:
             bucket=self._settings.bucket,
         )
 
+    async def get(self, object_key: str) -> tuple[bytes, str]:
+        """The object's bytes and content type."""
+        import asyncio
+
+        try:
+            answer = await asyncio.to_thread(
+                self._client.get_object, Bucket=self._settings.bucket, Key=object_key
+            )
+            data = await asyncio.to_thread(answer["Body"].read)
+        except ClientError as exc:
+            raise MediaStoreError(f"cannot read {object_key}: {exc}") from exc
+        return data, str(answer.get("ContentType") or "application/octet-stream")
+
     async def presigned_download_url(self, object_key: str, *, ttl_seconds: int) -> str:
         import asyncio
 

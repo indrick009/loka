@@ -47,6 +47,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
 from loka.bounded_contexts.dating.conversation.turns import DatingTurns
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
 from loka.bounded_contexts.food.conversation.turns import FoodTurns
+from loka.bounded_contexts.food.infrastructure.menu_reader import OpenRouterMenuReader
 from loka.bounded_contexts.food.infrastructure.store import SqlAlchemyFoodStore
 from loka.bounded_contexts.found.conversation.turns import FoundTurns
 from loka.bounded_contexts.found.infrastructure.store import SqlAlchemyFoundStore
@@ -191,6 +192,13 @@ def analyse_conversation_message_use_case(
     )
 
 
+def menu_reader(settings: Settings) -> OpenRouterMenuReader | None:
+    """Reads a restaurateur's menu photo; none without a model to read it."""
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterMenuReader(settings.ai, S3MediaStorage(settings.object_storage))
+
+
 def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
     """Food, Dating, Found and Booking, each over its own store."""
 
@@ -202,7 +210,9 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
         MobileMoneyPayments(payment_gateway(settings)), SqlAlchemyUnlockStore(uow.session)
     )
     return {
-        "food": FoodTurns(SqlAlchemyFoodStore(uow.session), name_of=first_name),
+        "food": FoodTurns(
+            SqlAlchemyFoodStore(uow.session), name_of=first_name, reader=menu_reader(settings)
+        ),
         "dating": DatingTurns(SqlAlchemyDatingStore(uow.session), unlock=unlock),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

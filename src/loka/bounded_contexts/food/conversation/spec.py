@@ -37,9 +37,12 @@ RESTAURANT_FORM = (
         "today's dishes, each with its price in FCFA",
         {
             "fr": "Quels plats as-tu aujourd'hui, avec leur prix ?\n"
-            "Par exemple : ndolè 2 000, poulet DG 3 500, soya 1 000.",
+            "Par exemple : ndolè 2 000, poulet DG 3 500, soya 1 000.\n"
+            "Tu peux aussi m'envoyer une photo de ton menu écrit : je lis les plats et "
+            "les prix pour toi.",
             "en": "Which dishes do you have today, with their prices?\n"
-            "For example: ndole 2000, chicken DG 3500.",
+            "For example: ndole 2000, chicken DG 3500.\n"
+            "You can also send me a photo of your written menu: I will read it.",
         },
     ),
 )

@@ -14,6 +14,7 @@ unless it had text or media silently dropped the best answer a user can give.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -73,6 +74,28 @@ class SharedLocation:
         if self.label is not None:
             cleaned = self.label.strip()[:MAX_LOCATION_LABEL]
             object.__setattr__(self, "label", cleaned or None)
+
+
+_MAP_LINK = re.compile(r"https?://\S*(?:maps|goo\.gl)\S*")
+_MAP_POINT = re.compile(r"(?:@|[?&](?:q|query|ll)=)(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)")
+
+
+def map_link_location(text: str | None) -> SharedLocation | None:
+    """The point inside a pasted map link, the rest of the message as its label.
+
+    Sharing a place from Google Maps sends a link, not a WhatsApp pin
+    (replay of 2 Nov 2026: "…/@3.85017743,11.48083637,17z" then the address).
+    A short link carries no coordinates and is left to the model.
+    """
+    link = _MAP_LINK.search(text or "")
+    point = _MAP_POINT.search(link.group(0)) if link else None
+    if link is None or point is None:
+        return None
+    label = " ".join(_MAP_LINK.sub(" ", text or "").split()) or None
+    try:
+        return SharedLocation(float(point.group(1)), float(point.group(2)), label)
+    except ValidationFailed:
+        return None
 
 
 @dataclass(frozen=True, slots=True)

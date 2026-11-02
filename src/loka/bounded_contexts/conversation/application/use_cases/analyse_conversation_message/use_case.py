@@ -81,6 +81,9 @@ from loka.bounded_contexts.conversation.domain.repositories.inbound_message_repo
     InboundMessageRepository,
     StoredInboundMessage,
 )
+from loka.bounded_contexts.conversation.domain.value_objects.inbound_message import (
+    map_link_location,
+)
 from loka.bounded_contexts.housing.conversation.facts import (
     FactExtractor,
 )
@@ -250,11 +253,10 @@ class AnalyseConversationMessageUseCase:
         # interpretation. They are read here, before any model: paying one to
         # look at two floats would be slower, dearer and less reliable than
         # reading the fields.
-        if message.location is not None:
+        point = message.location or map_link_location(text)
+        if point is not None:
             ai_bypass_total.labels(stage="location").inc()
-            return await self._finish(
-                session, message_id, shared_location(message.location), now=moment
-            )
+            return await self._finish(session, message_id, shared_location(point), now=moment)
         if message.media_refused is not None:
             ai_bypass_total.labels(stage="media").inc()
             reading = refused_media(session, kind=message.kind, refused=message.media_refused)
