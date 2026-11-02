@@ -5,11 +5,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from loka.bounded_contexts.dating.domain.profile import Profile
-from loka.bounded_contexts.dating.infrastructure.models import DatingAnswerRow, DatingProfileRow
+from loka.bounded_contexts.dating.domain.talk import OPEN, Side, Talk
+from loka.bounded_contexts.dating.infrastructure.models import (
+    DatingAnswerRow,
+    DatingProfileRow,
+    DatingTalkRow,
+)
 
 ACTIVE = "ACTIVE"
 REFUSED_MINOR = "REFUSED_MINOR"
@@ -29,6 +35,35 @@ def _profile(row: DatingProfileRow) -> Profile:
         description=row.description,
         looking=tuple(row.looking or ()),
         seeking=row.seeking,
+        created_at=row.created_at,
+    )
+
+
+def _side(profile_id: uuid.UUID, raw: dict[str, int]) -> Side:
+    return Side(
+        profile_id=profile_id,
+        sent=int(raw.get("sent", 0)),
+        photos=int(raw.get("photos", 0)),
+        packs=int(raw.get("packs", 1)),
+        confirmed=bool(raw.get("confirmed", 0)),
+    )
+
+
+def _raw(side: Side) -> dict[str, int]:
+    return {
+        "sent": side.sent,
+        "photos": side.photos,
+        "packs": side.packs,
+        "confirmed": int(side.confirmed),
+    }
+
+
+def _talk(row: DatingTalkRow) -> Talk:
+    return Talk(
+        talk_id=row.id,
+        first=_side(row.first_profile, row.first_side or {}),
+        second=_side(row.second_profile, row.second_side or {}),
+        status=row.status,
         created_at=row.created_at,
     )
 
@@ -143,3 +178,67 @@ class SqlAlchemyDatingStore:
             )
         ).scalar_one_or_none()
         return None if value is None else bool(value)
+
+    async def talk(self, talk_id: uuid.UUID) -> Talk | None:
+        row = await self._session.get(DatingTalkRow, talk_id)
+        return _talk(row) if row is not None else None
+
+    async def open_talk_of(self, profile_id: uuid.UUID) -> Talk | None:
+        row = (
+            await self._session.execute(
+                select(DatingTalkRow)
+                .where(
+                    DatingTalkRow.status == OPEN,
+                    or_(
+                        DatingTalkRow.first_profile == profile_id,
+                        DatingTalkRow.second_profile == profile_id,
+                    ),
+                )
+                .order_by(DatingTalkRow.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return _talk(row) if row is not None else None
+
+    async def ever_talked(self, a: uuid.UUID, b: uuid.UUID) -> bool:
+        found = await self._session.scalar(
+            select(DatingTalkRow.id).where(
+                or_(
+                    and_(DatingTalkRow.first_profile == a, DatingTalkRow.second_profile == b),
+                    and_(DatingTalkRow.first_profile == b, DatingTalkRow.second_profile == a),
+                )
+            )
+        )
+        return found is not None
+
+    async def save_talk(self, talk: Talk) -> None:
+        row = await self._session.get(DatingTalkRow, talk.talk_id)
+        if row is None:
+            row = DatingTalkRow(
+                id=talk.talk_id,
+                first_profile=talk.first.profile_id,
+                second_profile=talk.second.profile_id,
+                created_at=talk.created_at,
+            )
+            self._session.add(row)
+        row.status = talk.status
+        row.first_side = _raw(talk.first)
+        row.second_side = _raw(talk.second)
+        await self._session.flush()
+
+    async def liked_by_both(self, profile_id: uuid.UUID) -> list[uuid.UUID]:
+        mine = aliased(DatingAnswerRow)
+        rows = await self._session.execute(
+            select(DatingAnswerRow.from_profile)
+            .where(
+                DatingAnswerRow.to_profile == profile_id,
+                DatingAnswerRow.liked.is_(True),
+                DatingAnswerRow.from_profile.in_(
+                    select(mine.to_profile).where(
+                        mine.from_profile == profile_id, mine.liked.is_(True)
+                    )
+                ),
+            )
+            .order_by(DatingAnswerRow.created_at)
+        )
+        return list(rows.scalars())

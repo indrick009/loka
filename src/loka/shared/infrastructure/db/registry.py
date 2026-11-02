@@ -27,7 +27,11 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_mod
     InboundMessageRow,
     OutboundMessageRow,
 )
-from loka.bounded_contexts.dating.infrastructure.models import DatingAnswerRow, DatingProfileRow
+from loka.bounded_contexts.dating.infrastructure.models import (
+    DatingAnswerRow,
+    DatingProfileRow,
+    DatingTalkRow,
+)
 from loka.bounded_contexts.food.infrastructure.models import (
     FoodDailyMenuRow,
     FoodRequestRow,
@@ -79,6 +83,7 @@ __all__ = [
     "ConversationTurnRow",
     "DatingAnswerRow",
     "DatingProfileRow",
+    "DatingTalkRow",
     "DecisionShadowRow",
     "FoodDailyMenuRow",
     "FoodRequestRow",

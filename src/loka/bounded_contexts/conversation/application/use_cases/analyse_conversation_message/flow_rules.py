@@ -5,9 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.plugs.registry import (
+    HOLDING_QUESTIONS,
+    domain_of,
+)
+from loka.bounded_contexts.conversation.application.plugs.registry import (
     OPENING_INTENTS as FLOW_BY_OPENING_INTENT,
 )
-from loka.bounded_contexts.conversation.application.plugs.registry import domain_of
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
     FlowName,
@@ -37,7 +40,7 @@ def opens_new_flow(session: ConversationSession, intent: str) -> bool:
     the model's reading of one ambiguous verb.
     """
     opening_flow = FLOW_BY_OPENING_INTENT.get(intent)
-    if opening_flow is None:
+    if opening_flow is None or carried_question(session) in HOLDING_QUESTIONS:
         return False
     if domain_of(session.flow) not in (None, domain_of(opening_flow)):
         # Another service altogether: "au fait je veux manger" mid-listing is

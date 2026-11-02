@@ -1,4 +1,8 @@
-"""What a Dating turn does: build the profile, propose, record a yes or a no."""
+"""What a Dating turn does: build the profile, propose, record a yes or a no.
+
+Two yeses open a talk (see ``talk``): questions relayed by Kora, then each
+confirms. Only then is it a match, and the contact can be unlocked.
+"""
 
 from __future__ import annotations
 
@@ -14,17 +18,26 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowStep,
 )
 from loka.bounded_contexts.dating.conversation import texts
+from loka.bounded_contexts.dating.conversation.keys import (
+    LIKE_KEY,
+    MATCH_KEY,
+    PLUS_KEY,
+    PROPOSED_KEY,
+    TALK_ID,
+    TALK_KEY,
+    UNLOCK_KEY,
+)
 from loka.bounded_contexts.dating.conversation.spec import DATING
+from loka.bounded_contexts.dating.conversation.talk import DatingTalk
 from loka.bounded_contexts.dating.domain.matching import best_candidates
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
 
-PROPOSED_KEY = "_proposed"
-LIKE_KEY = DATING.question_key("like")
-UNLOCK_KEY = DATING.question_key("unlock")
-MATCH_KEY = "_match"
+# Never taken from a passing remark: the description is asked with its privacy
+# promise, and where to look only once the description is in.
+ASKED_ONLY = ("description", "looking")
 _YES = ("oui", "yes", "ok", "d'accord", "dac", "volontiers", "bien sûr", "carrément")
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
@@ -46,6 +59,7 @@ class DatingTurns:
     def __init__(self, store: DatingStore, *, unlock: UnlockContact | None = None) -> None:
         self._store = store
         self._unlock = unlock
+        self._talk = DatingTalk(store, unlock=unlock)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         user, lang = turn.session.user_id, turn.language
@@ -54,6 +68,16 @@ class DatingTurns:
         member = await self._store.profile_of(user)
         if member is None:
             return await self._register(turn, desk, user)
+        question = turn.session.context.get("next_question")
+        talk_id = turn.session.context.get(TALK_ID)
+        if not turn.fresh and question in (TALK_KEY, PLUS_KEY) and talk_id:
+            return await self._talk.apply(
+                turn,
+                desk,
+                member,
+                uuid.UUID(str(talk_id)),
+                propose=lambda prefix: self._propose(turn, desk, member, prefix=prefix),
+            )
         matched = turn.session.context.get(MATCH_KEY)
         if not turn.fresh and turn.session.context.get("next_question") == UNLOCK_KEY and matched:
             return await self._pay(turn, desk, member, uuid.UUID(str(matched)))
@@ -64,10 +88,19 @@ class DatingTurns:
 
     async def _close(self, turn: PlugTurn, desk: PlugDesk, text: str) -> TurnOutcome:
         await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})
-        return say(text, step=FlowStep.PUBLISHED)
+        # Exact copy: rewritten, « c'est noté » became « je n'ai pas encore de
+        # photo pour lui » after a member asked to see one.
+        return say(text, step=FlowStep.PUBLISHED, voiced=False)
 
     async def _register(self, turn: PlugTurn, desk: PlugDesk, user: uuid.UUID) -> TurnOutcome:
         known, lang = turn.known, turn.language
+        unasked = {name for name in ASKED_ONLY if name in turn.facts and turn.open_field != name}
+        if unasked:
+            # Only answers to their own questions: observed live, « je cherche une
+            # femme sérieuse » was kept as the description and « je vis à
+            # Yaoundé » as where to look, so the member was never told the
+            # description matters most and nobody else reads it.
+            known = {name: value for name, value in known.items() if name not in unasked}
         age = known.get("age")
         if isinstance(age, int) and age < ADULT_AGE:
             # Refused, not hidden: nothing about the person is kept.
@@ -99,6 +132,16 @@ class DatingTurns:
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, *, prefix: str
     ) -> TurnOutcome:
         lang = turn.language
+        partner = await self._talk.waiting(member)
+        if partner is not None:
+            return await self._talk.begin(
+                turn,
+                desk,
+                member,
+                partner,
+                prefix=prefix,
+                propose=lambda again: self._propose(turn, desk, member, prefix=again),
+            )
         excluded = await self._store.answered(member.profile_id)
         ranked = best_candidates(member, await self._store.members(), excluded=excluded)
         if not ranked:
@@ -111,7 +154,13 @@ class DatingTurns:
             context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3)},
         )
         text = f"{prefix}\n{texts.proposal(other, lang)}".strip()
-        return say(text, question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False)
+        return say(
+            text,
+            question=LIKE_KEY,
+            step=FlowStep.COLLECT_CHOICE,
+            voiced=False,
+            media=other.photo_key or None,
+        )
 
     async def _answer(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, proposed: uuid.UUID
@@ -136,29 +185,22 @@ class DatingTurns:
             return await self._propose(turn, desk, member, prefix=texts.passed(lang))
         their_answer = await self._store.likes(other.profile_id, member.profile_id)
         if their_answer:
-            # Consent on both sides: the only moment a match exists.
-            await desk.notify(
-                other.user_id,
-                texts.match(member, "fr"),
-                now=turn.now,
-                steer=Steer(
-                    flow=FlowName.DATING_PROFILE,
-                    step=FlowStep.COLLECT_CHOICE,
-                    question_key=UNLOCK_KEY,
-                    context={MATCH_KEY: str(member.profile_id)},
-                ),
-            )
-            await desk.settle(
+            # Both said yes: their questions first, the match once both confirm.
+            return await self._talk.begin(
                 turn,
-                step=FlowStep.COLLECT_CHOICE,
-                question_key=UNLOCK_KEY,
-                context={MATCH_KEY: str(other.profile_id)},
+                desk,
+                member,
+                other,
+                prefix="",
+                propose=lambda prefix: self._propose(turn, desk, member, prefix=prefix),
             )
-            return say(texts.match(other, lang), question=UNLOCK_KEY, voiced=False)
-        if their_answer is None:
+        if their_answer is None and await self._store.open_talk_of(other.profile_id) is None:
+            # Not while they talk with someone else: the proposal would take
+            # their thread away from that talk. It reaches them afterwards.
             await desk.notify(
                 other.user_id,
                 texts.proposal(member, "fr"),
+                media_object_key=member.photo_key or None,
                 now=turn.now,
                 steer=Steer(
                     flow=FlowName.DATING_PROFILE,

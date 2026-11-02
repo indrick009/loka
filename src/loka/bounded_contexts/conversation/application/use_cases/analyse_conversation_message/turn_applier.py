@@ -5,7 +5,10 @@ from __future__ import annotations
 import uuid
 from dataclasses import replace
 
-from loka.bounded_contexts.conversation.application.plugs.registry import spec_for
+from loka.bounded_contexts.conversation.application.plugs.registry import (
+    HOLDING_QUESTIONS,
+    spec_for,
+)
 from loka.bounded_contexts.conversation.application.plugs.turn import (
     DomainTurns,
     PlugDesk,
@@ -95,7 +98,10 @@ class TurnApplier:
                 next_step=outcome.next_step,
                 text=text,
                 media_burst_of=media_burst_of,
-                media_marker=media_marker,
+                # A domain's exact copy stays exact after a photo too: observed
+                # live, Dating's « le plus important : ta description… » was
+                # rewritten into a casual line that dropped what mattered.
+                media_marker=media_marker if outcome.platform_text is not None else None,
             )
 
         settled = await self._housing.settle(
@@ -143,6 +149,7 @@ class TurnApplier:
             else {name: value for name, value in session.context.items() if name != "next_question"}
         )
         facts = verdict.facts.as_context() if verdict.accepted else {}
+        asked = carried_question(session)
         turn = PlugTurn(
             session=session,
             flow=flow,
@@ -153,13 +160,21 @@ class TurnApplier:
             text=text,
             now=cost.now,
             model_reply=reply_text,
-            open_field=spec.field_of(carried_question(session)),
+            open_field=spec.field_of(asked),
             rejected=dict(verdict.facts.rejected),
         )
         outcome = await self._plugs[spec.name].apply(turn, self._desk)
-        if verdict.intent == "SUPPORT" and reply_text and not facts:
+        if (
+            verdict.intent == "SUPPORT"
+            and reply_text
+            and not facts
+            and outcome.question == asked
+            and asked not in HOLDING_QUESTIONS
+        ):
             # Small talk mid-form: the model's own answer, which was told the
-            # open question and comes back to it, beats the bare question.
+            # open question and comes back to it, beats the bare question. Only
+            # then: observed live, « oui envoie moi sa photo » recorded a yes in
+            # Dating, and the model's guess replaced Kora's answer to it.
             return replace(outcome, reply_text=reply_text, platform_text=None)
         return outcome
 

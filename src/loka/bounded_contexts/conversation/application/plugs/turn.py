@@ -64,7 +64,13 @@ class PlugDesk(Protocol):
     ) -> None: ...
 
     async def notify(
-        self, user_id: uuid.UUID, text: str, *, now: datetime, steer: Steer | None = None
+        self,
+        user_id: uuid.UUID,
+        text: str,
+        *,
+        now: datetime,
+        steer: Steer | None = None,
+        media_object_key: str | None = None,
     ) -> bool: ...
 
     async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool: ...

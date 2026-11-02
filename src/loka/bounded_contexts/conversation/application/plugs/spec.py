@@ -42,6 +42,10 @@ class DomainSpec:
     # punctuation removed, apostrophes as spaces). Read only when no model is
     # available: the words that name this service without any doubt.
     cues: Mapping[str, str] = field(default_factory=dict)
+    # Question keys during which every message belongs to this domain: two
+    # members talking through Kora. « Tu vis dans un studio ? » relayed to a
+    # match must not open a lodging search, nor be answered by the model.
+    holding: frozenset[str] = frozenset()
 
     @property
     def flows(self) -> frozenset[FlowName]:

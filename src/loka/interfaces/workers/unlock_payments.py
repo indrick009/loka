@@ -1,7 +1,8 @@
 """The sweep that hands over contacts once their 1 000 FCFA is validated.
 
-Dating: each member of the match gets the other's WhatsApp number. Found: the
-owner gets the finder's, the finder the owner's, with the handover rules.
+Dating: each member of the match gets the other's WhatsApp number, or a member
+who bought more questions gets them. Found: the owner gets the finder's, the
+finder the owner's, with the handover rules.
 """
 
 from __future__ import annotations
@@ -17,8 +18,9 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
+from loka.bounded_contexts.dating.domain.talk import MESSAGES_PER_PACK, PHOTOS_PER_PACK
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
-from loka.bounded_contexts.payment.domain.contact_unlock import DATING, FAILED, PAID
+from loka.bounded_contexts.payment.domain.contact_unlock import DATING, DATING_PLUS, FAILED, PAID
 from loka.bounded_contexts.payment.infrastructure.mobile_money import MobileMoneyPayments
 from loka.bounded_contexts.payment.infrastructure.unlock_store import SqlAlchemyUnlockStore
 from loka.shared.infrastructure.composition import payment_gateway, unit_of_work
@@ -63,6 +65,19 @@ async def settle_once(database: Database, settings: Settings) -> None:
                 continue
             unlock.status = PAID
             await store.save(unlock)
+            if unlock.purpose == DATING_PLUS:
+                payer = await dating.profile_of(unlock.payer_user_id)
+                talk = await dating.talk(unlock.subject_id)
+                if payer is not None and talk is not None:
+                    talk.side(payer.profile_id).packs += 1
+                    await dating.save_talk(talk)
+                await desk.notify(
+                    unlock.payer_user_id,
+                    f"Paiement reçu : tu as {MESSAGES_PER_PACK} messages et "
+                    f"{PHOTOS_PER_PACK} photos de plus. Écris ta question, je la transmets.",
+                    now=now,
+                )
+                continue
             payer_phone = await _phone(sessions, unlock.payer_user_id)
             target_phone = await _phone(sessions, unlock.target_user_id)
             if unlock.purpose == DATING:

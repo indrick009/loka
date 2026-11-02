@@ -25,6 +25,8 @@ _BY_FLOW = {flow: spec for spec in SPECS for flow in spec.flows}
 
 PLUG_FLOWS = frozenset(_BY_FLOW)
 
+HOLDING_QUESTIONS: frozenset[str] = frozenset().union(*(spec.holding for spec in SPECS))
+
 OPENING_INTENTS: dict[str, FlowName] = {
     **HOUSING_OPENING_INTENTS,
     **{intent: flow for spec in SPECS for intent, flow in spec.opening_intents.items()},

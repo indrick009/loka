@@ -43,3 +43,22 @@ class DatingAnswerRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (UniqueConstraint("from_profile", "to_profile", name="uq_dating_answer"),)
+
+
+class DatingTalkRow(Base):
+    """Two members asking each other questions through Kora before confirming."""
+
+    __tablename__ = "dating_talks"
+
+    id: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    first_profile: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, index=True
+    )
+    second_profile: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(12), nullable=False)
+    # Per member: messages and photos sent, packs held, and the final yes.
+    first_side: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False, default=dict)
+    second_side: Mapped[dict[str, int]] = mapped_column(JSONB, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -19,6 +19,9 @@ FAILED = "FAILED"
 
 DATING = "DATING"
 FOUND = "FOUND"
+# Not a contact: 10 more messages and 5 more photos relayed by Kora in a Dating
+# talk, bought by a member who used his own. ``subject_id`` is the talk.
+DATING_PLUS = "DATING_PLUS"
 
 
 @dataclass(slots=True)

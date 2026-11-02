@@ -35,12 +35,15 @@ def proposal(other: Profile, language: str) -> str:
         return (
             f"Voici quelqu'un qui pourrait te plaire : {other.first_name}, {other.age} ans, "
             f"{other.profession}, {where}. Vos descriptions vont bien ensemble.\n\n"
-            "Tu aimerais faire sa connaissance ? Réponds OUI ou NON."
+            "Tu aimerais faire sa connaissance ? Réponds OUI ou NON. Si vous dites oui "
+            "tous les deux, vous pourrez vous poser des questions à travers moi avant "
+            "de confirmer."
         )
     return (
         f"Here is someone you might like: {other.first_name}, {other.age}, "
         f"{other.profession}, {where}. Your descriptions fit well together.\n\n"
-        "Would you like to meet? Reply YES or NO."
+        "Would you like to meet? Reply YES or NO. If you both say yes, you can ask "
+        "each other questions through me before confirming."
     )
 
 

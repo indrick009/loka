@@ -61,15 +61,21 @@ def say(
     question: str | None = None,
     step: FlowStep | None = None,
     voiced: bool = True,
+    media: str | None = None,
 ) -> TurnOutcome:
     """The turn's answer. A voiced text is rewritten in the user's own tone;
-    a list or a recap goes out exactly as written."""
+    a list or a recap goes out exactly as written. ``media``: a stored image
+    sent with it, the text as its caption."""
     from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
         TurnOutcome,
     )
 
     return TurnOutcome(
-        question=question, next_step=step, reply_text=text, platform_text=text if voiced else None
+        question=question,
+        next_step=step,
+        reply_text=text,
+        platform_text=text if voiced else None,
+        media_object_key=media,
     )
 
 

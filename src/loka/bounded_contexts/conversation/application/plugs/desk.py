@@ -48,9 +48,18 @@ class ConversationDesk:
         )
 
     async def notify(
-        self, user_id: uuid.UUID, text: str, *, now: datetime, steer: Steer | None = None
+        self,
+        user_id: uuid.UUID,
+        text: str,
+        *,
+        now: datetime,
+        steer: Steer | None = None,
+        media_object_key: str | None = None,
     ) -> bool:
-        """Write to another user, on the thread he last used. ``False`` when he has none."""
+        """Write to another user, on the thread he last used. ``False`` when he has none.
+
+        With ``media_object_key`` the stored image goes out, ``text`` as its caption.
+        """
         session = await self._sessions.latest_by_user(user_id)
         if session is None:
             return False
@@ -76,6 +85,7 @@ class ConversationDesk:
                     reply_kind="QUESTION" if steer and steer.question_key else "ACK",
                     question_key=steer.question_key if steer else None,
                     text=text,
+                    media_object_key=media_object_key,
                     intent="NOTIFY",
                     language=session.language,
                 )

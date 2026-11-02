@@ -7,7 +7,11 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
-from loka.bounded_contexts.payment.domain.contact_unlock import UNLOCK_FEE_XAF, ContactUnlock
+from loka.bounded_contexts.payment.domain.contact_unlock import (
+    DATING_PLUS,
+    UNLOCK_FEE_XAF,
+    ContactUnlock,
+)
 
 _NO = ("non", "no", "pas maintenant", "plus tard", "annule")
 _YES = ("payer", "paye", "oui", "yes", "ok", "d'accord", "dac", "vas-y", "go")
@@ -59,7 +63,11 @@ class UnlockContact:
             reservation_id=unlock_id,
             amount_xaf=UNLOCK_FEE_XAF,
             payer_phone=payer_phone,
-            label=f"Kora - mise en relation {purpose.lower()}",
+            label=(
+                "Kora - questions supplementaires"
+                if purpose == DATING_PLUS
+                else f"Kora - mise en relation {purpose.lower()}"
+            ),
         )
         if reference is None:
             return False

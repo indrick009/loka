@@ -100,7 +100,10 @@ RULES = (
     "to meet. Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
     "to another member. To a profile Kora proposed, 'oui' is AFFIRMATIVE "
-    "and 'non' is NEGATIVE."
+    "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
+    "message is written to another member and Kora relays it: extract nothing, "
+    "and set 'inappropriate' to true only when it is sexual, insulting or asks "
+    "for money."
 )
 
 ENTITIES: dict[str, Any] = {
@@ -149,6 +152,9 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
             facts["description"] = description
         else:
             rejected["description"] = "too short"
+    if entities.get("inappropriate") is True:
+        # Read by a talk: a message to a match is refused, not relayed.
+        rejected["message"] = "inappropriate"
     if common.get("media_kind") == "IMAGE" and common.get("media_key"):
         facts["photo"] = common["media_key"]
     return ExtractedFacts(facts=facts, rejected=rejected)
@@ -158,7 +164,8 @@ DATING = DomainSpec(
     name="dating",
     roles={
         FlowName.DATING_PROFILE: "a member creating a dating profile, then "
-        "answering the profiles Kora proposes"
+        "answering the profiles Kora proposes, then asking questions to a match "
+        "through Kora"
     },
     forms={FlowName.DATING_PROFILE: PROFILE_FORM},
     opening_intents={"DATING_PROFILE": FlowName.DATING_PROFILE},
@@ -166,6 +173,7 @@ DATING = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
+    holding=frozenset({"ask.dating.talk", "ask.dating.plus"}),
     cues={
         "DATING_PROFILE": (
             r"\b(quelqu un de serieux|rencontres?|ame s(oe)?ur|l amour|celibataire|"
