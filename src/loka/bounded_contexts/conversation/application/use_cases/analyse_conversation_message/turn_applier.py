@@ -43,6 +43,21 @@ from loka.bounded_contexts.housing.conversation.turns.turns import (
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 
+# Steps where Kora waits for what comes next rather than for a free text: a
+# question asked there is an aside, answered without redoing the task. Never
+# COLLECT_CHOICE or AWAITING_REVIEW: Dating relays and Found proofs read the
+# raw text there.
+RESTING_STEPS = frozenset(
+    {
+        FlowStep.PUBLISHED,
+        FlowStep.PRESENT_RESULTS,
+        FlowStep.COLLECT_PROPERTY_CHOICE,
+        FlowStep.AWAITING_MATCH,
+        FlowStep.AWAITING_AVAILABILITY,
+        FlowStep.DONE,
+    }
+)
+
 
 class TurnApplier:
     def __init__(
@@ -85,6 +100,26 @@ class TurnApplier:
         reply_text = collapse_repeats(reply_text) if reply_text else reply_text
 
         target = target_flow(session, verdict.intent)
+        if self._is_aside(session, verdict, target, reply_text):
+            # « C'est les seuls ? », « tu as ma commande ? »: the model, which
+            # sees the whole state, answers; the task is not run again. It used
+            # to resend the list and its photos (replays of 3 Nov 2026).
+            aside = TurnOutcome(
+                question=carried_question(session),
+                next_step=None,
+                reply_text=reply_text,
+                platform_text=None,
+            )
+            return await self._answer(
+                session,
+                verdict,
+                cost,
+                aside,
+                next_step=None,
+                text=text,
+                media_burst_of=None,
+                media_marker=None,
+            )
         spec = spec_for(target)
         if spec is not None and spec.name in self._plugs and self._desk is not None:
             outcome = await self._plugged(
@@ -127,6 +162,21 @@ class TurnApplier:
             text=text,
             media_burst_of=media_burst_of,
             media_marker=media_marker,
+        )
+
+    @staticmethod
+    def _is_aside(
+        session: ConversationSession,
+        verdict: Verdict,
+        target: FlowName,
+        reply_text: str | None,
+    ) -> bool:
+        return (
+            verdict.intent == "SUPPORT"
+            and bool(reply_text)
+            and target is session.flow
+            and session.step in RESTING_STEPS
+            and not verdict.facts.as_context()
         )
 
     async def _plugged(

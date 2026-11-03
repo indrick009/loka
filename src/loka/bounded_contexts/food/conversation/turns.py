@@ -35,6 +35,8 @@ HITS_KEY = "_food_offers"
 NEARBY_KM = 15.0
 PER_RESTAURANT = 2
 MAX_OFFERS = 5
+SENT_KEY = "request_sent"
+PHOTO_SPACING_SECONDS = 2
 
 NameOf = Callable[[uuid.UUID], Awaitable[str | None]]
 
@@ -66,9 +68,14 @@ class FoodTurns:
         return say(text, question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
 
     async def _done(
-        self, turn: PlugTurn, desk: PlugDesk, text: str, voiced: bool = True
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        text: str,
+        voiced: bool = True,
+        context: dict[str, Any] | None = None,
     ) -> TurnOutcome:
-        await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})
+        await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context=context)
         return say(text, step=FlowStep.PUBLISHED, voiced=voiced)
 
     async def _restaurateur(
@@ -236,14 +243,26 @@ class FoodTurns:
     async def _show_photos(
         self, found: list[DishOffer], client: uuid.UUID, desk: PlugDesk, turn: PlugTurn
     ) -> None:
-        """One picture per offered dish that has one, numbered like the list."""
+        """One picture per offered dish that has one, numbered like the list.
+
+        Each is held back behind the list: sent at once, the pictures reached
+        the client before the list that numbers them (replay of 3 Nov 2026).
+        """
+        shown = 0
         for index, offer in enumerate(found, start=1):
             if offer.media:
+                shown += 1
                 caption = (
                     f"{index}. {offer.dish_name} — {xaf(offer.price_xaf)} — "
                     f"{offer.restaurant.name}"
                 )
-                await desk.notify(client, caption, now=turn.now, media_object_key=offer.media[0])
+                await desk.notify(
+                    client,
+                    caption,
+                    now=turn.now,
+                    media_object_key=offer.media[0],
+                    delay_seconds=PHOTO_SPACING_SECONDS * shown,
+                )
 
     async def _search(
         self,
@@ -293,7 +312,8 @@ class FoodTurns:
         self, turn: PlugTurn, desk: PlugDesk, client: uuid.UUID, offer: dict[str, Any]
     ) -> TurnOutcome:
         lang = turn.language
-        first_name = await self._name_of(client) or ("Un client" if lang != "en" else "A client")
+        known_name = await self._name_of(client)
+        first_name = known_name or ("Un client" if lang != "en" else "A client")
         await self._store.record_request(
             restaurant_id=uuid.UUID(offer["restaurant_id"]),
             client_user_id=client,
@@ -310,4 +330,12 @@ class FoodTurns:
         # Platform words, never rewritten: the voice once confirmed another dish
         # than the one passed on to the restaurant (replay of 1 Nov 2026).
         sent = texts.request_sent(offer["restaurant"], offer["dish"], lang)
-        return await self._done(turn, desk, sent, voiced=False)
+        # Kept in the session so « tu as ma commande ? » is answered from it.
+        record = {
+            "dish": offer["dish"],
+            "price_xaf": int(offer["price"]),
+            "restaurant": offer["restaurant"],
+            "client_first_name": known_name or "unknown: WhatsApp did not give it",
+            "status": "passed to the restaurant, which calls the client back",
+        }
+        return await self._done(turn, desk, sent, voiced=False, context={SENT_KEY: record})

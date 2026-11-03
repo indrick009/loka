@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from loka.bounded_contexts.auth.domain.value_objects.phone_number import PhoneNumber
@@ -55,10 +55,12 @@ class ConversationDesk:
         now: datetime,
         steer: Steer | None = None,
         media_object_key: str | None = None,
+        delay_seconds: float = 0,
     ) -> bool:
         """Write to another user, on the thread he last used. ``False`` when he has none.
 
         With ``media_object_key`` the stored image goes out, ``text`` as its caption.
+        ``delay_seconds`` holds it back, so a photo follows the list it illustrates.
         """
         session = await self._sessions.latest_by_user(user_id)
         if session is None:
@@ -88,6 +90,13 @@ class ConversationDesk:
                     media_object_key=media_object_key,
                     intent="NOTIFY",
                     language=session.language,
+                    # From the clock, not ``now``: the turn's moment is the
+                    # inbound message's, already seconds old after the model.
+                    not_before=(
+                        max(now, datetime.now(UTC)) + timedelta(seconds=delay_seconds)
+                        if delay_seconds
+                        else None
+                    ),
                 )
             ],
             correlation_id=current_context().get("correlation_id") or "unknown",

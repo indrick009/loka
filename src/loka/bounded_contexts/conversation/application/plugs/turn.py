@@ -71,6 +71,7 @@ class PlugDesk(Protocol):
         now: datetime,
         steer: Steer | None = None,
         media_object_key: str | None = None,
+        delay_seconds: float = 0,
     ) -> bool: ...
 
     async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool: ...
