@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import replace
 
@@ -61,6 +62,18 @@ RESTING_STEPS = frozenset(
         FlowStep.DONE,
     }
 )
+
+# Shorter than this, what the model said before its question is a « Super ! »,
+# not an explanation worth keeping.
+MIN_EXPLANATION_CHARS = 60
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def explanation_in(reply_text: str | None) -> str | None:
+    """What the model explained, without the questions it asked after it."""
+    sentences = _SENTENCE_END.split((reply_text or "").strip())
+    told = " ".join(s for s in sentences if not s.rstrip().endswith("?")).strip()
+    return told if len(told) >= MIN_EXPLANATION_CHARS else None
 
 
 class TurnApplier:
@@ -237,6 +250,12 @@ class TurnApplier:
             # then: observed live, « oui envoie moi sa photo » recorded a yes in
             # Dating, and the model's guess replaced Kora's answer to it.
             return replace(outcome, reply_text=reply_text, platform_text=None)
+        told = explanation_in(reply_text) if fresh else None
+        if told and outcome.platform_text and outcome.media_object_key is None:
+            # « How dating work? »: the model explained, then the domain's first
+            # question replaced it (journal of 5 Nov 2026). The explanation goes
+            # first, the domain's exact question stays last.
+            return replace(outcome, reply_text=f"{told}\n\n{outcome.platform_text}")
         return outcome
 
     async def _answer(

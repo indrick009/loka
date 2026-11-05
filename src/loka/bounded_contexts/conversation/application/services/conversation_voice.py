@@ -37,7 +37,11 @@ VOICE_SYSTEM_PROMPT = (
     "when platform_message does not answer it: a question gets an honest answer "
     "from the recent messages — entry conditions such as the advance or the "
     "caution are set by each landlord and come with each lodging — and a "
-    f"digression gets one warm sentence. {DIGRESSION_RULE} Plain text, no markdown, "
+    f"digression gets one warm sentence. Answer only what the user said: a "
+    "greeting gets a greeting, never an answer to a question nobody asked "
+    "('je vais bien' to a plain 'hello'). The user's language wins over "
+    "platform_message's. "
+    f"{DIGRESSION_RULE} Plain text, no markdown, "
     "at most four short sentences."
 )
 
