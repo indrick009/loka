@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.forms import ask_field, stored
 from loka.bounded_contexts.conversation.application.plugs.forms import say as _say
-from loka.bounded_contexts.conversation.application.plugs.forms import stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
@@ -61,7 +61,7 @@ class FoundTurns:
         await desk.settle(
             turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(turn.known)
         )
-        return say(field.ask(turn.language), question=key, step=FlowStep.COLLECT_FIELD)
+        return ask_field(turn, FOUND, field)
 
     async def _declare(self, turn: PlugTurn, desk: PlugDesk, finder: uuid.UUID) -> TurnOutcome:
         lang = turn.language

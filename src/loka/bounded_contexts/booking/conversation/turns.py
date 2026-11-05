@@ -13,7 +13,12 @@ from loka.bounded_contexts.booking.domain.line import Line
 from loka.bounded_contexts.booking.domain.ports import SeatMaps, TicketPayments
 from loka.bounded_contexts.booking.domain.reservation import CANCELLED, Reservation
 from loka.bounded_contexts.booking.domain.store import BookingStore
-from loka.bounded_contexts.conversation.application.plugs.forms import chosen, say, stored
+from loka.bounded_contexts.conversation.application.plugs.forms import (
+    ask_field,
+    chosen,
+    say,
+    stored,
+)
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
@@ -67,7 +72,7 @@ class BookingTurns:
             await desk.settle(
                 turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(turn.known)
             )
-            return say(field.ask(turn.language), question=key, voiced=False)
+            return ask_field(turn, BOOKING, field)
         known = turn.known
         origin, destination = str(known["origin"]), str(known["destination"])
         day = date.fromisoformat(str(known["travel_date"]))

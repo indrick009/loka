@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.plugs.forms import (
+    ask_field,
     chosen,
     say,
     stored,
@@ -64,8 +65,7 @@ class FoodTurns:
         await desk.settle(
             turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(turn.known)
         )
-        text = f"{prefix}\n{field.ask(turn.language)}".strip()
-        return say(text, question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
+        return ask_field(turn, FOOD, field, prefix=prefix)
 
     async def _done(
         self,

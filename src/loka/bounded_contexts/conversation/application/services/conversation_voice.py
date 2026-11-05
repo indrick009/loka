@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import re
+from difflib import SequenceMatcher
 
 from loka.bounded_contexts.ai.domain.ai_provider import Prompt
 from loka.bounded_contexts.conversation.application.ports import Exchange
@@ -27,7 +28,9 @@ from loka.bounded_contexts.conversation.application.services.prompts import (
 VOICE_SYSTEM_PROMPT = (
     f"{PERSONA} You receive the user's last message, the recent messages of the "
     "thread, and 'platform_message': what the platform has decided to tell the user, "
-    "written as stock copy. Rewrite it as Kora's next WhatsApp message, in your own "
+    "written as stock copy. It is Kora speaking to the user: its questions are "
+    "Kora's questions to the user, never questions to you. Rewrite it as Kora's "
+    "next WhatsApp message, in your own "
     "words and in the user's language and register (French, English or Cameroonian "
     "Pidgin; 'tu' when the user says 'tu' or writes casually) — never copy its "
     "formal sentences. Keep its facts: every number exactly as written, every place "
@@ -40,7 +43,8 @@ VOICE_SYSTEM_PROMPT = (
     f"digression gets one warm sentence. Answer only what the user said: a "
     "greeting gets a greeting, never an answer to a question nobody asked "
     "('je vais bien' to a plain 'hello'). The user's language wins over "
-    "platform_message's. "
+    "platform_message's. A photo, a document or a position the user sent is "
+    "received: thank them for it, never say you cannot see it. "
     f"{DIGRESSION_RULE} Plain text, no markdown, "
     "at most four short sentences."
 )
@@ -75,6 +79,22 @@ def build_voice_prompt(
     )
 
 
+# How close to one of Kora's recent lines a reply may come before it counts as
+# the same sentence sent again.
+PARROT_RATIO = 0.85
+
+
+def parrots(reply: str, thread: list[Exchange], *, lines: int = 3) -> bool:
+    """Whether the reply repeats one of Kora's last lines."""
+    said = [line.text for line in thread if line.speaker == "kora"][-lines:]
+    folded = reply.casefold().strip()
+    return any(
+        SequenceMatcher(None, folded, line.casefold().strip()).ratio() >= PARROT_RATIO
+        for line in said
+    )
+
+
+
 def keeps_the_facts(
     platform_text: str, rewritten: str, *, already_said: tuple[str, ...] = ()
 ) -> bool:
@@ -87,6 +107,10 @@ def keeps_the_facts(
     are left to the prompt: checking them would need every domain's vocabulary.
     """
     if not rewritten.strip() or len(rewritten) > len(platform_text) + _MAX_GROWTH_CHARS:
+        return False
+    # A question asked is a fact too: dropped, the thread stops on a remark
+    # (journal of 5 Nov 2026, after a shared position).
+    if "?" in platform_text and "?" not in rewritten:
         return False
     required = _numbers(platform_text)
     said = _numbers(rewritten)

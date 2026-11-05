@@ -11,13 +11,19 @@ from loka.bounded_contexts.conversation.domain.services.extracted_facts import E
 from loka.bounded_contexts.dating.domain.profile import LOOKING, SEXES
 from loka.shared.domain.knowledge import market
 
+# Said word for word before the photo is sent, whoever writes the question.
 PHOTO_RULE = {
-    "fr": "Envoie maintenant une photo de toi, bien nette, où l'on voit ton visage.\n"
-    "Important : la photo ne doit pas être générée par l'IA. Toute photo avec "
+    "fr": "Important : la photo ne doit pas être générée par l'IA. Toute photo avec "
     "filtre, générée ou modifiée par l'IA entraîne la suppression du compte.",
-    "en": "Now send a clear photo of yourself, showing your face.\n"
-    "Important: the photo must not be AI-generated. Any photo with a filter, "
+    "en": "Important: the photo must not be AI-generated. Any photo with a filter, "
     "generated or modified by AI leads to the account being deleted.",
+}
+# The privacy promise that makes people say everything in their description.
+DESCRIPTION_PROMISE = {
+    "fr": "Ta description n'est lue que par Kora pour te trouver la bonne personne : "
+    "elle ne sera jamais montrée à personne.",
+    "en": "Only Kora reads your description, to find you the right person: it is "
+    "never shown to anyone.",
 }
 
 PROFILE_FORM = (
@@ -62,22 +68,29 @@ PROFILE_FORM = (
             "en": "And which city?",
         },
     ),
-    FormField("photo", "a photo of the member (sent as an image)", PHOTO_RULE),
+    FormField(
+        "photo",
+        "a clear photo of the member's face, sent as an image",
+        {
+            "fr": "Envoie maintenant une photo de toi, bien nette, où l'on voit ton visage.",
+            "en": "Now send a clear photo of yourself, showing your face.",
+        },
+        notice=PHOTO_RULE,
+    ),
     FormField(
         "description",
-        "a description of themselves and of the love they look for",
+        "the most important answer, the one matches are made on: who the member "
+        "is and the love they look for, what they like and expect from the other; "
+        "a few words are not enough, invite them to say more",
         {
             "fr": "Maintenant le plus important : ta description. Présente-toi et dis "
             "clairement quel type d'amour tu recherches, ce que tu aimes, ce que tu "
-            "attends de l'autre. Elle n'est lue que par Kora pour te trouver la bonne "
-            "personne : elle ne sera jamais montrée à personne. Alors dis tout, plus "
-            "tu es précis, meilleur sera le match.",
+            "attends de l'autre. Plus tu es précis, meilleur sera le match.",
             "en": "Now the most important part: your description. Tell me about yourself "
             "and say clearly what kind of love you are looking for, what you like and "
-            "what you expect from the other person. Only Kora reads it, to find you "
-            "the right person: it is never shown to anyone. So say everything, the "
-            "more precise you are, the better the match.",
+            "what you expect from the other person. The more precise, the better the match.",
         },
+        notice=DESCRIPTION_PROMISE,
     ),
     FormField(
         "looking",
@@ -128,6 +141,11 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
         if value and len(value) >= 2:
             facts[name] = value[0].upper() + value[1:]
     city = text_of(entities.get("city"), longest=60)
+    pinned = common.get("place") if "latitude" in entities else None
+    if not city and pinned:
+        # A shared position answers « where do you live » (journal of 5 Nov
+        # 2026: a pin in Obobogo, then « Dans quel pays vis-tu ? » three times).
+        city = str(pinned["city"])
     if city:
         facts["city"] = market.resolve_city(city) or city.title()
         if "country" not in facts and market.resolve_city(city):

@@ -340,6 +340,7 @@ class AnalyseConversationMessageUseCase:
             turn.cost,
             call=turn.call,
             reply_text=turn.reply_text,
+            asking=turn.asking,
             text=text,
         )
 

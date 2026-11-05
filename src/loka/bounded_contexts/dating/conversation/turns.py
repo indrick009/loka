@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 
-from loka.bounded_contexts.conversation.application.plugs.forms import say, stored
+from loka.bounded_contexts.conversation.application.plugs.forms import ask_field, say, stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
@@ -118,8 +118,7 @@ class DatingTurns:
             await desk.settle(
                 turn, step=FlowStep.COLLECT_FIELD, question_key=key, context=stored(known)
             )
-            text = f"{prefix}\n{field.ask(lang)}".strip()
-            return say(text, question=key, step=FlowStep.COLLECT_FIELD, voiced=False)
+            return ask_field(turn, DATING, field, prefix=prefix)
         member = Profile.create(
             user_id=user,
             now=turn.now,

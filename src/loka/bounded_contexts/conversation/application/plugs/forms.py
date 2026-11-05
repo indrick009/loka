@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowStep
 from loka.shared.domain.knowledge.where import place_from
 
 if TYPE_CHECKING:
+    from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec, FormField
     from loka.bounded_contexts.conversation.application.plugs.turn import PlugTurn
     from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
         TurnOutcome,
@@ -77,6 +79,33 @@ def say(
         platform_text=text if voiced else None,
         media_object_key=media,
     )
+
+
+def ask_field(
+    turn: PlugTurn,
+    spec: DomainSpec,
+    field: FormField,
+    *,
+    prefix: str = "",
+    step: FlowStep = FlowStep.COLLECT_FIELD,
+) -> TurnOutcome:
+    """Ask for one form field: a goal, not a sentence.
+
+    The model's reply takes the place of ``field.ask`` when it asks the same
+    field (see ``TurnApplier``); the copy is only the fallback. The notice is
+    said once: asked again, the field gets the short question alone, never the
+    same paragraph twice (journal of 5 Nov 2026, « Je veux une belle »).
+    """
+    lang, key = turn.language, spec.question_key(field.name)
+    # From the turn, not the session: ``desk.settle`` has already recorded the
+    # new question there.
+    again = not turn.fresh and turn.open_field == field.name
+    notice = None if again else field.warn(lang)
+    text = "\n".join(part for part in (prefix, field.ask(lang), notice) if part)
+    # Exact when it carries a prefix or a notice: a rewrite dropped « le plus
+    # important » once. Otherwise said in the user's voice.
+    outcome = say(text, question=key, step=step, voiced=not (prefix or notice))
+    return replace(outcome, asks=None if prefix else field.name, notice=notice)
 
 
 def xaf(amount: int) -> str:

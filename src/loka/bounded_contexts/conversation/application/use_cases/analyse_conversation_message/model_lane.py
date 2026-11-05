@@ -13,6 +13,7 @@ from loka.bounded_contexts.conversation.application.plugs.registry import (
     spec_for,
 )
 from loka.bounded_contexts.conversation.application.ports import Exchange, IntentModel, TurnSummary
+from loka.bounded_contexts.conversation.application.services.conversation_voice import parrots
 from loka.bounded_contexts.conversation.application.services.prompts import build_analysis_prompt
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     target_flow,
@@ -58,6 +59,8 @@ class ModelTurn:
     cost: TurnCost
     call: CallUsage
     reply_text: str | None
+    # The form field the model's reply asks for, as it named it.
+    asking: str | None = None
 
 
 class ModelLane:
@@ -160,6 +163,10 @@ class ModelLane:
         # not ask what was decided pays for a second call, written before the
         # write transaction opens.
         reply_text: str | None = result.reply
+        if reply_text and parrots(reply_text, thread):
+            # Observed with « Taximan tu es trop crue »: the model sent back
+            # Kora's previous sentence word for word, then asked again.
+            reply_text = None
         plugged = spec_for(target_flow(session, verdict.intent)) is not None
         if not plugged and not inline_reply_fits(
             prompt_flow, session=session, verdict=verdict, asking=result.asking
@@ -185,4 +192,5 @@ class ModelLane:
             ),
             call=call,
             reply_text=reply_text,
+            asking=result.asking,
         )

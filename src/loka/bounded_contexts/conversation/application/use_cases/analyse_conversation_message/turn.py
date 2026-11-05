@@ -100,3 +100,7 @@ class TurnOutcome:
     platform_text: str | None
     # An image sent with the reply, the text as its caption: a bus plan.
     media_object_key: str | None = None
+    # The form field this answer only asks for: the model's own sentence may
+    # take its place when it asks the same, ``notice`` then added after it.
+    asks: str | None = None
+    notice: str | None = None

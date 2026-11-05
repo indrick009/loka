@@ -103,7 +103,12 @@ def build_analysis_prompt(
         # No task yet, no form: shown the landlord's fields, a "bonjour"
         # was answered "quel type de propriété tu veux proposer ?".
         "required_fields": (
-            [{"field": item.name, "ask": item.topic} for item in spec.missing(flow, public_known)]
+            [
+                {"field": item.name, "ask": item.topic}
+                # What Kora says itself after the reply: not to be said twice.
+                | ({"kora_adds": item.warn(default_language)} if item.notice else {})
+                for item in spec.missing(flow, public_known)
+            ]
             if spec
             else [] if flow is FlowName.SUPPORT else _missing_fields(flow, public_known)
         ),

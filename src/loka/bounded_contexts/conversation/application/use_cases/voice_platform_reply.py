@@ -25,6 +25,7 @@ from loka.bounded_contexts.conversation.application.services.conversation_voice 
     build_voice_prompt,
     keeps_the_facts,
     numbers_in,
+    parrots,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
@@ -85,7 +86,7 @@ class VoicePlatformReplyUseCase:
             rewritten = await self._write(
                 prompt, session_id=session_id, user_id=user_id, now=now
             )
-        if rewritten is None or not keeps_the_facts(
+        if rewritten is None or parrots(rewritten, exchanges) or not keeps_the_facts(
             platform_text, rewritten, already_said=already_said
         ):
             self._logger.warning(

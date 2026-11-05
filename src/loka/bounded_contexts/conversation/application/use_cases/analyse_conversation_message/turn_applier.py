@@ -102,6 +102,7 @@ class TurnApplier:
         *,
         call: CallUsage | None = None,
         reply_text: str | None = None,
+        asking: str | None = None,
         text: str | None = None,
         media_burst_of: uuid.UUID | None = None,
         media_marker: str | None = None,
@@ -122,7 +123,7 @@ class TurnApplier:
             "reading", session.phone.e164, intent=verdict.intent, accepted=verdict.accepted,
             reason=verdict.reason, flow=session.flow.value, step=session.step.value,
             facts=verdict.facts.as_context(), aside=is_aside or None,
-            model_reply=reply_text, known=public_known_facts(session.context),
+            model_reply=reply_text, asking=asking, known=public_known_facts(session.context),
         )
         if is_aside:
             # « C'est les seuls ? », « tu as ma commande ? »: the model, which
@@ -147,7 +148,7 @@ class TurnApplier:
         spec = spec_for(target)
         if spec is not None and spec.name in self._plugs and self._desk is not None:
             outcome = await self._plugged(
-                session, verdict, cost, target, text=text, reply_text=reply_text
+                session, verdict, cost, target, text=text, reply_text=reply_text, asking=asking
             )
             return await self._answer(
                 session,
@@ -212,6 +213,7 @@ class TurnApplier:
         *,
         text: str | None,
         reply_text: str | None,
+        asking: str | None,
     ) -> TurnOutcome:
         """Hand the turn to the domain that owns its flow."""
         spec = spec_for(flow)
@@ -250,6 +252,14 @@ class TurnApplier:
             # then: observed live, « oui envoie moi sa photo » recorded a yes in
             # Dating, and the model's guess replaced Kora's answer to it.
             return replace(outcome, reply_text=reply_text, platform_text=None)
+        if outcome.asks and reply_text and asking == outcome.asks and asking not in facts:
+            # The domain decides what is asked, the model how: its sentence,
+            # which reacts to what the user said, asks the very field decided.
+            # The stock question used to replace it on every turn (journal of
+            # 5 Nov 2026: « D'accord Indrick, c'est noté. Quel est ton âge ? »
+            # went out as « Quel âge as-tu ? »).
+            said = f"{reply_text}\n\n{outcome.notice}" if outcome.notice else reply_text
+            return replace(outcome, reply_text=said, platform_text=None)
         told = explanation_in(reply_text) if fresh else None
         if told and outcome.platform_text and outcome.media_object_key is None:
             # « How dating work? »: the model explained, then the domain's first

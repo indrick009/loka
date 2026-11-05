@@ -18,14 +18,26 @@ from loka.bounded_contexts.conversation.domain.services.extracted_facts import E
 
 @dataclass(frozen=True, slots=True)
 class FormField:
-    """One field a flow collects: what the model is told, and what the user reads."""
+    """One field a flow collects.
+
+    ``topic`` is the goal the model asks for in its own words; ``question`` is
+    only the fallback when no model wrote the reply. ``notice`` is what must be
+    said word for word the first time it is asked (the photo rule), added after
+    whichever sentence asks.
+    """
 
     name: str
     topic: str
     question: Mapping[str, str]
+    notice: Mapping[str, str] | None = None
 
     def ask(self, language: str) -> str:
         return self.question.get(language) or self.question["fr"]
+
+    def warn(self, language: str) -> str | None:
+        if not self.notice:
+            return None
+        return self.notice.get(language) or self.notice["fr"]
 
 
 @dataclass(frozen=True, slots=True)
