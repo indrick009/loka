@@ -50,6 +50,7 @@ from loka.shared.infrastructure.broker.consumer import (
 from loka.shared.infrastructure.broker.topology import Broker, QueueSpec
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
+from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import whatsapp_failures_total
@@ -221,6 +222,11 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         await self._send(to=recipient, text=text, image_url=image_url)
         await self._record_sent(
             event_id=body.get("event_id"), session_id=session_id, recipient=recipient, text=text
+        )
+        journal(
+            "out", recipient, text=text, media=metadata.get("media_object_key"),
+            intent=metadata.get("intent"), reply_kind=reply_kind,
+            question_key=metadata.get("question_key"),
         )
         _logger.info(
             "outbound_message_sent",

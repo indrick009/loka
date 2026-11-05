@@ -15,6 +15,9 @@ from loka.bounded_contexts.conversation.application.plugs.turn import (
     PlugTurn,
 )
 from loka.bounded_contexts.conversation.application.services.prompts import collapse_repeats
+from loka.bounded_contexts.conversation.application.services.prompts.state import (
+    public_known_facts,
+)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.flow_rules import (  # noqa: E501
     carried_question,
     opens_new_flow,
@@ -42,6 +45,7 @@ from loka.bounded_contexts.housing.conversation.turns.turns import (
     HousingTurns,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.infrastructure.conversation_log import journal
 
 # Steps where Kora waits for what comes next rather than for a free text: a
 # question asked there is an aside, answered without redoing the task. Never
@@ -100,7 +104,14 @@ class TurnApplier:
         reply_text = collapse_repeats(reply_text) if reply_text else reply_text
 
         target = target_flow(session, verdict.intent)
-        if self._is_aside(session, verdict, target, reply_text):
+        is_aside = self._is_aside(session, verdict, target, reply_text)
+        journal(
+            "reading", session.phone.e164, intent=verdict.intent, accepted=verdict.accepted,
+            reason=verdict.reason, flow=session.flow.value, step=session.step.value,
+            facts=verdict.facts.as_context(), aside=is_aside or None,
+            model_reply=reply_text, known=public_known_facts(session.context),
+        )
+        if is_aside:
             # « C'est les seuls ? », « tu as ma commande ? »: the model, which
             # sees the whole state, answers; the task is not run again. It used
             # to resend the list and its photos (replays of 3 Nov 2026).

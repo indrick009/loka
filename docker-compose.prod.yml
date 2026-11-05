@@ -25,6 +25,10 @@ x-app: &app
   env_file: [.env]
   environment: *network-env
   restart: unless-stopped
+  # The conversation journal (CONVERSATION_LOG_PATH), kept on the host so a
+  # rebuild or _empty_all_data never loses it.
+  volumes:
+    - ./logs:/app/logs
   depends_on:
     postgres:
       condition: service_healthy

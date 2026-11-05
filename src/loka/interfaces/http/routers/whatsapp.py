@@ -37,6 +37,7 @@ from loka.shared.domain.errors import (
     ValidationFailed,
 )
 from loka.shared.infrastructure.broker.topology import EVENTS_EXCHANGE
+from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.object_storage.media import (
     CHAT_MEDIA_PREFIX,
     MediaStoreError,
@@ -156,6 +157,11 @@ async def receive_gateway_event(
             context={"message_kind": body.message_kind},
         )
 
+    journal(
+        "in", body.sender_phone, kind=body.message_kind, text=body.text,
+        media=body.media_object_key,
+        location=body.location.model_dump() if body.location else None,
+    )
     if is_demo_reset(container, body.text):  # DEMO ONLY, see demo_reset.py
         await reset_everything(container, body.sender_phone)
         return {"accepted": True, "external_message_id": body.external_message_id}
