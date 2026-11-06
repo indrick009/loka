@@ -148,14 +148,25 @@ _NO_RESULTS_TEXT: dict[str, str] = {
 # already explains a silence. First person, like the rest of the thread. And
 # "qui correspond à ce que vous cherchez" rather than "adapté", because
 # whether a lodging suits him is his judgement, not Kora's.
+#
+# Said while the catalogue is searched: the lodgings found, or the promise
+# below, follow it seconds later. It used to be the promise itself, followed at
+# once by « bonne nouvelle : j'ai trouvé 2 logements » (journal of 5 Nov 2026).
 _DEMAND_RECORDED_TEXT: dict[str, str] = {
+    "fr": "C'est noté, je regarde les logements qui correspondent à votre recherche.",
+    "en": "Noted, I am looking at the properties that match your search.",
+}
+
+# Sent by the matching once it found nothing for a search just recorded.
+_NOTHING_YET_TEXT: dict[str, str] = {
     "fr": (
-        "Votre demande est enregistrée. Si un logement correspond à ce que "
-        "vous cherchez, je reviens vers vous avec les informations."
+        "Pour le moment, aucun logement ne correspond à votre recherche. Votre "
+        "demande est enregistrée : si un logement correspond, je reviens vers "
+        "vous avec les informations."
     ),
     "en": (
-        "Your request is recorded. If a property matches what you are looking "
-        "for, I will come back to you with the details."
+        "For now, no property matches your search. Your request is recorded: if "
+        "a property matches, I will come back to you with the details."
     ),
 }
 
@@ -449,6 +460,11 @@ def availability_pending_text(language: str) -> str:
 def choice_out_of_range_text(language: str) -> str:
     """His number names nothing. Re-asked rather than resolved to the nearest."""
     return _copy(_CHOICE_OUT_OF_RANGE_TEXT, language)
+
+
+def nothing_yet_text(language: str) -> str:
+    """The search found nothing yet: the demand waits, and Kora will write."""
+    return _copy(_NOTHING_YET_TEXT, language)
 
 
 def demand_recorded_text(language: str) -> str:

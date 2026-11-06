@@ -53,6 +53,12 @@ from loka.shared.infrastructure.metrics import ai_bypass_total
 _logger = get_logger(__name__)
 
 
+# A message shorter than this does not change the thread's language: after
+# « i don't heart french », « cameroun/yaounde » switched Kora back to French
+# (journal of 5 Nov 2026).
+MIN_WORDS_TO_SWITCH = 3
+
+
 @dataclass(frozen=True, slots=True)
 class ModelTurn:
     verdict: Verdict
@@ -142,7 +148,9 @@ class ModelLane:
         # The model read the message, so it is the one that knows which language
         # the user is writing in. Adopting its answer keeps a bare "150000" in
         # tomorrow's fallback in the right language instead of snapping to French.
-        if result.language in SUPPORTED_LANGUAGES:
+        if result.language in SUPPORTED_LANGUAGES and (
+            result.language == session.language or len(text.split()) >= MIN_WORDS_TO_SWITCH
+        ):
             session.language = result.language
         entities = dict(result.entities)
         # The locale shorthand ("50 mil") is a rule, not a guess: when the

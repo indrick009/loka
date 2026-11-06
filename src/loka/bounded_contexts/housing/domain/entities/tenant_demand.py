@@ -196,6 +196,7 @@ class TenantDemand(AggregateRoot):
             occurred_at=now,
             payload={
                 "demand_id": str(self.id),
+                "tenant_id": str(self.tenant_id),
                 "city": city,
                 "property_type": property_type,
             },

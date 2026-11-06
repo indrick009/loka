@@ -21,12 +21,14 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
 from loka.bounded_contexts.housing.application.use_cases.match_tenant_demands import (
     MatchTenantDemandsUseCase,
 )
+from loka.bounded_contexts.housing.conversation.texts.conversation_copy import nothing_yet_text
 from loka.bounded_contexts.housing.conversation.use_cases.ask_still_searching import (
     AskStillSearchingUseCase,
 )
@@ -68,11 +70,26 @@ class DemandMatchingConsumer(ConsumerBase):
         async with unit_of_work(self._database) as uow:
             matcher = MatchTenantDemandsUseCase(uow)
             if event_type in _DEMAND_EVENTS:
-                await matcher.for_demand(uuid_field(payload, "demand_id"), now=now)
+                found = await matcher.for_demand(uuid_field(payload, "demand_id"), now=now)
+                tenant = _metadata(payload).get("tenant_id")
+                if not found and isinstance(tenant, str):
+                    await self._nothing_yet(uow, uuid.UUID(tenant), now=now)
             elif event_type == "PropertyPublished":
                 await matcher.for_listing(uuid_field(payload, "property_id"), now=now)
             else:
                 raise PermanentHandlerError(f"no matching for event {event_type!r}")
+
+
+    @staticmethod
+    async def _nothing_yet(uow: Any, tenant_id: uuid.UUID, *, now: datetime) -> None:
+        """Tell him the search came back empty: the thread said « je regarde »."""
+        sessions = uow.repository(CONVERSATION_SESSION_REPOSITORY)
+        session = await sessions.latest_by_user(tenant_id)
+        if session is None:
+            return
+        desk = ConversationDesk(uow, sessions)
+        await desk.notify(tenant_id, nothing_yet_text(session.language), now=now)
+        await uow.commit()
 
 
 class DemandProposalConsumer(ConsumerBase):

@@ -63,6 +63,9 @@ RESTING_STEPS = frozenset(
     }
 )
 
+# Where the user said he is before any task, read by the task that follows.
+SHARED_PLACE = "place"
+
 # Shorter than this, what the model said before its question is a « Super ! »,
 # not an explanation worth keeping.
 MIN_EXPLANATION_CHARS = 60
@@ -145,6 +148,31 @@ class TurnApplier:
                 media_burst_of=None,
                 media_marker=None,
             )
+        shared = verdict.facts.as_context().get("location")
+        if (
+            session.flow is FlowName.SUPPORT
+            and verdict.intent == "COLLECT_LOCATION"
+            and isinstance(shared, dict)
+            and shared.get("city")
+        ):
+            # A position before any task says where the user is, not that he
+            # wants a lodging: kept for the task that follows, and he is asked
+            # what he needs (journal of 5 Nov 2026: a pin got « publier ou
+            # chercher ? », then the food search asked for it again).
+            observed = session.revision
+            session.merge_context({SHARED_PLACE: shared}, now=cost.now)
+            await self._writer.save(session, observed=observed)
+            ask = TurnOutcome(question=None, next_step=None, reply_text=None, platform_text=None)
+            return await self._answer(
+                session,
+                replace(verdict, intent="SUPPORT"),
+                cost,
+                ask,
+                next_step=None,
+                text=text,
+                media_burst_of=None,
+                media_marker=media_marker,
+            )
         spec = spec_for(target)
         if spec is not None and spec.name in self._plugs and self._desk is not None:
             outcome = await self._plugged(
@@ -224,6 +252,9 @@ class TurnApplier:
             if fresh
             else {name: value for name, value in session.context.items() if name != "next_question"}
         )
+        where = session.context.get(SHARED_PLACE)
+        if fresh and isinstance(where, dict) and any(f.name == "place" for f in spec.form(flow)):
+            base = {"place": where}
         facts = verdict.facts.as_context() if verdict.accepted else {}
         asked = carried_question(session)
         turn = PlugTurn(

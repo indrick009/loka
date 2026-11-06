@@ -8,7 +8,8 @@ still without one — so photos sent in the menu's order land where expected.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import re
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from loka.bounded_contexts.food.conversation import texts
@@ -19,6 +20,11 @@ from loka.bounded_contexts.food.domain.store import FoodStore
 from loka.shared.domain.errors import DomainError
 
 THOUSANDS_BELOW = 100  # "ndolè 2" on a board is 2 000 FCFA
+# A caption naming a dish and its price: « Eru and fufu 1500 », « soya : 1 000 f ».
+_PRICED_CAPTION = re.compile(
+    r"^\s*(?P<name>[^\d]{2,60}?)\s*[:\-\u2013=]?\s*(?P<price>\d[\d\s.]{0,8})\s*(?:f|fcfa|frs?|xaf)?\s*$",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +63,12 @@ class DishPhotos:
             if dishes:
                 return PhotoOutcome(publish=dishes, unpriced=unpriced)
             return PhotoOutcome(texts.menu_without_prices(unpriced, language), ask_dishes=True)
+        priced = _priced_dish(caption, media_key)
+        if priced is not None:
+            # The plate and its price in one message: it is a dish of the menu,
+            # with its photo (journal of 5 Nov 2026: « Eru and fufu 1500 » was
+            # answered « j'ai bien ta photo, mais pas de menu du jour »).
+            return PhotoOutcome(publish=[priced])
         menu = await self._store.menu_of(restaurant.restaurant_id, menu_day(now))
         if menu is None:
             return PhotoOutcome(texts.photo_before_menu(language), ask_dishes=True)
@@ -67,6 +79,19 @@ class DishPhotos:
         await self._store.save_menu(menu)
         waiting = [item.name for item in menu.dishes if item.available and not item.media]
         return PhotoOutcome(texts.photo_added(dish.name, waiting, language))
+
+
+def _priced_dish(caption: str | None, media_key: str) -> MenuDish | None:
+    match = _PRICED_CAPTION.match(caption or "")
+    if match is None:
+        return None
+    amount = int(re.sub(r"[\s.]", "", match.group("price")))
+    amount = amount * 1000 if 0 < amount < THOUSANDS_BELOW else amount
+    try:
+        dish = MenuDish.of(match.group("name").strip(" .,;"), amount)
+    except DomainError:
+        return None
+    return replace(dish, media=(media_key,))
 
 
 def _dishes(lines: list[tuple[str, int | None]]) -> tuple[list[MenuDish], list[str]]:
