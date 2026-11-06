@@ -36,6 +36,9 @@ dev = [
     "ruff>=0.7",
     "mypy>=1.13",
 ]
+agent = [
+    "pydantic-ai-slim[openai]>=2.66",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
