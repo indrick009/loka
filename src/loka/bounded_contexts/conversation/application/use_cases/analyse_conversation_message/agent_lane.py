@@ -67,7 +67,7 @@ _logger = get_logger(__name__)
 class AgentLane:
     def __init__(
         self,
-        agent: ConversationAgent,
+        agent: ConversationAgent | None,
         *,
         uow: UnitOfWork,
         writer: SessionWriter,
@@ -99,7 +99,7 @@ class AgentLane:
         now: datetime,
     ) -> AnalysisReport | None:
         """The agent's turn, or ``None`` to hand the message to the pipeline."""
-        if not text.strip():
+        if self._agent is None or not text.strip():
             return None
         decision = await self._ledger.budget(session, now=now)
         if not decision.allowed:
@@ -128,11 +128,11 @@ class AgentLane:
         )
         if reply.act in HANDED_BACK or not reply.reply.strip():
             return None
-        return await self._apply(
+        return await self.apply(
             session, reply, fresh=fresh, text=text, message_id=message_id, now=now
         )
 
-    async def _apply(
+    async def apply(
         self,
         session: ConversationSession,
         reply: AgentAnswer,
@@ -142,6 +142,7 @@ class AgentLane:
         message_id: uuid.UUID,
         now: datetime,
     ) -> AnalysisReport:
+        """The tenant's answers kept, the next question asked or the search recorded."""
         observed = session.revision
         if fresh:
             session.start_flow(FlowName.PROPERTY_SEARCH, now=now, first_step=FlowStep.START)

@@ -193,6 +193,8 @@ def analyse_conversation_message_use_case(
         agent=conversation_agent(settings),
         # The forms of Food, Dating, Found and Booking, filled by the same agent.
         form_filler=form_filler(settings),
+        # One agent for the whole thread, Food and the tenant search as tools.
+        kora=kora_agent(settings),
     )
 
 
@@ -205,6 +207,15 @@ def conversation_agent(settings: Settings) -> Any | None:
     )
 
     return PydanticTenantSearchAgent(settings.ai)
+
+
+def kora_agent(settings: Settings) -> Any | None:
+    """The single Kora agent behind ``AI__KORA_AGENT_ENABLED``."""
+    if not (settings.ai.kora_agent_enabled and settings.ai.pipeline_enabled):
+        return None
+    from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import PydanticKora
+
+    return PydanticKora(settings.ai)
 
 
 def form_filler(settings: Settings) -> Any | None:

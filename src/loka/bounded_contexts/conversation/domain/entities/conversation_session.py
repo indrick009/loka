@@ -18,6 +18,13 @@ from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
 
 SESSION_IDLE_TIMEOUT = timedelta(minutes=30)
+# What the user said in earlier tasks, kept in the context when a new task
+# starts: the food search's place for the lodging asked next, the order passed
+# an hour ago (journal of 7 Nov 2026: « toujours dans la même adresse » after a
+# food search, and the place had been wiped with the task).
+MEMORY_KEY = "_memory"
+MEMORY_TASKS = 4
+_NOT_FACTS = frozenset({"next_question", "abort_reason", MEMORY_KEY})
 
 
 class FlowName(StrEnum):
@@ -137,10 +144,12 @@ class ConversationSession(AggregateRoot):
     def start_flow(self, flow: FlowName, *, now: datetime, first_step: FlowStep) -> None:
         if self.is_idle(now) and self.status is SessionStatus.ACTIVE:
             self.status = SessionStatus.IDLE
+        # Folded before the task changes: the memory names the task that ends.
+        remembered = self._remembered()
         self.flow = flow
         self.step = first_step
         self.status = SessionStatus.ACTIVE
-        self.context = {}
+        self.context = remembered
         # A new task: the lodging the last one saved is not this one's.
         self.assigned_property_id = None
         self._touch(now)
@@ -226,12 +235,45 @@ class ConversationSession(AggregateRoot):
         )
 
     def restart(self, *, now: datetime) -> None:
+        remembered = self._remembered()
         self.flow = FlowName.SUPPORT
         self.step = FlowStep.START
         self.status = SessionStatus.ACTIVE
-        self.context = {}
+        self.context = remembered
         self.assigned_property_id = None
         self._touch(now)
+
+    @property
+    def memory(self) -> dict[str, object]:
+        """The earlier tasks of this user, and the last place he gave."""
+        kept = self.context.get(MEMORY_KEY)
+        return dict(kept) if isinstance(kept, dict) else {}
+
+    def _remembered(self) -> dict[str, object]:
+        """The context a new task starts with: only the memory, the task folded in."""
+        memory = self.memory
+        facts = {
+            name: value
+            for name, value in self.context.items()
+            if name not in _NOT_FACTS and not str(name).startswith("_")
+        }
+        for name in ("place", "location"):
+            place = facts.get(name)
+            if isinstance(place, dict) and place.get("city"):
+                memory["place"] = place
+        if facts and self.flow is not FlowName.SUPPORT:
+            earlier = memory.get("tasks")
+            tasks = list(earlier)[-(MEMORY_TASKS - 1) :] if isinstance(earlier, list) else []
+            tasks.append(
+                {
+                    "task": self.flow.value,
+                    "ended_at_step": self.step.value,
+                    "at": self.updated_at.isoformat(timespec="minutes"),
+                    "facts": facts,
+                }
+            )
+            memory["tasks"] = tasks
+        return {MEMORY_KEY: memory} if memory else {}
 
     def record_pending_question(self, asked: str | None) -> None:
         """Remember the question this turn actually asked, or that none was.

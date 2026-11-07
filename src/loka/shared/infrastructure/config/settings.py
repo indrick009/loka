@@ -101,6 +101,9 @@ class AISettings(BaseModel):
     # The tenant search led by the Pydantic AI agent (docs/pydantic-ai-prototype.md).
     # Off: the classifier and the form lead it, as before.
     agent_enabled: bool = False
+    # One agent for the whole thread, the services as its tools (Food and the
+    # tenant search for now); off: the lanes above, one per task.
+    kora_agent_enabled: bool = False
 
     def pricing_for(self, model: str) -> ModelPricing | None:
         return self.model_pricing_usd_per_million.get(model)

@@ -1,4 +1,4 @@
-"""The agent ports, answered by Pydantic AI: the tenant search and the domain forms."""
+"""The agent ports, answered by Pydantic AI: Kora, the tenant search and the domain forms."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from pydantic_ai.messages import (
 )
 
 from loka.bounded_contexts.ai.infrastructure.agent.form_agent import FormAgent
+from loka.bounded_contexts.ai.infrastructure.agent.kora_agent import KoraAgentModel
 from loka.bounded_contexts.ai.infrastructure.agent.models import openrouter_model
 from loka.bounded_contexts.ai.infrastructure.agent.tenant_search import TenantSearchAgent
 from loka.bounded_contexts.conversation.application.plugs.registry import spec_for
@@ -23,6 +24,8 @@ from loka.bounded_contexts.conversation.application.ports import (
     AgentAnswer,
     Exchange,
     FormAnswer,
+    KoraAnswer,
+    KoraState,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.shared.infrastructure.config.settings import AISettings
@@ -130,6 +133,29 @@ class PydanticFormFiller:
             reply=turn.reply,
             asking=turn.asking,
             language=turn.language,
+            entities=turn.entities,
+            model=self._model,
+            input_tokens=turn.input_tokens,
+            output_tokens=turn.output_tokens,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            cost_usd=cost_of(self._settings, self._model, turn.input_tokens, turn.output_tokens),
+        )
+
+
+class PydanticKora:
+    def __init__(self, settings: AISettings) -> None:
+        self._settings = settings
+        self._model = settings.default_model
+        self._agent = KoraAgentModel(openrouter_model(settings, self._model))
+
+    async def answer(self, text: str, *, state: KoraState, thread: list[Exchange]) -> KoraAnswer:
+        started = time.monotonic()
+        turn = await self._agent.reply(text, state=state, history=as_history(thread))
+        return KoraAnswer(
+            act=turn.act,
+            reply=turn.reply,
+            language=turn.language,
+            action=turn.action,
             entities=turn.entities,
             model=self._model,
             input_tokens=turn.input_tokens,

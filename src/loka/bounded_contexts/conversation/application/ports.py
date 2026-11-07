@@ -567,3 +567,50 @@ class FormFiller(Protocol):
         thread: list[Exchange],
         language: str,
     ) -> FormAnswer: ...
+
+
+@dataclass(frozen=True, slots=True)
+class KoraState:
+    """Everything the single Kora agent knows before it reads a message.
+
+    The task under way (``flow``, ``step``, its ``facts``, the question left
+    open, the numbered ``offers`` last sent) and ``memory``: the earlier tasks
+    of this user and the last place he gave, kept across services.
+    """
+
+    flow: str
+    step: str
+    language: str
+    facts: dict[str, Any]
+    open_question: str | None
+    offers: list[dict[str, Any]]
+    memory: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class KoraAnswer:
+    """One message answered by the Kora agent.
+
+    ``action`` is what its tools decided — ``food_search``, ``food_order`` or
+    ``lodging`` — with the ``entities`` they validated; none: ``reply`` answers
+    alone. ``act`` ``other_service``: another part of Kora takes the message.
+    """
+
+    act: str
+    reply: str
+    language: str
+    action: str | None
+    entities: dict[str, Any]
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    cost_usd: Decimal
+
+
+class KoraAgent(Protocol):
+    """One model for the whole thread, each service's rules as its tools."""
+
+    async def answer(
+        self, text: str, *, state: KoraState, thread: list[Exchange]
+    ) -> KoraAnswer: ...

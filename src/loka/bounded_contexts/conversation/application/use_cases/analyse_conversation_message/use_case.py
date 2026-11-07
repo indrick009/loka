@@ -42,6 +42,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     Exchange,
     FormFiller,
     IntentModel,
+    KoraAgent,
     PropertyListing,
     PropertySearchGateway,
     ResponseModel,
@@ -54,6 +55,10 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.form_lane import (  # noqa: E501
     FormLane,
+)
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.kora_lane import (  # noqa: E501
+    THREAD_LINES,
+    KoraLane,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
@@ -115,6 +120,8 @@ from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.metrics import ai_bypass_total
 
 _logger = get_logger(__name__)
+# The thread lines the task lanes and the reading model are shown.
+LANE_LINES = 6
 
 
 class AnalyseConversationMessageUseCase:
@@ -144,6 +151,7 @@ class AnalyseConversationMessageUseCase:
         plugs: Mapping[str, DomainTurns] | None = None,
         agent: ConversationAgent | None = None,
         form_filler: FormFiller | None = None,
+        kora: KoraAgent | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -174,11 +182,15 @@ class AnalyseConversationMessageUseCase:
             plugs=dict(plugs or {}),
             desk=ConversationDesk(uow, sessions),
         )
-        self._agent = (
-            AgentLane(
-                agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing
+        tenant = AgentLane(
+            agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing
+        )
+        self._agent = tenant if agent is not None else None
+        self._kora = (
+            KoraLane(
+                kora, judge=self._judge, applier=self._applier, ledger=self._ledger, search=tenant
             )
-            if agent is not None
+            if kora is not None
             else None
         )
         self._forms = (
@@ -221,7 +233,11 @@ class AnalyseConversationMessageUseCase:
         history = await self._turns.recent(session.id, limit=5)
         # The words, not only the labels: what the user and Kora actually said.
         thread = (
-            await self._exchanges.recent(session.id, excluding=command.message_id)
+            await self._exchanges.recent(
+                session.id,
+                excluding=command.message_id,
+                limit=THREAD_LINES if self._kora is not None else LANE_LINES,
+            )
             if self._exchanges is not None
             else []
         )
@@ -310,13 +326,24 @@ class AnalyseConversationMessageUseCase:
             )
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
-        if self._agent is not None and self._agent.leads(session, text):
+        led_by_kora = self._kora is not None and self._kora.leads(session, text)
+        if led_by_kora and self._kora is not None:
+            led = await self._kora.answer(
+                session, text=text, thread=thread, message_id=message_id, now=moment
+            )
+            if led is not None:
+                return led
+            # Another service, or the agent failed: the reading model answers,
+            # not the per-task agents Kora stands for.
+        # The task lanes read the last lines only, as before.
+        thread = thread[-LANE_LINES:]
+        if not led_by_kora and self._agent is not None and self._agent.leads(session, text):
             led = await self._agent.answer(
                 session, text=text, thread=thread, message_id=message_id, now=moment
             )
             if led is not None:
                 return led
-        if self._forms is not None and self._forms.leads(session):
+        if not led_by_kora and self._forms is not None and self._forms.leads(session):
             led = await self._forms.answer(
                 session,
                 text=text,

@@ -299,38 +299,14 @@ class TenantSearchAgent:
                 max_rent_xaf: the highest monthly rent he accepts, in FCFA.
                 advance_months: how many months of rent he can pay up front.
             """
-            entities: dict[str, Any] = {}
-            if property_type:
-                entities["property_type"] = property_type
-            if neighbourhoods:
-                entities["neighbourhood"] = neighbourhoods[0]
-                entities["neighbourhoods"] = list(neighbourhoods)
-            if city:
-                entities["city"] = city
-            if max_rent_xaf is not None:
-                entities["price"] = max_rent_xaf
-            if advance_months is not None:
-                entities["advance_months"] = advance_months
-
-            checked = ctx.deps.extractor.validate(entities)
-            rejected = dict(checked.rejected)
-            if "location" in rejected and neighbourhoods and not city:
-                # "Zzzville" alone: a hint the code cannot place. Never stored
-                # as a city — ask the city instead.
-                rejected["location"] = (
-                    f"unknown neighbourhood {neighbourhoods[0]!r}: ask which city"
-                )
-            accepted = {
-                name: value for name, value in checked.facts.items() if name in SEARCH_FIELDS
-            }
-            rent = accepted.get("rent")
-            if isinstance(rent, int) and rent < market.DEFAULT_PLAUSIBILITY_WINDOW.min_xaf:
-                # "50" is not fifty francs. Asked back rather than multiplied:
-                # a guessed thousand is a budget nobody stated.
-                del accepted["rent"]
-                rejected["rent"] = (
-                    f"{rent} FCFA is not a monthly rent: ask whether he means {rent * 1000} FCFA"
-                )
+            accepted, rejected = check_lodging(
+                ctx.deps.extractor,
+                property_type=property_type,
+                neighbourhoods=neighbourhoods,
+                city=city,
+                max_rent_xaf=max_rent_xaf,
+                advance_months=advance_months,
+            )
             ctx.deps.facts.update(accepted)
             missing = missing_fields(ctx.deps.facts)
             return {
@@ -394,6 +370,59 @@ class TenantSearchAgent:
                     "stated. Remove these amounts; never write a price yourself."
                 )
             return output
+
+
+def check_lodging(
+    extractor: FactExtractor,
+    *,
+    property_type: str | None = None,
+    neighbourhoods: list[str] | None = None,
+    city: str | None = None,
+    max_rent_xaf: int | None = None,
+    advance_months: int | None = None,
+    place: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """A tenant's answers through the domain value objects: kept, and refused with why.
+
+    ``place`` is one given earlier (a pin, a food search), coordinates included.
+    """
+    entities: dict[str, Any] = {}
+    if property_type:
+        entities["property_type"] = property_type
+    if place:
+        entities.update(
+            {
+                name: place[name]
+                for name in ("city", "neighbourhood", "latitude", "longitude")
+                if place.get(name) is not None
+            }
+        )
+    if neighbourhoods:
+        entities["neighbourhood"] = neighbourhoods[0]
+        entities["neighbourhoods"] = list(neighbourhoods)
+    if city:
+        entities["city"] = city
+    if max_rent_xaf is not None:
+        entities["price"] = max_rent_xaf
+    if advance_months is not None:
+        entities["advance_months"] = advance_months
+
+    checked = extractor.validate(entities)
+    rejected = dict(checked.rejected)
+    if "location" in rejected and neighbourhoods and not city and not place:
+        # "Zzzville" alone: a hint the code cannot place. Never stored
+        # as a city — ask the city instead.
+        rejected["location"] = f"unknown neighbourhood {neighbourhoods[0]!r}: ask which city"
+    accepted = {name: value for name, value in checked.facts.items() if name in SEARCH_FIELDS}
+    rent = accepted.get("rent")
+    if isinstance(rent, int) and rent < market.DEFAULT_PLAUSIBILITY_WINDOW.min_xaf:
+        # "50" is not fifty francs. Asked back rather than multiplied:
+        # a guessed thousand is a budget nobody stated.
+        del accepted["rent"]
+        rejected["rent"] = (
+            f"{rent} FCFA is not a monthly rent: ask whether he means {rent * 1000} FCFA"
+        )
+    return accepted, rejected
 
 
 # "60 000", "60.000", "60000", "60mil", "60 k"
