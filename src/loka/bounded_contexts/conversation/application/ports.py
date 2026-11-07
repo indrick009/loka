@@ -530,6 +530,7 @@ class ConversationAgent(Protocol):
         facts: Mapping[str, Any],
         thread: list[Exchange],
         language: str,
+        known_place: Mapping[str, Any] | None = None,
     ) -> AgentAnswer: ...
 
 

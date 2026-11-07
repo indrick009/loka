@@ -112,7 +112,11 @@ class AgentLane:
         )
         try:
             reply = await self._agent.answer(
-                text, facts=known, thread=thread, language=session.language
+                text,
+                facts=known,
+                thread=thread,
+                language=session.language,
+                known_place=_known_place(session),
             )
         except Exception as exc:  # the pipeline still answers
             _logger.warning("agent_failed", session_id=str(session.id), error=type(exc).__name__)
@@ -205,3 +209,12 @@ class AgentLane:
             question_key=question,
             cost_usd=reply.cost_usd,
         )
+
+
+def _known_place(session: ConversationSession) -> dict[str, object] | None:
+    """The place the user gave for another task in this thread, if any."""
+    for name in ("place", "location"):
+        value = session.context.get(name)
+        if isinstance(value, dict) and value.get("city"):
+            return dict(value)
+    return None

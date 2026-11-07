@@ -60,10 +60,16 @@ class PydanticTenantSearchAgent:
         facts: Mapping[str, Any],
         thread: list[Exchange],
         language: str,
+        known_place: Mapping[str, Any] | None = None,
     ) -> AgentAnswer:
         started = time.monotonic()
         turn = await self._agent.reply(
-            text, facts=dict(facts), history=as_history(thread), language=language, submit=True
+            text,
+            facts=dict(facts),
+            history=as_history(thread),
+            language=language,
+            submit=True,
+            known_place=dict(known_place) if known_place else None,
         )
         return AgentAnswer(
             act=turn.act,

@@ -122,6 +122,8 @@ class TenantSearchDeps:
     # with its photos, follows through the demand matching.
     submit: bool = False
     submitted: bool = False
+    # Where the user said he is, earlier in the thread (a pin, a food search).
+    known_place: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,9 +216,15 @@ class TenantSearchAgent:
         language: str = "fr",
         search: PropertySearchGateway | None = None,
         submit: bool = False,
+        known_place: dict[str, Any] | None = None,
     ) -> AgentTurn:
         deps = TenantSearchDeps(
-            facts=dict(facts), language=language, user_text=text, search=search, submit=submit
+            facts=dict(facts),
+            language=language,
+            user_text=text,
+            search=search,
+            submit=submit,
+            known_place=known_place,
         )
         result = await self._agent.run(
             text, deps=deps, message_history=list(history), usage_limits=TURN_LIMITS
@@ -255,6 +263,15 @@ class TenantSearchAgent:
                 "of the message is in another language.",
                 f"Stored facts: {describe_facts(ctx.deps.facts) or 'none yet'}.",
             ]
+            place = ctx.deps.known_place
+            if place and not ctx.deps.facts.get("location"):
+                # Journal of 7 Nov 2026: « toujours dans la même adresse » after
+                # a pin, and the agent asked for the place again.
+                lines.append(
+                    f"Earlier the user gave this place: {place.get('neighbourhood') or ''} "
+                    f"{place.get('city') or ''}. Record it as the location only when he "
+                    "refers to it ('même adresse', 'ici', 'là où je suis', 'same place')."
+                )
             if missing:
                 lines.append(
                     f"Next question to ask if the message does not answer it: "
