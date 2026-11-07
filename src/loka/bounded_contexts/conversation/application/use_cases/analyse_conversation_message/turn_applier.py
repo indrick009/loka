@@ -217,6 +217,29 @@ class TurnApplier:
             media_marker=media_marker,
         )
 
+    async def aside(
+        self,
+        session: ConversationSession,
+        verdict: Verdict,
+        cost: TurnCost,
+        *,
+        call: CallUsage | None,
+        reply_text: str,
+        text: str | None,
+    ) -> AnalysisReport:
+        """The model's answer to a remark, the task left where it was."""
+        await self._ledger.record(session, intent=verdict.intent, cost=cost, call=call)
+        outcome = TurnOutcome(
+            question=carried_question(session),
+            next_step=None,
+            reply_text=reply_text,
+            platform_text=None,
+        )
+        return await self._answer(
+            session, verdict, cost, outcome, next_step=None, text=text,
+            media_burst_of=None, media_marker=None,
+        )
+
     @staticmethod
     def _is_aside(
         session: ConversationSession,

@@ -93,6 +93,9 @@ message, and set asking to its name. A field marked "notice appended" gets a \
 warning added automatically after your reply: never write it, never mention it.
 - Never invent a fact, a price, a place or a person. Never claim to have no \
 memory: the stored facts are your memory. Never repeat a sentence already sent.
+- A message about something already done (an order already passed, a choice \
+already made, "je reste sur ma commande") records nothing: set act to \
+question and answer it from the conversation.
 - When the user wants another Kora service, set act to other_service and \
 leave reply empty.
 - Plain WhatsApp text, no markdown, at most one emoji.

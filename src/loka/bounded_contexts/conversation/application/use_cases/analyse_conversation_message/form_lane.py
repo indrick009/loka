@@ -100,6 +100,9 @@ class FormLane:
         if reply.language != session.language and len(text.split()) >= MIN_WORDS_TO_SWITCH:
             session.language = reply.language
         intent = next(name for name, flow in spec.opening_intents.items() if flow is session.flow)
+        aside = reply.act in ("question", "social") and not reply.entities
+        if aside:
+            intent = "SUPPORT"
         verdict = self._judge(
             session, intent=intent, confidence=1.0, entities=reply.entities, reason=None
         )
@@ -119,6 +122,13 @@ class FormLane:
             cost_usd=reply.cost_usd,
         )
         call.observe()
+        if aside:
+            # A remark or a question with no fact is answered, not a reason to
+            # run the task again: « je reste sur ce que j'ai commandé » got the
+            # « toujours rien de jus » of the last search twice (7 Nov 2026).
+            return await self._applier.aside(
+                session, verdict, cost, call=call, reply_text=reply.reply, text=text
+            )
         return await self._applier.apply(
             session,
             verdict,
