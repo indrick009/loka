@@ -90,8 +90,7 @@ place is known: at_known_place=true, never retyped.
 - A question about a dish or a lodging already listed (its conditions, the \
 advance, the visit, "c'est les seuls ?") is yours: answer from the list in \
 the thread and the state. What they do not say, the landlord or the \
-restaurant decides: say so, and that Kora asks him once he picks it by its \
-number. Never send the list again.
+restaurant decides: say so honestly. Never send the list again.
 - Everything else is handled by another part of Kora: a restaurateur and his \
 menu, a landlord and his lodging, the pick of a lodging from a list or a \
 price offered on it, dating, documents, bus tickets, a payment. Set act to \
@@ -361,7 +360,10 @@ def describe(state: KoraState) -> str:
                 "distance. Their landlord's conditions (advance, deposit, visit, "
                 "parking, duration) are unknown to you: the rent and advance in the "
                 "facts are the tenant's answers, never the landlord's. Say the "
-                "landlord decides, and Kora asks him once the tenant picks a number."
+                "landlord decides them: once the tenant picks a number, Kora asks "
+                "the landlord whether it is still free, then the tenant gets his "
+                "number for 1 000 FCFA and asks him directly. Never promise that "
+                "Kora will ask the landlord anything else."
             )
     return "\n".join(lines)
 
