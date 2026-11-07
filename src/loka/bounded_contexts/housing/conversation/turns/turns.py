@@ -33,6 +33,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     ConversationSession,
     FlowStep,
 )
+from loka.bounded_contexts.housing.conversation.facts import ExtractedFacts
 from loka.bounded_contexts.housing.conversation.rules import (
     DeterministicClassifier,
     DeterministicMatch,
@@ -93,6 +94,18 @@ class HousingTurns:
         self._search = TenantSearch(demands, availability_requests)
         self._payment = PaymentTurn(unlock_payments)
         self._reminder = SearchReminder(follow_up)
+
+    async def record_search(
+        self, session: ConversationSession, facts: dict[str, Any], *, now: datetime
+    ) -> tuple[str | None, FlowStep | None]:
+        """A search the agent completed, recorded as the form would have."""
+        return await self._search.record_demand(
+            session,
+            intent="PROPERTY_SEARCH",
+            facts=ExtractedFacts(facts=facts),
+            next_step=FlowStep.PRESENT_RESULTS,
+            now=now,
+        )
 
     def read_open_question(
         self,

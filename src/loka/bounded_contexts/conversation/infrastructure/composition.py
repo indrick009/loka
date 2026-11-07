@@ -189,7 +189,20 @@ def analyse_conversation_message_use_case(
         exchanges=SqlAlchemyConversationExchanges(uow.session),
         # The domains plugged into the engine: each receives its own turns.
         plugs=domain_turns(uow, settings),
+        # The tenant search led by the Pydantic AI agent, when switched on.
+        agent=conversation_agent(settings),
     )
+
+
+def conversation_agent(settings: Settings) -> Any | None:
+    """The agent behind ``AI__AGENT_ENABLED``; none without a model to run it."""
+    if not (settings.ai.agent_enabled and settings.ai.pipeline_enabled):
+        return None
+    from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import (
+        PydanticTenantSearchAgent,
+    )
+
+    return PydanticTenantSearchAgent(settings.ai)
 
 
 def menu_reader(settings: Settings) -> OpenRouterMenuReader | None:

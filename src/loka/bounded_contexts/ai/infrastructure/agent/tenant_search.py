@@ -79,6 +79,8 @@ DialogueAct = Literal[
     "refusal",
     "unclear",
     "out_of_scope",
+    "other_service",
+    "listing_choice",
 ]
 
 
@@ -86,6 +88,12 @@ class AgentReply(BaseModel):
     """What the model hands back at the end of a turn."""
 
     act: DialogueAct = Field(description="What the user did with this message.")
+    language: Literal["fr", "en"] = Field(
+        description=(
+            "The language the user writes in. A message of fewer than three "
+            "words keeps the session language."
+        )
+    )
     reply: str = Field(
         description=(
             "The WhatsApp message Kora sends, in the session language. Short, "
@@ -107,6 +115,10 @@ class TenantSearchDeps:
     hits: list[ConversationPropertyHit] = field(default_factory=list)
     searched: bool = False
     search_failed: bool = False
+    # In the WhatsApp pipeline the search is recorded, not run here: the list,
+    # with its photos, follows through the demand matching.
+    submit: bool = False
+    submitted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,6 +130,10 @@ class AgentTurn:
     facts: dict[str, Any]
     hits: tuple[ConversationPropertyHit, ...]
     messages: list[ModelMessage]
+    language: str = "fr"
+    submitted: bool = False
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 def missing_fields(facts: dict[str, Any]) -> list[str]:
@@ -157,9 +173,14 @@ price a listing yourself: the system appends the real list.
 - Never invent a listing, a price, a neighbourhood or a fact the user did not \
 give. Never claim to have no memory: the stored facts are your memory.
 - Out of scope (football, politics, code…): decline in one sentence and come \
-back to the search. Kora also does food, dating and lost documents: if the \
-user switches to one of those, say you note it and that you will come back to \
-the lodging afterwards.
+back to the search.
+- Kora also does food, dating, lost documents and bus tickets. When the user \
+asks for one of those, set act to other_service and leave reply empty: \
+another part of Kora answers.
+- When the user picks a listing already sent to him ("le 2", "je prends le \
+premier") or asks for a lower price on one, set act to listing_choice and \
+leave reply empty: Kora asks the landlord, a price offer included.
+- Kora sends the photos of each listing with the list: never say it cannot.
 - Plain text, WhatsApp style, no markdown headings, at most one emoji.
 """
 
@@ -189,8 +210,11 @@ class TenantSearchAgent:
         history: Sequence[ModelMessage] = (),
         language: str = "fr",
         search: PropertySearchGateway | None = None,
+        submit: bool = False,
     ) -> AgentTurn:
-        deps = TenantSearchDeps(facts=dict(facts), language=language, user_text=text, search=search)
+        deps = TenantSearchDeps(
+            facts=dict(facts), language=language, user_text=text, search=search, submit=submit
+        )
         result = await self._agent.run(text, deps=deps, message_history=list(history))
         output = result.output
         message = output.reply.strip()
@@ -200,14 +224,19 @@ class TenantSearchAgent:
             message = f"{message}\n\n{listing}" if message else listing
         elif deps.searched and deps.search_failed:
             message = search_unavailable_text(language)
-        elif deps.searched and not message:
+        elif deps.searched and not deps.submitted and not message:
             message = no_results_text(language)
+        usage = result.usage()
         return AgentTurn(
             act=output.act,
             reply=message,
             facts=deps.facts,
             hits=tuple(deps.hits),
             messages=result.all_messages()[-_HISTORY_LIMIT:],
+            language=output.language,
+            submitted=deps.submitted,
+            input_tokens=usage.input_tokens or 0,
+            output_tokens=usage.output_tokens or 0,
         )
 
     @staticmethod
@@ -296,6 +325,16 @@ class TenantSearchAgent:
             if missing:
                 return {"error": "not every question is answered", "still_missing": missing}
             ctx.deps.searched = True
+            if ctx.deps.submit:
+                ctx.deps.submitted = True
+                return {
+                    "submitted": True,
+                    "advice": (
+                        "the search is recorded and the matching lodgings, with "
+                        "their photos, follow in the next message: say in one "
+                        "short sentence that you are looking, list nothing"
+                    ),
+                }
             query = search_query(ctx.deps.facts)
             if query is None or ctx.deps.search is None:
                 ctx.deps.search_failed = True

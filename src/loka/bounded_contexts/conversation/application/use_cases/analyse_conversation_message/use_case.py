@@ -35,6 +35,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     AvailabilityAnswers,
     AvailabilityRequests,
     BudgetPolicy,
+    ConversationAgent,
     ConversationExchanges,
     ConversationTurnRepository,
     DemandFollowUp,
@@ -46,6 +47,9 @@ from loka.bounded_contexts.conversation.application.ports import (
     TenantDemands,
     TurnSummary,
     UnlockPayments,
+)
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.agent_lane import (  # noqa: E501
+    AgentLane,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
@@ -73,6 +77,7 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
+    FlowName,
 )
 from loka.bounded_contexts.conversation.domain.repositories.conversation_session_repository import (
     ConversationSessionRepository,
@@ -133,6 +138,7 @@ class AnalyseConversationMessageUseCase:
         shadow: DecisionShadow | None = None,
         exchanges: ConversationExchanges | None = None,
         plugs: Mapping[str, DomainTurns] | None = None,
+        agent: ConversationAgent | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -162,6 +168,13 @@ class AnalyseConversationMessageUseCase:
             housing=self._housing,
             plugs=dict(plugs or {}),
             desk=ConversationDesk(uow, sessions),
+        )
+        self._agent = (
+            AgentLane(
+                agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing
+            )
+            if agent is not None
+            else None
         )
         self._lane = (
             ModelLane(
@@ -287,6 +300,13 @@ class AnalyseConversationMessageUseCase:
             )
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
+        if self._agent is not None and self._agent.leads(session, text):
+            led = await self._agent.answer(
+                session, text=text, thread=thread, message_id=message_id, now=moment
+            )
+            if led is not None:
+                return led
+
         if self._lane is None:
             return await self._without_a_model(
                 session, message_id=message_id, text=text, pending=pending_key, now=moment
@@ -334,6 +354,22 @@ class AnalyseConversationMessageUseCase:
             return await self._without_a_model(
                 session, message_id=message_id, text=text, pending=pending_key, now=moment
             )
+        if (
+            self._agent is not None
+            and turn.verdict.intent == "PROPERTY_SEARCH"
+            and session.flow is not FlowName.PROPERTY_SEARCH
+        ):
+            # A tenant search starts: the agent leads it from its first message,
+            # and the reading that recognised it is paid for too.
+            led = await self._agent.answer(
+                session, text=text, thread=thread, message_id=message_id, now=moment
+            )
+            if led is not None:
+                await self._ledger.record(
+                    session, intent=turn.verdict.intent, cost=turn.cost, call=turn.call
+                )
+                await self._uow.commit()
+                return led
         return await self._applier.apply(
             session,
             turn.verdict,

@@ -98,6 +98,9 @@ class AISettings(BaseModel):
     backup_model: str = "auto"
     backup_timeout_seconds: float = 30.0
     backup_cooldown_seconds: float = 120.0
+    # The tenant search led by the Pydantic AI agent (docs/pydantic-ai-prototype.md).
+    # Off: the classifier and the form lead it, as before.
+    agent_enabled: bool = False
 
     def pricing_for(self, model: str) -> ModelPricing | None:
         return self.model_pricing_usd_per_million.get(model)

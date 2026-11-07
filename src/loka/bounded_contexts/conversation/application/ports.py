@@ -494,3 +494,37 @@ __all__ = [
     "TurnSummary",
     "UsageEntry",
 ]
+
+
+@dataclass(frozen=True, slots=True)
+class AgentAnswer:
+    """One message answered by the agent that leads a conversation.
+
+    ``act`` ``other_service`` or ``listing_choice`` hands the message back to
+    the pipeline: another domain, or the choice of a listing already sent.
+    ``submitted``: every question is answered, the search is to be recorded.
+    """
+
+    act: str
+    reply: str
+    facts: dict[str, Any]
+    language: str
+    submitted: bool
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    cost_usd: Decimal
+
+
+class ConversationAgent(Protocol):
+    """A model that leads one flow, the business rules as its tools."""
+
+    async def answer(
+        self,
+        text: str,
+        *,
+        facts: Mapping[str, Any],
+        thread: list[Exchange],
+        language: str,
+    ) -> AgentAnswer: ...
