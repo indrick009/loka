@@ -31,6 +31,7 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 
 from loka.bounded_contexts.conversation.application.ports import (
     ConversationPropertyHit,
@@ -66,6 +67,8 @@ SEARCH_FIELDS: tuple[str, ...] = tuple(name for name, _ in SEARCH_REQUIREMENTS)
 # The 1 000 FCFA unlock may always be named; it is Kora's own price.
 _ALWAYS_ALLOWED_AMOUNTS = frozenset({1000})
 _HISTORY_LIMIT = 30
+# More model requests than this in one turn is a loop: it fails over to the pipeline.
+TURN_LIMITS = UsageLimits(request_limit=6)
 
 DialogueAct = Literal[
     "social",
@@ -215,7 +218,9 @@ class TenantSearchAgent:
         deps = TenantSearchDeps(
             facts=dict(facts), language=language, user_text=text, search=search, submit=submit
         )
-        result = await self._agent.run(text, deps=deps, message_history=list(history))
+        result = await self._agent.run(
+            text, deps=deps, message_history=list(history), usage_limits=TURN_LIMITS
+        )
         output = result.output
         message = output.reply.strip()
         if deps.hits:

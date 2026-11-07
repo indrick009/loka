@@ -10,6 +10,8 @@ facts (search, propose, book, pay) stays in its own turns.
 
 from __future__ import annotations
 
+import contextlib
+import json
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
@@ -18,11 +20,15 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import ModelMessage
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 
 DOUALA = timezone(timedelta(hours=1))
+# A turn that needs more model requests than this is looping: it fails, and
+# the pipeline answers instead (replay of 7 Nov 2026: 50 calls on one menu).
+TURN_LIMITS = UsageLimits(request_limit=6)
 # Where a place is given, in every domain: the spec reads them through
 # ``common_facts``.
 PLACE_KEYS = ("city", "neighbourhood")
@@ -78,10 +84,12 @@ complaint gets a real answer, a question about how the service works gets a \
 short honest answer, then come back to the form.
 - Every fact you understand goes through record_facts, all at once when one \
 message gives several, with the field names given below. Only facts the tool \
-accepted are known; if it refuses one, ask for it again in other words.
+accepted are known. When it answers "not kept: give it as …", call it again \
+at once in that format (a dish list is a list of objects with name and \
+price); only when the user's words truly lack the fact, ask him again.
 - Ask only for the next missing field, in your own words, one question per \
-message, and set asking to its name. A field marked "Kora adds" is followed by \
-that text, added by Kora: never say it yourself.
+message, and set asking to its name. A field marked "notice appended" gets a \
+warning added automatically after your reply: never write it, never mention it.
 - Never invent a fact, a price, a place or a person. Never claim to have no \
 memory: the stored facts are your memory. Never repeat a sentence already sent.
 - When the user wants another Kora service, set act to other_service and \
@@ -115,7 +123,9 @@ class FormAgent:
         deps = FormDeps(
             spec=spec, flow=flow, facts=dict(facts), open_field=open_field, language=language
         )
-        result = await self._agent.run(text, deps=deps, message_history=history)
+        result = await self._agent.run(
+            text, deps=deps, message_history=history, usage_limits=TURN_LIMITS
+        )
         usage = result.usage
         return FormTurn(
             act=result.output.act,
@@ -136,9 +146,11 @@ class FormAgent:
             fields = []
             for item in deps.spec.form(deps.flow):
                 line = f"- {item.name}: {item.topic}"
-                notice = item.warn(deps.language)
-                if notice and known.get(item.name) in (None, "", []):
-                    line += f' (Kora adds: "{notice}")'
+                schema = deps.spec.entities.get(item.name)
+                if schema:
+                    line += f" — format {json.dumps(schema, ensure_ascii=False)}"
+                if item.notice and known.get(item.name) in (None, "", []):
+                    line += " (notice appended)"
                 fields.append(line)
             missing = [item.name for item in deps.spec.missing(deps.flow, known)]
             names = sorted({*deps.spec.entities, *PLACE_KEYS})
@@ -167,14 +179,44 @@ class FormAgent:
                 facts: field name to value, e.g. {"first_name": "Indrick", "age": 26}.
             """
             deps = ctx.deps
-            merged = {**deps.entities, **facts}
+            entities = deps.spec.entities
+            given = {name: _shaped(entities.get(name), value) for name, value in facts.items()}
+            merged = {**deps.entities, **given}
             checked = deps.spec.validate(dict(merged), deps.flow)
             deps.entities = merged
             known = {**deps.facts, **checked.facts}
             missing = [item.name for item in deps.spec.missing(deps.flow, known)]
+            rejected = dict(checked.rejected)
+            for name, value in given.items():
+                schema = entities.get(name)
+                kept = name in checked.facts or name in rejected
+                if schema and value is not None and not kept:
+                    # Dropped in silence by the domain, so the model believed it
+                    # kept « looking: PEU_IMPORTE » given as a string (replay of
+                    # 7 Nov 2026) and moved on.
+                    shape = json.dumps(schema, ensure_ascii=False)
+                    rejected[name] = f"not kept: give it as {shape}"
             return {
                 "accepted": sorted(name for name in checked.facts if name not in deps.facts),
-                "rejected": dict(checked.rejected),
+                "rejected": rejected,
                 "still_missing": missing,
                 "next_field": missing[0] if missing else None,
             }
+
+
+def _shaped(schema: dict[str, Any] | None, value: Any) -> Any:
+    """A single value where the domain wants a list becomes a list of one.
+
+    A list sent as a JSON string — what Gemini does with nested objects — is
+    read as the list it spells.
+    """
+    if schema and schema.get("type") in ("array", "object") and isinstance(value, str):
+        with contextlib.suppress(ValueError):
+            value = json.loads(value)
+    if not schema or schema.get("type") != "array" or value is None or isinstance(value, list):
+        return value
+    items = schema.get("items") or {}
+    if items.get("type") == "object" and not isinstance(value, dict):
+        # A sentence is not a list of dishes: left as it is, to be refused.
+        return value
+    return [value]
