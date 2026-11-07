@@ -114,7 +114,10 @@ class KoraLane:
             flow=session.flow.value, step=session.step.value, entities=reply.entities,
             model_reply=reply.reply,
         )
-        if reply.act == "other_service":
+        if reply.act == "other_service" and reply.action is None:
+            # A tool that recorded an action is kept whatever the act says:
+            # « 6 » months of advance came back other_service once the search
+            # was complete (journal of 7 Nov 2026, 10:29).
             return None
         if reply.language != session.language and len(text.split()) >= MIN_WORDS_TO_SWITCH:
             session.language = reply.language
