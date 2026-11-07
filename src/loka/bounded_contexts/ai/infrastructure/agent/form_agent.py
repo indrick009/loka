@@ -86,7 +86,8 @@ short honest answer, then come back to the form.
 message gives several, with the field names given below. Only facts the tool \
 accepted are known. When it answers "not kept: give it as …", call it again \
 at once in that format (a dish list is a list of objects with name and \
-price); only when the user's words truly lack the fact, ask him again.
+price). Any other refusal ("too short", "inappropriate", an unknown place) is \
+the user's to fix: never call the tool again with the same value, ask him.
 - Ask only for the next missing field, in your own words, one question per \
 message, and set asking to its name. A field marked "notice appended" gets a \
 warning added automatically after your reply: never write it, never mention it.
