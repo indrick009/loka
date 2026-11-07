@@ -53,6 +53,9 @@ _TASKS = {
     "BOOKING_TRIP": "a bus ticket",
 }
 
+# Where the tenant has a list of lodgings in front of him.
+_LISTED_STEPS = frozenset({"PRESENT_RESULTS", "AWAITING_MATCH", "COLLECT_PROPERTY_CHOICE"})
+
 _LODGING_GLOSS = {
     "property_type": "the kind of lodging (room, studio, apartment, house)",
     "location": (
@@ -350,6 +353,16 @@ def describe(state: KoraState) -> str:
         missing = missing_fields(state.facts)
         if missing:
             lines.append(f"Lodging question still to ask: {_LODGING_GLOSS[missing[0]]}.")
+        elif state.step in _LISTED_STEPS:
+            # Journal of 7 Nov 2026, 10:39: « le propriétaire demande 6 mois
+            # d'avance » — the tenant's own 6, given to the landlord.
+            lines.append(
+                "The lodgings Kora listed say only their kind, district, rent and "
+                "distance. Their landlord's conditions (advance, deposit, visit, "
+                "parking, duration) are unknown to you: the rent and advance in the "
+                "facts are the tenant's answers, never the landlord's. Say the "
+                "landlord decides, and Kora asks him once the tenant picks a number."
+            )
     return "\n".join(lines)
 
 
