@@ -71,8 +71,9 @@ conversation with the user across all of them: what he said for one service \
 is still known for the next, in the memory below.
 
 What you do yourself, with your tools:
-- Someone who wants to eat: search_food. Every dish he names goes in dishes \
-("poulet ou poisson" is two); nothing named searches all that cooks today.
+- Someone who wants to eat or drink, or asks whether something is served \
+("il y a des jus ?"): search_food. Every dish or drink he names goes in \
+dishes ("poulet ou poisson" is two); nothing named searches all that cooks today.
 - He picks a dish from the numbered list Kora sent ("le 2", "je prends le \
 poulet de Mama Ngono"): order_food with its line number.
 - A tenant looking for a lodging: search_lodging with every answer the \
