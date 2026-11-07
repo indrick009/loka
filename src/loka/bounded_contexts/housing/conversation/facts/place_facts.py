@@ -67,7 +67,10 @@ def _resolve_location_hint(raw: Any) -> dict[str, str] | None:
 
 
 def _build_location(entities: dict[str, Any]) -> dict[str, Any]:
-    city = str(entities.get("city") or "").strip()
+    raw_city = str(entities.get("city") or "").strip()
+    # The gazetteer's spelling: a typed "Yaounde" searched nothing, the
+    # catalogue says "Yaoundé" (replay of 7 Nov 2026, in English).
+    city = market.resolve_city(raw_city) or raw_city if raw_city else ""
     neighbourhood = entities.get("neighbourhood")
     neighbourhood_text = str(neighbourhood).strip() if isinstance(neighbourhood, str) else ""
     accepted = _accepted_neighbourhoods(neighbourhood_text, entities.get("neighbourhoods"))

@@ -1,4 +1,4 @@
-"""The ``ConversationAgent`` port, answered by the Pydantic AI tenant search."""
+"""The agent ports, answered by Pydantic AI: the tenant search and the domain forms."""
 
 from __future__ import annotations
 
@@ -15,9 +15,16 @@ from pydantic_ai.messages import (
     UserPromptPart,
 )
 
+from loka.bounded_contexts.ai.infrastructure.agent.form_agent import FormAgent
 from loka.bounded_contexts.ai.infrastructure.agent.models import openrouter_model
 from loka.bounded_contexts.ai.infrastructure.agent.tenant_search import TenantSearchAgent
-from loka.bounded_contexts.conversation.application.ports import AgentAnswer, Exchange
+from loka.bounded_contexts.conversation.application.plugs.registry import spec_for
+from loka.bounded_contexts.conversation.application.ports import (
+    AgentAnswer,
+    Exchange,
+    FormAnswer,
+)
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.shared.infrastructure.config.settings import AISettings
 
 
@@ -72,8 +79,55 @@ class PydanticTenantSearchAgent:
         )
 
     def _cost(self, input_tokens: int, output_tokens: int) -> Decimal:
-        pricing = self._settings.pricing_for(self._model)
-        if pricing is None:
-            return Decimal("0")
-        dollars = (input_tokens * pricing.input + output_tokens * pricing.output) / 1_000_000
-        return Decimal(str(round(dollars, 6)))
+        return cost_of(self._settings, self._model, input_tokens, output_tokens)
+
+
+def cost_of(settings: AISettings, model: str, input_tokens: int, output_tokens: int) -> Decimal:
+    pricing = settings.pricing_for(model)
+    if pricing is None:
+        return Decimal("0")
+    dollars = (input_tokens * pricing.input + output_tokens * pricing.output) / 1_000_000
+    return Decimal(str(round(dollars, 6)))
+
+
+class PydanticFormFiller:
+    def __init__(self, settings: AISettings) -> None:
+        self._settings = settings
+        self._model = settings.default_model
+        self._agent = FormAgent(openrouter_model(settings, self._model))
+
+    async def answer(
+        self,
+        text: str,
+        *,
+        flow: FlowName,
+        facts: Mapping[str, Any],
+        open_field: str | None,
+        thread: list[Exchange],
+        language: str,
+    ) -> FormAnswer:
+        spec = spec_for(flow)
+        if spec is None:
+            raise ValueError(f"no plugged domain runs {flow.value}")
+        started = time.monotonic()
+        turn = await self._agent.reply(
+            text,
+            spec=spec,
+            flow=flow,
+            facts=dict(facts),
+            open_field=open_field,
+            language=language,
+            history=as_history(thread),
+        )
+        return FormAnswer(
+            act=turn.act,
+            reply=turn.reply,
+            asking=turn.asking,
+            language=turn.language,
+            entities=turn.entities,
+            model=self._model,
+            input_tokens=turn.input_tokens,
+            output_tokens=turn.output_tokens,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            cost_usd=cost_of(self._settings, self._model, turn.input_tokens, turn.output_tokens),
+        )

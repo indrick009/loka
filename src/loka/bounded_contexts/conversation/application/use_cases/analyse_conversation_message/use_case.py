@@ -40,6 +40,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     ConversationTurnRepository,
     DemandFollowUp,
     Exchange,
+    FormFiller,
     IntentModel,
     PropertyListing,
     PropertySearchGateway,
@@ -50,6 +51,9 @@ from loka.bounded_contexts.conversation.application.ports import (
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.agent_lane import (  # noqa: E501
     AgentLane,
+)
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.form_lane import (  # noqa: E501
+    FormLane,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
@@ -139,6 +143,7 @@ class AnalyseConversationMessageUseCase:
         exchanges: ConversationExchanges | None = None,
         plugs: Mapping[str, DomainTurns] | None = None,
         agent: ConversationAgent | None = None,
+        form_filler: FormFiller | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -174,6 +179,11 @@ class AnalyseConversationMessageUseCase:
                 agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing
             )
             if agent is not None
+            else None
+        )
+        self._forms = (
+            FormLane(form_filler, judge=self._judge, applier=self._applier, ledger=self._ledger)
+            if form_filler is not None
             else None
         )
         self._lane = (
@@ -303,6 +313,17 @@ class AnalyseConversationMessageUseCase:
         if self._agent is not None and self._agent.leads(session, text):
             led = await self._agent.answer(
                 session, text=text, thread=thread, message_id=message_id, now=moment
+            )
+            if led is not None:
+                return led
+        if self._forms is not None and self._forms.leads(session):
+            led = await self._forms.answer(
+                session,
+                text=text,
+                thread=thread,
+                pending_key=pending_key,
+                message_id=message_id,
+                now=moment,
             )
             if led is not None:
                 return led

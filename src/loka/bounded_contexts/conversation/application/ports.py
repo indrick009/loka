@@ -23,6 +23,9 @@ from loka.bounded_contexts.ai.domain.ai_provider import (
 )
 
 if TYPE_CHECKING:
+    from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
+        FlowName,
+    )
     from loka.bounded_contexts.housing.application.use_cases.create_property_from_conversation import (  # noqa: E501
         ConversationListingResult,
         ConversationMediaResult,
@@ -528,3 +531,38 @@ class ConversationAgent(Protocol):
         thread: list[Exchange],
         language: str,
     ) -> AgentAnswer: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FormAnswer:
+    """A plugged domain's form message, answered by the agent.
+
+    ``entities`` are what its tool calls passed: the pipeline validates them
+    again through the domain before anything is kept.
+    """
+
+    act: str
+    reply: str
+    asking: str | None
+    language: str
+    entities: dict[str, Any]
+    model: str
+    input_tokens: int
+    output_tokens: int
+    latency_ms: int
+    cost_usd: Decimal
+
+
+class FormFiller(Protocol):
+    """A model that fills a plugged domain's form, the domain's validation as its tool."""
+
+    async def answer(
+        self,
+        text: str,
+        *,
+        flow: FlowName,
+        facts: Mapping[str, Any],
+        open_field: str | None,
+        thread: list[Exchange],
+        language: str,
+    ) -> FormAnswer: ...

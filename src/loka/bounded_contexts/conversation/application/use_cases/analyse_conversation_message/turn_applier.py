@@ -289,7 +289,11 @@ class TurnApplier:
             # The stock question used to replace it on every turn (journal of
             # 5 Nov 2026: « D'accord Indrick, c'est noté. Quel est ton âge ? »
             # went out as « Quel âge as-tu ? »).
-            said = f"{reply_text}\n\n{outcome.notice}" if outcome.notice else reply_text
+            # Said once: a model that wrote the notice itself is not doubled.
+            notice = outcome.notice
+            if notice and notice[:40] in reply_text:
+                notice = None
+            said = f"{reply_text}\n\n{notice}" if notice else reply_text
             return replace(outcome, reply_text=said, platform_text=None)
         told = explanation_in(reply_text) if fresh else None
         if told and outcome.platform_text and outcome.media_object_key is None:

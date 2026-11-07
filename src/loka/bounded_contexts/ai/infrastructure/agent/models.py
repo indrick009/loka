@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import os
+
+# The import-time banner is for a terminal, not for the worker's logs.
+os.environ.setdefault("PYDANTIC_AI_NO_BANNER", "1")
+
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openrouter import OpenRouterProvider
 

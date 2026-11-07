@@ -191,6 +191,8 @@ def analyse_conversation_message_use_case(
         plugs=domain_turns(uow, settings),
         # The tenant search led by the Pydantic AI agent, when switched on.
         agent=conversation_agent(settings),
+        # The forms of Food, Dating, Found and Booking, filled by the same agent.
+        form_filler=form_filler(settings),
     )
 
 
@@ -203,6 +205,17 @@ def conversation_agent(settings: Settings) -> Any | None:
     )
 
     return PydanticTenantSearchAgent(settings.ai)
+
+
+def form_filler(settings: Settings) -> Any | None:
+    """The plugged domains' form filler behind ``AI__AGENT_ENABLED``."""
+    if not (settings.ai.agent_enabled and settings.ai.pipeline_enabled):
+        return None
+    from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import (
+        PydanticFormFiller,
+    )
+
+    return PydanticFormFiller(settings.ai)
 
 
 def menu_reader(settings: Settings) -> OpenRouterMenuReader | None:

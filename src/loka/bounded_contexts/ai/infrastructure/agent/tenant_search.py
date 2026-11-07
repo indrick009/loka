@@ -226,7 +226,7 @@ class TenantSearchAgent:
             message = search_unavailable_text(language)
         elif deps.searched and not deps.submitted and not message:
             message = no_results_text(language)
-        usage = result.usage()
+        usage = result.usage
         return AgentTurn(
             act=output.act,
             reply=message,

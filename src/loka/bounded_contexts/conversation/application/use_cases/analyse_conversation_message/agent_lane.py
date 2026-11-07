@@ -39,6 +39,7 @@ from loka.bounded_contexts.housing.conversation.facts import SEARCH_REQUIREMENTS
 from loka.bounded_contexts.housing.conversation.facts.forms import SEARCH_QUESTION_BY_STEP
 from loka.bounded_contexts.housing.conversation.turns.turns import HousingTurns
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.logging import get_logger
 
 SEARCH_FIELDS = tuple(name for name, _ in SEARCH_REQUIREMENTS)
@@ -116,6 +117,11 @@ class AgentLane:
         except Exception as exc:  # the pipeline still answers
             _logger.warning("agent_failed", session_id=str(session.id), error=type(exc).__name__)
             return None
+        journal(
+            "reading", session.phone.e164, lane="agent", act=reply.act, flow=session.flow.value,
+            step=session.step.value, facts=reply.facts, submitted=reply.submitted or None,
+            model_reply=reply.reply,
+        )
         if reply.act in HANDED_BACK or not reply.reply.strip():
             return None
         return await self._apply(
