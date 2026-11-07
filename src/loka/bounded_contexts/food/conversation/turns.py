@@ -201,10 +201,11 @@ class FoodTurns:
         if not known.get("place"):
             return await self._ask(turn, desk, "place")
         place, dish = known["place"], known.get("dish")
-        found = await self._search(place, known.get("dish_key"), dish, turn, wide=False)
+        wanted = _wanted(known)
+        found = await self._search(place, wanted, dish, turn, wide=False)
         wide = not found
         if wide:
-            found = await self._search(place, known.get("dish_key"), dish, turn, wide=True)
+            found = await self._search(place, wanted, dish, turn, wide=True)
         if not found:
             # Asked again with nothing new: say so differently, never the same
             # sentence twice (replay of 2 Nov 2026).
@@ -267,14 +268,14 @@ class FoodTurns:
     async def _search(
         self,
         place: dict[str, Any],
-        key: str | None,
+        wanted: list[str],
         dish: str | None,
         turn: PlugTurn,
         *,
         wide: bool,
     ) -> list[DishOffer]:
         """Near the client first; ``wide`` is the whole of his town."""
-        keys = related_keys(key) if key else frozenset()
+        keys = frozenset().union(*(related_keys(key) for key in wanted))
         found: list[DishOffer] = []
         for restaurant, menu in await self._store.open_menus(menu_day(turn.now)):
             distance = km_between(place, restaurant.place)
@@ -339,3 +340,12 @@ class FoodTurns:
             "status": "passed to the restaurant, which calls the client back",
         }
         return await self._done(turn, desk, sent, voiced=False, context={SENT_KEY: record})
+
+
+def _wanted(known: dict[str, Any]) -> list[str]:
+    """The dishes asked for: every one named, else the single key of old sessions."""
+    keys = known.get("dish_keys")
+    if isinstance(keys, list) and keys:
+        return [str(key) for key in keys]
+    key = known.get("dish_key")
+    return [str(key)] if key else []

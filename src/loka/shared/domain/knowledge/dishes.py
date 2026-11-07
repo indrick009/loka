@@ -71,6 +71,27 @@ def dish_key(text: str | None) -> str | None:
     return None
 
 
+def dish_keys(text: str | None) -> list[str]:
+    """Every dish a request names, in order: « poulet ou poisson » is two."""
+    folded = f" {normalize(text or '')} "
+    found = sorted(
+        (match.start(), -len(alias), match.end(), dish.key)
+        for alias, dish in _ALIASES
+        for match in re.finditer(rf"\b{re.escape(alias)}\b", folded)
+    )
+    keys: list[str] = []
+    covered = -1
+    for start, _, end, key in found:
+        # The longest name wins where two overlap: « poisson braisé » is the
+        # braised fish, not every fish.
+        if start < covered:
+            continue
+        covered = end
+        if key not in keys:
+            keys.append(key)
+    return keys
+
+
 def related_keys(key: str) -> frozenset[str]:
     """A general dish also finds its variants: "poulet" finds "poulet DG"."""
     if key in ("poulet", "poisson"):

@@ -10,7 +10,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.services.extracted_facts import ExtractedFacts
 from loka.bounded_contexts.food.domain.menu import MenuDish
 from loka.shared.domain.errors import DomainError
-from loka.shared.domain.knowledge.dishes import dish_key
+from loka.shared.domain.knowledge.dishes import dish_key, dish_keys
 
 _SHARE = (
     "Le plus simple : partage ta position WhatsApp. Sinon, donne la ville et le "
@@ -115,6 +115,9 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
     if dish:
         facts["dish"] = dish
         facts["dish_key"] = dish_key(dish)
+        # « poulet ou poisson »: both are searched (journal of 7 Nov 2026,
+        # only the fish was, and a Poulet DG nearby was said not to exist).
+        facts["dish_keys"] = dish_keys(dish)
     return ExtractedFacts(facts=facts, rejected=rejected)
 
 
