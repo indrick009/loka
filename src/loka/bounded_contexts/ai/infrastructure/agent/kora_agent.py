@@ -283,7 +283,8 @@ class KoraAgentModel:
                     "ask the next question in your own words"
                     if missing
                     else "the search is recorded and the lodgings with their photos "
-                    "follow: say in one short sentence that you are looking, list nothing"
+                    "follow in a few seconds: say in one short sentence that you are "
+                    "looking. No team, no delay, no promise, list nothing"
                 ),
             }
 

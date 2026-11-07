@@ -17,6 +17,7 @@ from loka.bounded_contexts.conversation.application.plugs.registry import PLUG_F
 from loka.bounded_contexts.conversation.application.ports import Exchange, FormFiller
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.agent_lane import (  # noqa: E501
     MIN_WORDS_TO_SWITCH,
+    known_place,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     AnalysisReport,
@@ -84,6 +85,7 @@ class FormLane:
                 open_field=spec.field_of(pending_key),
                 thread=thread,
                 language=session.language,
+                known_place=known_place(session),
             )
         except Exception as exc:  # the pipeline still answers
             _logger.warning(

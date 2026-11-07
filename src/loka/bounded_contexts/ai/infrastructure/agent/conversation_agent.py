@@ -114,6 +114,7 @@ class PydanticFormFiller:
         open_field: str | None,
         thread: list[Exchange],
         language: str,
+        known_place: Mapping[str, Any] | None = None,
     ) -> FormAnswer:
         spec = spec_for(flow)
         if spec is None:
@@ -127,6 +128,7 @@ class PydanticFormFiller:
             open_field=open_field,
             language=language,
             history=as_history(thread),
+            known_place=dict(known_place) if known_place else None,
         )
         return FormAnswer(
             act=turn.act,

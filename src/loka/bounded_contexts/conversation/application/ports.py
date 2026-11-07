@@ -566,6 +566,7 @@ class FormFiller(Protocol):
         open_field: str | None,
         thread: list[Exchange],
         language: str,
+        known_place: Mapping[str, Any] | None = None,
     ) -> FormAnswer: ...
 
 

@@ -61,6 +61,8 @@ class FormDeps:
     facts: dict[str, Any]
     open_field: str | None
     language: str
+    # The last place the user gave, in an earlier task or before any (a pin).
+    known_place: dict[str, Any] | None = None
     # Every entity a record_facts call passed, validated again by the pipeline.
     entities: dict[str, Any] = field(default_factory=dict)
 
@@ -123,9 +125,15 @@ class FormAgent:
         open_field: str | None,
         language: str,
         history: list[ModelMessage],
+        known_place: dict[str, Any] | None = None,
     ) -> FormTurn:
         deps = FormDeps(
-            spec=spec, flow=flow, facts=dict(facts), open_field=open_field, language=language
+            spec=spec,
+            flow=flow,
+            facts=dict(facts),
+            open_field=open_field,
+            language=language,
+            known_place=known_place,
         )
         result = await self._agent.run(
             text, deps=deps, message_history=history, usage_limits=TURN_LIMITS
@@ -172,6 +180,7 @@ class FormAgent:
                     f"Stored facts: {known or 'none yet'}.",
                     f"The question open before this message: {deps.open_field or 'none'}.",
                     f"Still missing, in order: {', '.join(missing) or 'nothing'}.",
+                    *_earlier_place(deps.known_place),
                 ]
             )
 
@@ -206,6 +215,20 @@ class FormAgent:
                 "still_missing": missing,
                 "next_field": missing[0] if missing else None,
             }
+
+
+def _earlier_place(place: dict[str, Any] | None) -> list[str]:
+    """The place given before this task, which the user may point back to."""
+    if not place:
+        return []
+    # Journal of 7 Nov 2026, 11:00: « fait la recherche avec la localisation
+    # que j'ai envoyé » got « je ne peux pas utiliser une localisation GPS ».
+    return [
+        f"Earlier the user shared this place: {json.dumps(place, ensure_ascii=False)}. "
+        "When he refers to it ('ma localisation', 'tu connais déjà', 'même endroit'), "
+        "record it at once through record_facts with the form's field names (its city, "
+        "its neighbourhood, and the country it is in), never ask him to type it again."
+    ]
 
 
 def _shaped(schema: dict[str, Any] | None, value: Any) -> Any:

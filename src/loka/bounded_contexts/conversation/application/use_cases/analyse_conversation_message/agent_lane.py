@@ -116,7 +116,7 @@ class AgentLane:
                 facts=known,
                 thread=thread,
                 language=session.language,
-                known_place=_known_place(session),
+                known_place=known_place(session),
             )
         except Exception as exc:  # the pipeline still answers
             _logger.warning("agent_failed", session_id=str(session.id), error=type(exc).__name__)
@@ -212,10 +212,11 @@ class AgentLane:
         )
 
 
-def _known_place(session: ConversationSession) -> dict[str, object] | None:
+def known_place(session: ConversationSession) -> dict[str, object] | None:
     """The place the user gave for another task in this thread, if any."""
-    for name in ("place", "location"):
-        value = session.context.get(name)
-        if isinstance(value, dict) and value.get("city"):
-            return dict(value)
+    for source in (session.context, session.memory):
+        for name in ("place", "location"):
+            value = source.get(name)
+            if isinstance(value, dict) and value.get("city"):
+                return dict(value)
     return None
