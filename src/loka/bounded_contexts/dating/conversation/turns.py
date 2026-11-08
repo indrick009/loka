@@ -36,8 +36,10 @@ from loka.bounded_contexts.payment.application.unlock_contact import UnlockConta
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
 
 # Never taken from a passing remark: the description is asked with its privacy
-# promise, and where to look only once the description is in.
-ASKED_ONLY = ("description", "looking")
+# promise. Where to look is kept when said, and still asked after the
+# description when it was not: « je cherche l'amour dans mon quartier » got
+# « c'est noté ! » then the question again at the end (journal of 7 Nov 2026).
+ASKED_ONLY = ("description",)
 _YES = ("oui", "yes", "ok", "d'accord", "dac", "volontiers", "bien sûr", "carrément")
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
