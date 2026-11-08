@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
@@ -24,7 +25,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 )
 from loka.bounded_contexts.food.conversation import texts
 from loka.bounded_contexts.food.conversation.photos import DishPhotos
-from loka.bounded_contexts.food.conversation.spec import FOOD
+from loka.bounded_contexts.food.conversation.spec import FOOD, HITS_KEY
 from loka.bounded_contexts.food.domain.menu import DailyMenu, MenuDish, menu_day
 from loka.bounded_contexts.food.domain.reader import MenuReader
 from loka.bounded_contexts.food.domain.restaurant import DishOffer, Restaurant
@@ -32,12 +33,14 @@ from loka.bounded_contexts.food.domain.store import FoodStore
 from loka.shared.domain.knowledge.dishes import related_keys
 from loka.shared.domain.knowledge.where import km_between
 
-HITS_KEY = "_food_offers"
 NEARBY_KM = 15.0
 PER_RESTAURANT = 2
 MAX_OFFERS = 5
 SENT_KEY = "request_sent"
 PHOTO_SPACING_SECONDS = 2
+
+# Between two things asked for at once: « poulet ou poisson », « ndolè, eru ».
+_NAMED = re.compile(r"\s+(?:ou|et|or|and)\s+(?:un |une |des |du |de la |a |some )?|\s*[,+/]\s*")
 
 NameOf = Callable[[uuid.UUID], Awaitable[str | None]]
 
@@ -276,6 +279,10 @@ class FoodTurns:
     ) -> list[DishOffer]:
         """Near the client first; ``wide`` is the whole of his town."""
         keys = frozenset().union(*(related_keys(key) for key in wanted))
+        # Each thing named is also matched by its words: « jus » has no dish
+        # key, and « poisson braisé et un jus » found the fish only (live
+        # replay of 8 Nov 2026).
+        names = [part for part in _NAMED.split(dish or "") if part.strip()]
         found: list[DishOffer] = []
         for restaurant, menu in await self._store.open_menus(menu_day(turn.now)):
             distance = km_between(place, restaurant.place)
@@ -288,7 +295,7 @@ class FoodTurns:
             ):
                 continue
             for item in menu.open_dishes():
-                if dish and not ((item.key in keys) if keys else item.is_named(dish)):
+                if dish and item.key not in keys and not any(item.is_named(n) for n in names):
                     continue
                 found.append(
                     DishOffer(

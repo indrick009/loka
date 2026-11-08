@@ -42,6 +42,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
+from loka.bounded_contexts.housing.conversation.turns.keys import is_availability_answer
 from loka.bounded_contexts.housing.conversation.turns.turns import (
     HousingTurns,
 )
@@ -174,7 +175,17 @@ class TurnApplier:
                 media_marker=media_marker,
             )
         spec = spec_for(target)
-        if spec is not None and spec.name in self._plugs and self._desk is not None:
+        if (
+            spec is not None
+            and spec.name in self._plugs
+            and self._desk is not None
+            # A landlord's answer to « encore disponible ? » is Housing's in any
+            # task he was in: asked while his last task was a found document,
+            # « oui il est toujours disponible » got the found document's
+            # closing line and the tenant was never released (live replay of
+            # 8 Nov 2026, 03:04).
+            and not is_availability_answer(verdict.intent)
+        ):
             outcome = await self._plugged(
                 session, verdict, cost, target, text=text, reply_text=reply_text, asking=asking
             )

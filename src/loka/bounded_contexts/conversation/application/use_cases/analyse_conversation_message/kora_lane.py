@@ -50,7 +50,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.food.conversation.turns import HITS_KEY
+from loka.bounded_contexts.food.conversation.spec import HITS_KEY
 from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.logging import get_logger
 

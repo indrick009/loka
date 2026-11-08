@@ -12,6 +12,9 @@ from loka.bounded_contexts.food.domain.menu import MenuDish
 from loka.shared.domain.errors import DomainError
 from loka.shared.domain.knowledge.dishes import dish_key, dish_keys
 
+# Where a client's search keeps the dishes it listed, numbered as sent.
+HITS_KEY = "_food_offers"
+
 _SHARE = (
     "Le plus simple : partage ta position WhatsApp. Sinon, donne la ville et le "
     "quartier, par exemple : Douala, Bonapriso."
