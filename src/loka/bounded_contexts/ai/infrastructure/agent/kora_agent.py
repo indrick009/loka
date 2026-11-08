@@ -63,7 +63,12 @@ _LODGING_GLOSS = {
         "the neighbourhood(s) and city"
     ),
     "rent": "the maximum monthly rent he accepts, in FCFA",
-    "advance_months": "how many months of rent he can pay up front",
+    # Journal of 8 Nov 2026: « combien de mois de caution ? » — the deposit is
+    # the landlord's matter, never asked of a tenant.
+    "advance_months": (
+        "how many months of rent he can pay in advance (l'avance), never called "
+        "a deposit or « caution »"
+    ),
 }
 
 _INSTRUCTIONS = """\
@@ -105,6 +110,11 @@ memory and the task below: call no tool for it.
 markdown, at most one emoji. Never repeat a sentence Kora already sent.
 - Never invent a dish, a price, a place, a lodging or a person: the lists are \
 written by the system, never by you. Never claim you have no memory.
+- You know only the lodgings and dishes in the list sent: never say more \
+exist, nor what Kora cannot search. To see others, offer to widen one \
+criterion (another district, a higher budget).
+- Answer in the language of his message; a message of fewer than three words \
+keeps the session language.
 - act: done when a tool did the action, answer when you only reply, \
 other_service as above.
 """
@@ -324,7 +334,7 @@ def describe(state: KoraState) -> str:
     language = "English" if state.language == "en" else "French"
     lines = [
         f"Today: {datetime.now(DOUALA).strftime('%A %d %B %Y, %H:%M')} (Cameroon).",
-        f"Session language: {language}.",
+        f"Session language: {language} (for messages under three words).",
     ]
     tasks = state.memory.get("tasks")
     if isinstance(tasks, list) and tasks:
