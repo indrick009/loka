@@ -24,9 +24,13 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
 from redis.asyncio import Redis
 
+from loka.bounded_contexts.conversation.application.ports import Exchange
+from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import RichReply
+from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds import (
+    RedisConversationHolds,
+)
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     voice_platform_reply_use_case,
 )
@@ -40,6 +44,8 @@ from loka.interfaces.worker.conversation_analysis_consumer import (
     ConversationLockFactory,
     redis_lock_factory,
 )
+from loka.interfaces.worker.stuck_guard import StuckGuard, holding_text
+from loka.interfaces.worker.whatsapp_channels import GatewayDown, channel_for
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
@@ -74,9 +80,7 @@ OUTBOUND_QUEUE = "whatsapp.outgoing"
 GATEWAY_DOWN_PATIENCE = timedelta(minutes=30)
 GATEWAY_DOWN_RECHECK_MS = 15_000
 
-
-class GatewayDown(RetryableHandlerError):
-    """The gateway or its WhatsApp socket is down, not this message."""
+__all__ = ["OUTBOUND_QUEUE", "GatewayDown", "WhatsAppOutboundConsumer"]
 
 _logger = get_logger(__name__)
 
@@ -97,28 +101,28 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         self._settings = settings
         self._lock_factory = lock_factory or redis_lock_factory(settings)
         whatsapp = settings.whatsapp
-        self._gateway_url = whatsapp.gateway_url.rstrip("/")
-        self._api_key = whatsapp.api_key.get_secret_value()
-        self._timeout = whatsapp.request_timeout_seconds
         self._limit_per_minute = whatsapp.max_outbound_per_minute
         # Presigning lives here, not in the analysis: a URL that expires has to
         # be minted moments before the send, and the domain only holds the key.
         self._media: MediaStorage = S3MediaStorage(settings.object_storage)
         self._media_ttl = settings.object_storage.presigned_url_ttl_seconds
-        self._client = httpx.AsyncClient(
-            base_url=self._gateway_url,
-            timeout=httpx.Timeout(self._timeout),
-            headers={"X-Api-Key": self._api_key} if self._api_key else {},
-        )
+        # The official API when it is set up, Baileys otherwise: the same
+        # reply, shown as richly as the channel allows.
+        self._channel = channel_for(settings)
         # Built, not awaited: redis-py connects lazily, and a rate limiter whose
         # backend is down must degrade to "allow" rather than stop replies.
-        self._rate_limiter = RedisRateLimiter(
-            Redis.from_url(settings.redis_url, decode_responses=True)
+        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        self._rate_limiter = RedisRateLimiter(redis)
+        self._guard = StuckGuard(
+            database,
+            RedisConversationHolds(redis),
+            enabled=whatsapp.stuck_guard_enabled,
+            alert_phones=[p.strip() for p in whatsapp.alert_phones.split(",") if p.strip()],
         )
 
     async def stop(self) -> None:
         await super().stop()
-        await self._client.aclose()
+        await self._channel.aclose()
 
     async def handle(self, payload: dict[str, Any]) -> None:
         body = payload.get("payload")
@@ -205,6 +209,16 @@ class WhatsAppOutboundConsumer(ConsumerBase):
                 session_id=session_id,
                 user_id=_optional_uuid(body.get("actor_id")),
             )
+        if session_id is not None and StuckGuard.watches(metadata):
+            if await self._guard.held(session_id):
+                # A reply written before the hold was set: the person released
+                # the thread answers it, not a sentence from before the fix.
+                _logger.info("reply_dropped_conversation_held", session_id=str(session_id))
+                return
+            stuck = await self._guard.check(text, metadata, session_id)
+            if stuck is not None:
+                await self._hold(body, metadata, session_id, recipient, text, stuck)
+                return
         # A photo, when the message names one, is sent with the sentence as its
         # caption: the tenant reads what was found and sees it in one message.
         image_url = await self._image_url(_optional_str(metadata, "media_object_key"))
@@ -219,7 +233,8 @@ class WhatsAppOutboundConsumer(ConsumerBase):
                 f"outbound rate limit of {self._limit_per_minute}/min reached"
             )
 
-        await self._send(to=recipient, text=text, image_url=image_url)
+        rich = RichReply.from_dict(metadata.get("rich"))
+        await self._channel.send(to=recipient, text=text, image_url=image_url, rich=rich)
         await self._record_sent(
             event_id=body.get("event_id"), session_id=session_id, recipient=recipient, text=text
         )
@@ -237,6 +252,42 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             characters=len(text),
             media=image_url is not None,
         )
+
+    async def _hold(
+        self,
+        body: dict[str, Any],
+        metadata: dict[str, Any],
+        session_id: uuid.UUID,
+        recipient: str,
+        withheld: str,
+        stuck: tuple[str, list[Exchange]],
+    ) -> None:
+        """Tell the user an answer is coming, hold the thread, alert a person.
+
+        The user first: were the hold set and his message then failed, the
+        retry would find a held thread and tell him nothing at all.
+        """
+        signal, thread = stuck
+        language = _optional_str(metadata, "language")
+        waiting = holding_text(language)
+        await self._channel.send(to=recipient, text=waiting)
+        await self._record_sent(
+            event_id=body.get("event_id"), session_id=session_id, recipient=recipient, text=waiting
+        )
+        journal("out", recipient, text=waiting, reply_kind="HOLD")
+        alerts = await self._guard.hold(
+            session_id=session_id,
+            recipient=recipient,
+            signal=signal,
+            language=language,
+            withheld=withheld,
+            thread=thread,
+        )
+        for phone, alert in alerts:
+            try:
+                await self._channel.send(to=phone, text=alert)
+            except Exception as exc:  # the journal and the log still hold the incident
+                _logger.warning("stuck_alert_failed", error=type(exc).__name__)
 
     async def _in_user_voice(
         self,
@@ -313,32 +364,6 @@ class WhatsAppOutboundConsumer(ConsumerBase):
                 error=str(exc),
             )
             return None
-
-    async def _send(
-        self, *, to: str, text: str, image_url: str | None = None
-    ) -> None:
-        body: dict[str, Any] = {"to": to, "text": text}
-        if image_url:
-            body = {"to": to, "image": image_url, "caption": text}
-        try:
-            response = await self._client.post("/send", json=body)
-        except (httpx.TimeoutException, httpx.TransportError) as exc:
-            whatsapp_failures_total.labels(operation="send", reason="unreachable").inc()
-            raise GatewayDown(f"gateway unreachable: {exc}") from exc
-
-        if response.status_code < 300:
-            return
-
-        reason = f"http_{response.status_code}"
-        whatsapp_failures_total.labels(operation="send", reason=reason).inc()
-        detail = response.text[:512]
-        if response.status_code in (502, 503, 504):
-            raise GatewayDown(f"gateway returned {reason}: {detail}")
-        if response.status_code == 429 or response.status_code >= 500:
-            raise RetryableHandlerError(f"gateway returned {reason}: {detail}")
-        # The gateway is up and refuses this specific send: the phone number or
-        # the body is wrong, and neither changes on the fourth attempt.
-        raise PermanentHandlerError(f"gateway rejected the send {reason}: {detail}")
 
 
 def _require_str(metadata: dict[str, Any], name: str) -> str:

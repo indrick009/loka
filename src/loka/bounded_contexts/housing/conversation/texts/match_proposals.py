@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import Option, RichReply
 from loka.bounded_contexts.housing.conversation.texts.listing_recap import (
     property_type_label,
 )
@@ -200,3 +201,9 @@ def _line(proposal: Mapping[str, Any], language: str, words: Mapping[str, str]) 
     if isinstance(rent, int) and not isinstance(rent, bool):
         parts.append(words["rent"].format(amount=f"{rent:,}".replace(",", " ")))
     return " - ".join(part for part in parts if part)
+
+
+def choose_button(number: int, language: str) -> dict[str, Any]:
+    """One « Choisir » button whose id is the number the tenant would type."""
+    title = "Choose" if language.startswith("en") else "Choisir"
+    return RichReply(options=(Option(str(number), f"{title} {number}"),)).to_dict()

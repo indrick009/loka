@@ -12,7 +12,17 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Index,
+    Integer,
+    SmallInteger,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -86,6 +96,30 @@ class ProviderComplaintRow(Base):
         # The queue, oldest first, optionally filtered by status.
         Index("ix_provider_complaints_queue", "status", "filed_at"),
     )
+
+
+class ComplaintReportRow(Base):
+    """A signalement written on WhatsApp by anyone: « faux bailleur », « arnaque »…
+
+    Not a :class:`ProviderComplaintRow`: no introduction is required, so it
+    starts ``verified = False`` and a person checks it before anything is done.
+    Kept when the user erases their history: others may rely on it.
+    """
+
+    __tablename__ = "complaint_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    reference: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    account: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    media_keys: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    verified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="OPEN")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class ProviderStandingRow(Base):

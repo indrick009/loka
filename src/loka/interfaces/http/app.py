@@ -23,6 +23,7 @@ from loka.interfaces.http.routers import payments as payments_router
 from loka.interfaces.http.routers import properties as properties_router
 from loka.interfaces.http.routers import reports as reports_router
 from loka.interfaces.http.routers import whatsapp as whatsapp_router
+from loka.interfaces.http.routers import whatsapp_cloud as whatsapp_cloud_router
 from loka.shared.application.context import (
     new_id,
     reset_request_id,
@@ -169,6 +170,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(found_router.router)
     app.include_router(agencies_router.router)
     app.include_router(whatsapp_router.router)
+    app.include_router(whatsapp_cloud_router.router)
 
     @app.get("/", include_in_schema=False)
     async def root() -> PlainTextResponse:

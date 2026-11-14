@@ -13,6 +13,7 @@ transient and must be retried.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import Callable
 from contextlib import AsyncExitStack
@@ -20,14 +21,24 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from redis.asyncio import Redis
+from sqlalchemy import select
 
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
     AnalysisReport,
 )
+from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds import (
+    RedisConversationHolds,
+)
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     analyse_conversation_message_use_case,
 )
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
+    InboundMessageRow,
+)
+from loka.interfaces.worker.complaint_desk import ComplaintDesk
+from loka.interfaces.worker.privacy_desk import PrivacyDesk
+from loka.interfaces.worker.whatsapp_channels import channel_for
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
     PermanentHandlerError,
@@ -36,6 +47,7 @@ from loka.shared.infrastructure.broker.consumer import (
 from loka.shared.infrastructure.broker.topology import Broker, QueueSpec
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
+from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.redis_client import (
@@ -116,9 +128,31 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._database = database
         self._settings = settings
         self._lock_factory = lock_factory or redis_lock_factory(settings)
+        redis = Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=3,
+            socket_timeout=3,
+        )
+        self._holds = RedisConversationHolds(redis)
+        self._privacy = PrivacyDesk(database, redis, settings)
+        self._complaints = ComplaintDesk(database, redis, settings)
+        self._channel = channel_for(settings)
+
+    async def stop(self) -> None:
+        await super().stop()
+        await self._channel.aclose()
 
     async def handle(self, payload: dict[str, Any]) -> None:
         message_id, session_id = parse_analysis_payload(payload)
+        hold = await self._holds.get(session_id)
+        if hold is not None:
+            # Stored already; answered when a person releases the thread (see
+            # ``interfaces/worker/stuck_guard``).
+            await self._holds.note_pending(hold, message_id)
+            journal("held", hold.phone, message_id=str(message_id), signal=hold.signal)
+            _logger.info("message_held", session_id=str(session_id))
+            return
         # One turn at a time per conversation. Two messages sent seconds apart
         # otherwise race on the session's optimistic lock, and the loser rolls
         # back a transaction that had already staged the user's reply — which is
@@ -152,6 +186,13 @@ class ConversationAnalysisConsumer(ConsumerBase):
                 raise RetryableHandlerError(
                     f"conversation {session_id} is still being analysed"
                 ) from exc
+            # The welcome, the privacy summary and the erasure come before any model.
+            if await self._privacy.handle(message_id, session_id):
+                return
+            # A complaint, from anyone, goes to a person before any model.
+            if await self._complaints.handle(message_id, session_id):
+                return
+            await self._show_typing(message_id)
             report = await self._analyse(message_id, session_id)
         _logger.info(
             "conversation_message_analysed",
@@ -167,6 +208,26 @@ class ConversationAnalysisConsumer(ConsumerBase):
             rejected_facts=sorted(report.rejected_facts),
             cost_usd=str(report.cost_usd),
         )
+
+    async def _show_typing(self, message_id: uuid.UUID) -> None:
+        """« écrit… » while the turn is read: the user sees idia is on it.
+
+        A courtesy, bounded to two seconds and never a reason to delay or fail
+        the answer itself.
+        """
+        try:
+            async with unit_of_work(self._database) as uow:
+                query = select(
+                    InboundMessageRow.sender_phone, InboundMessageRow.external_message_id
+                ).where(InboundMessageRow.id == message_id)
+                row = (await uow.session.execute(query)).first()
+            if row is not None:
+                await asyncio.wait_for(
+                    self._channel.typing(to=row.sender_phone, message_id=row.external_message_id),
+                    timeout=2,
+                )
+        except Exception as exc:  # see the docstring
+            _logger.info("typing_not_shown", error=type(exc).__name__)
 
     async def _analyse(
         self, message_id: uuid.UUID, session_id: uuid.UUID

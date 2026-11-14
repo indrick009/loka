@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import BaseModel, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -121,12 +122,47 @@ class AISettings(BaseModel):
         }
 
 
+class WhatsAppCloudSettings(BaseModel):
+    """Meta's official WhatsApp Cloud API, used when ``provider`` is ``cloud``.
+
+    ``verify_token`` answers Meta's webhook check; ``app_secret`` verifies the
+    ``X-Hub-Signature-256`` of every delivery.
+    """
+
+    graph_url: str = "https://graph.facebook.com"
+    api_version: str = "v21.0"
+    phone_number_id: str = ""
+    access_token: SecretStr = SecretStr("")
+    app_secret: SecretStr = SecretStr("")
+    verify_token: SecretStr = SecretStr("")
+
+
 class WhatsAppSettings(BaseModel):
+    # ``baileys`` for the tests today; ``cloud`` once the official API is set up
+    # (see ``interfaces/worker/whatsapp_channels``).
+    provider: Literal["baileys", "cloud"] = "baileys"
+    cloud: WhatsAppCloudSettings = Field(default_factory=WhatsAppCloudSettings)
     gateway_url: str = "http://localhost:3000"
     api_key: SecretStr = SecretStr("")
     request_timeout_seconds: float = 10.0
     session_name: str = "loka-main"
     max_outbound_per_minute: int = 120
+    # A reply that repeats itself is held back and a person is alerted (see
+    # ``interfaces/worker/stuck_guard``). The alert goes to these numbers,
+    # comma-separated, in E.164; none means the journal and the logs only.
+    stuck_guard_enabled: bool = True
+    alert_phones: str = ""
+
+
+class PrivacySettings(BaseModel):
+    """What the first message and the privacy answer tell the user.
+
+    ``policy_url`` is the hosted privacy policy; empty, the user is told to
+    write « confidentialité » to read its summary on WhatsApp instead.
+    """
+
+    contact_email: str = "indrick.kamdem@gmail.com"
+    policy_url: str = ""
 
 
 class FapshiSettings(BaseModel):
@@ -234,6 +270,7 @@ class Settings(BaseSettings):
     object_storage: ObjectStorageSettings = Field(default_factory=ObjectStorageSettings)
     ai: AISettings = Field(default_factory=AISettings)
     whatsapp: WhatsAppSettings = Field(default_factory=WhatsAppSettings)
+    privacy: PrivacySettings = Field(default_factory=PrivacySettings)
     payment: PaymentSettings = Field(default_factory=PaymentSettings)
     fraud: FraudSettings = Field(default_factory=FraudSettings)
     reviews: ReviewsSettings = Field(default_factory=ReviewsSettings)

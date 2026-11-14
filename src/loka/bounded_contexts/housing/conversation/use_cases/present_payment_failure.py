@@ -25,6 +25,7 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
 )
 from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
     PAYMENT_QUESTION_KEY,
+    payment_choices,
     unlock_text,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
@@ -86,6 +87,7 @@ class PresentPaymentFailureUseCase:
                     text=unlock_text("failed", session.language, phone=session.phone.e164),
                     intent="PAYMENT_FAILED",
                     language=session.language,
+                    rich=payment_choices(session.language),
                 )
             ],
             correlation_id=correlation_id,

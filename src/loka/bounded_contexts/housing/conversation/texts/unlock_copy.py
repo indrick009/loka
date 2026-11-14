@@ -14,6 +14,13 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
 
+from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import (
+    ContactCard,
+    Option,
+    Place,
+    RichReply,
+)
+
 # Kept on the tenant's session while the unlock is under way: which listing,
 # whose contact, and the number the withdrawal goes to. The underscore keeps it
 # out of every prompt.
@@ -185,3 +192,29 @@ def contact_text(
         lines.append(words["map"].format(lat=point["latitude"], lon=point["longitude"]))
     lines.append(words["contact_end"])
     return "\n".join(lines)
+
+
+def payment_choices(language: str) -> dict[str, Any]:
+    """« Oui, payer » / « Non, annuler » as buttons where the channel has them.
+
+    The ids are the words the answer reader already understands.
+    """
+    if language.startswith("en"):
+        options = (Option("YES", "Yes, pay"), Option("NO", "No, cancel"))
+    else:
+        options = (Option("OUI", "Oui, payer"), Option("NON", "Non, annuler"))
+    return RichReply(options=options).to_dict()
+
+
+def contact_extras(
+    *, landlord_phone: str, lodging: str, point: Mapping[str, float] | None, language: str
+) -> dict[str, Any]:
+    """The landlord as a contact card to save, and the lodging as a map pin."""
+    who = "Owner" if language.startswith("en") else "Propriétaire"
+    place = (
+        Place(float(point["latitude"]), float(point["longitude"]), name=lodging)
+        if point is not None
+        else None
+    )
+    card = ContactCard(f"{who} · {lodging}"[:60], landlord_phone)
+    return RichReply(contact=card, place=place).to_dict()

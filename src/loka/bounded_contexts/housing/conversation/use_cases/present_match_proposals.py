@@ -39,6 +39,7 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
 )
 from loka.bounded_contexts.housing.conversation.texts.match_proposals import (
     SHOWN_LISTINGS_KEY,
+    choose_button,
     match_proposal_caption,
     match_proposal_line,
     match_proposals_text,
@@ -182,6 +183,11 @@ class PresentMatchProposalsUseCase:
                             language=session.language,
                         ),
                         media_object_key=key,
+                        # The last photo of a lodging carries its « Choisir »
+                        # button where the channel has buttons: the card of the ads.
+                        rich=choose_button(number, session.language)
+                        if index == len(keys)
+                        else None,
                         intent="DEMAND_MATCHED_PHOTO",
                         language=session.language,
                         # Staged together, these used to race: a photo reached

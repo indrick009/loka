@@ -108,6 +108,7 @@ class SessionWriter:
                     answering=answering or None,
                     media_burst_of=media_burst_of,
                     media_object_key=media_object_key,
+                    turn_reply=True,
                     # Long enough for the rest of an album to arrive: only the
                     # last photo of a burst is answered (see the outbound layer).
                     not_before=(

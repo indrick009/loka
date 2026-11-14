@@ -46,6 +46,7 @@ from loka.bounded_contexts.housing.conversation.texts.negotiation_copy import (
 from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
     PAYMENT_QUESTION_KEY,
     UNLOCK_KEY,
+    payment_choices,
     unlock_text,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
@@ -142,6 +143,7 @@ class HandleAvailabilityAnswerUseCase:
             intent="UNLOCK_OFFER",
             correlation_id=correlation_id,
             now=now,
+            rich=payment_choices(session.language),
         )
         await self._uow.commit()
         self._logger.info("unlock_offer_sent", session_id=str(session.id))
@@ -178,6 +180,7 @@ class HandleAvailabilityAnswerUseCase:
         intent: str,
         correlation_id: str,
         now: datetime,
+        rich: dict[str, Any] | None = None,
     ) -> None:
         self._uow.events.stage(
             [
@@ -193,6 +196,7 @@ class HandleAvailabilityAnswerUseCase:
                     text=text,
                     intent=intent,
                     language=session.language,
+                    rich=rich,
                 )
             ],
             correlation_id=correlation_id,

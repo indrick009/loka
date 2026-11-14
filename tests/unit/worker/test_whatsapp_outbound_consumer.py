@@ -85,7 +85,7 @@ def build(
     limiter = _RateLimiter(allowed)
     consumer._rate_limiter = limiter  # type: ignore[attr-defined]
     if handler is not None:
-        consumer._client = httpx.AsyncClient(  # type: ignore[attr-defined]
+        consumer._channel._client = httpx.AsyncClient(  # type: ignore[attr-defined]
             transport=httpx.MockTransport(handler),
             base_url=settings.whatsapp.gateway_url,
             headers={"X-Api-Key": settings.whatsapp.api_key.get_secret_value()}
@@ -360,7 +360,7 @@ def test_the_gateway_url_is_stripped_of_a_trailing_slash() -> None:
 
     # Stored canonical, so the base URL that ends up in logs and in httpx is
     # the one that was configured rather than a normalised surprise.
-    assert consumer._gateway_url == "http://baileys:3000"  # type: ignore[attr-defined]
+    assert str(consumer._channel._client.base_url) == "http://baileys:3000"  # type: ignore[attr-defined]
 
 
 class _RefusingLock:

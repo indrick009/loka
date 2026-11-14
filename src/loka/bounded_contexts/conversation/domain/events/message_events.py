@@ -116,6 +116,12 @@ class WhatsAppMessageSendRequested(DomainEvent):
     answering: str | None = None
     not_before: datetime | None = None
     media_burst_of: uuid.UUID | None = None
+    # The answer to a turn of the conversation, as opposed to a notice the
+    # platform sends on its own: only those can show a thread going in circles.
+    turn_reply: bool = False
+    # What the reply shows beyond its words: buttons, a contact card, a map pin
+    # (``value_objects/rich_reply.RichReply.to_dict``). The text stands alone.
+    rich: dict[str, Any] | None = None
 
     def to_payload(self) -> dict[str, Any]:
         payload = DomainEvent.to_payload(self)
@@ -125,6 +131,8 @@ class WhatsAppMessageSendRequested(DomainEvent):
             "answering": self.answering,
             "not_before": self.not_before.isoformat() if self.not_before else None,
             "media_burst_of": str(self.media_burst_of) if self.media_burst_of else None,
+            "turn_reply": self.turn_reply,
+            "rich": self.rich,
             "recipient_phone": self.recipient_phone,
             "reply_kind": self.reply_kind,
             "question_key": self.question_key,

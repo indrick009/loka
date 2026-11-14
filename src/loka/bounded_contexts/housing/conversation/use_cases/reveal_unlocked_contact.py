@@ -34,6 +34,7 @@ from loka.bounded_contexts.conversation.domain.repositories.conversation_session
 )
 from loka.bounded_contexts.housing.conversation.texts.unlock_copy import (
     UNLOCK_KEY,
+    contact_extras,
     contact_text,
 )
 from loka.shared.application.unit_of_work import UnitOfWork
@@ -112,6 +113,13 @@ class RevealUnlockedContactUseCase:
                     ),
                     intent="CONTACT_UNLOCKED",
                     language=session.language,
+                    # A card to save and a pin to open, after the sentence.
+                    rich=contact_extras(
+                        landlord_phone=contact.landlord_phone,
+                        lodging=contact.lodging,
+                        point=contact.point,
+                        language=session.language,
+                    ),
                 )
             ],
             correlation_id=correlation_id,

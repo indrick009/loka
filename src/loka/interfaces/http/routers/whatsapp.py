@@ -130,6 +130,11 @@ async def receive_gateway_event(
 ) -> dict[str, Any]:
     container = get_container(request)
     _authorise(container.settings.whatsapp.api_key.get_secret_value(), x_api_key)
+    return await admit(container, body)
+
+
+async def admit(container: Any, body: GatewayMessage) -> dict[str, Any]:
+    """Put one authenticated delivery on ``whatsapp.incoming``, whatever channel brought it."""
     broker = container.broker
     if broker is None:
         raise ExternalServiceUnavailable(

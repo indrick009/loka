@@ -60,6 +60,7 @@ from loka.bounded_contexts.payment.infrastructure.persistence.models import (
 )
 from loka.bounded_contexts.payment.infrastructure.unlock_store import ContactUnlockRow
 from loka.bounded_contexts.reviews_complaints.infrastructure.persistence.models import (
+    ComplaintReportRow,
     ProviderComplaintRow,
     ProviderReviewRow,
     ProviderStandingRow,
@@ -77,6 +78,7 @@ __all__ = [
     "BookingAgencyRow",
     "BookingLineRow",
     "BookingReservationRow",
+    "ComplaintReportRow",
     "ContactUnlockRow",
     "ConversationMetricsRow",
     "ConversationSessionRow",

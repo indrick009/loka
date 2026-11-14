@@ -579,7 +579,7 @@ app.get('/qr', async (_req, res) => {
 });
 
 app.post('/send', async (req, res) => {
-  const { to, text, image, caption, location } = req.body || {};
+  const { to, text, image, caption, location, contact } = req.body || {};
   if (!to) {
     res.status(400).json({ error: 'to is required' });
     return;
@@ -587,20 +587,19 @@ app.post('/send', async (req, res) => {
   // D3's outbound half: this accepted only {to, text}, so the platform could
   // never answer with a listing photo or with the lodging's position — which
   // is the thing the 1 000 FCFA unlock pays for.
-  const content = outboundContent({ text, image, caption, location });
+  const content = outboundContent({ text, image, caption, location, contact });
   if (!content) {
-    res.status(400).json({ error: 'one of text, image or location is required' });
+    res.status(400).json({ error: 'one of text, image, location or contact is required' });
     return;
   }
   if (!gateway.connected || !gateway.sock) {
     res.status(503).json({ error: 'whatsapp is not connected' });
     return;
   }
-  const digits = digitsOf(to);
-  const jid = String(to).includes('@')
-    ? String(to)
-    : lidByPhone.get(digits) || `${digits}@s.whatsapp.net`;
+  const jid = jidOf(to);
   try {
+    // « écrit… » ends with the message it announced.
+    gateway.sock.sendPresenceUpdate('paused', jid).catch(() => {});
     const sent = await gateway.sock.sendMessage(jid, content);
     rememberForRetry(sent);
     res.status(200).json({ ok: true, id: sent.key.id });
@@ -619,15 +618,28 @@ app.post('/send', async (req, res) => {
  * accepted because the caller knows which it has and this transport should not
  * make it fetch its own object twice.
  */
-function outboundContent({ text, image, caption, location }) {
+function outboundContent({ text, image, caption, location, contact }) {
   if (location && Number.isFinite(Number(location.latitude))) {
     return {
       location: {
         degreesLatitude: Number(location.latitude),
         degreesLongitude: Number(location.longitude),
         name: location.label ? String(location.label) : undefined,
+        address: location.address ? String(location.address) : undefined,
       },
     };
+  }
+  if (contact && contact.phone) {
+    // A contact card the user saves in one tap: the vCard WhatsApp shows with
+    // « Message » and « Enregistrer ». waid makes the card open the chat.
+    const name = String(contact.name || contact.phone).replace(/[\r\n;]/g, ' ');
+    const digits = digitsOf(contact.phone);
+    const vcard =
+      'BEGIN:VCARD\nVERSION:3.0\n' +
+      `FN:${name}\n` +
+      `TEL;type=CELL;type=VOICE;waid=${digits}:+${digits}\n` +
+      'END:VCARD';
+    return { contacts: { displayName: name, contacts: [{ vcard }] } };
   }
   if (typeof image === 'string' && image.trim()) {
     const body = /^https?:\/\//i.test(image)
@@ -640,6 +652,31 @@ function outboundContent({ text, image, caption, location }) {
   }
   return null;
 }
+
+function jidOf(to) {
+  const digits = digitsOf(to);
+  return String(to).includes('@')
+    ? String(to)
+    : lidByPhone.get(digits) || `${digits}@s.whatsapp.net`;
+}
+
+// « écrit… » while the platform prepares the reply. Best effort: WhatsApp
+// clears it by itself after a while, and the next /send clears it at once.
+app.post('/typing', async (req, res) => {
+  const { to } = req.body || {};
+  if (!to || !gateway.connected || !gateway.sock) {
+    res.status(202).json({ ok: false });
+    return;
+  }
+  try {
+    const jid = jidOf(to);
+    await gateway.sock.presenceSubscribe(jid).catch(() => {});
+    await gateway.sock.sendPresenceUpdate('composing', jid);
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    res.status(202).json({ ok: false, error: error.message });
+  }
+});
 
 app.post('/logout', async (_req, res) => {
   try {
