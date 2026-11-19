@@ -19,6 +19,7 @@ from loka.bounded_contexts.housing.application.use_cases.follow_up_tenant_demand
     FollowUpTenantDemandsUseCase,
 )
 from loka.shared.infrastructure.composition import unit_of_work
+from loka.shared.infrastructure.conversation_log import prune
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.logging import get_logger
 
@@ -36,4 +37,11 @@ async def sweep_forever(database: Database, *, interval: float = SWEEP_INTERVAL_
             raise
         except Exception as exc:  # pragma: no cover - resilience path
             _logger.exception("demand_follow_up_failed", error=str(exc))
+        # The same hourly beat drops journal lines past their retention.
+        try:
+            dropped = await asyncio.to_thread(prune)
+            if dropped:
+                _logger.info("conversation_log_pruned", lines=dropped)
+        except Exception as exc:  # pragma: no cover - resilience path
+            _logger.warning("conversation_log_prune_failed", error=type(exc).__name__)
         await asyncio.sleep(interval)

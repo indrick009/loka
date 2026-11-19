@@ -287,6 +287,7 @@ class Settings(BaseSettings):
     demo_reset_enabled: bool = False
     # Test phase: every conversation appended to this JSONL file. Empty: off.
     conversation_log_path: str = ""
+    conversation_log_retention_days: int = 30
 
     @property
     def is_production(self) -> bool:

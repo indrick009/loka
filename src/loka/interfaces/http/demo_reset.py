@@ -81,8 +81,19 @@ _BY_PHONE = (
 )
 
 
-def is_demo_reset(container: Container, message: str | None) -> bool:
-    return container.settings.demo_reset_enabled and (message or "").strip() == COMMAND
+def is_demo_reset(container: Container, message: str | None, sender: str = "") -> bool:
+    """The reset command, from one of the two test numbers only.
+
+    Typed by anyone else it is an ordinary message: a real user must never be
+    able to wipe anything, nor even learn the command exists.
+    """
+    digits = "".join(c for c in sender if c.isdigit())
+    from_tester = any(digits.endswith(phone[-9:]) for phone in TEST_PHONES)
+    return (
+        container.settings.demo_reset_enabled
+        and from_tester
+        and (message or "").strip() == COMMAND
+    )
 
 
 async def reset_everything(container: Container, phone: str) -> None:

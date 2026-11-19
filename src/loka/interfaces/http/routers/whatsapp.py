@@ -167,7 +167,7 @@ async def admit(container: Any, body: GatewayMessage) -> dict[str, Any]:
         media=body.media_object_key,
         location=body.location.model_dump() if body.location else None,
     )
-    if is_demo_reset(container, body.text):  # DEMO ONLY, see demo_reset.py
+    if is_demo_reset(container, body.text, body.sender_phone):  # DEMO ONLY, see demo_reset.py
         await reset_everything(container, body.sender_phone)
         return {"accepted": True, "external_message_id": body.external_message_id}
 
