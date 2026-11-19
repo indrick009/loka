@@ -25,14 +25,14 @@ def declared(language: str) -> str:
     if _fr(language):
         return (
             "Merci beaucoup ! Ta déclaration est enregistrée. Si son propriétaire le "
-            "cherche, il devra d'abord prouver qu'il est à lui, et l'équipe Kora "
+            "cherche, il devra d'abord prouver qu'il est à lui, et l'équipe idia "
             "vérifiera avant toute mise en relation. La restitution se fera dans un "
             "lieu public ou au commissariat, et aucun argent n'est dû entre vous. "
             "Tu peux envoyer d'autres photos si tu veux."
         )
     return (
         "Thank you! Your declaration is recorded. Its owner will have to prove it is "
-        "theirs, and the Kora team checks before anyone is put in touch. The "
+        "theirs, and the idia team checks before anyone is put in touch. The "
         "handover happens in a public place or at a police station, and no money is "
         "owed between you."
     )
@@ -69,10 +69,10 @@ def nothing_yet(language: str) -> str:
 def proof_received(language: str) -> str:
     if _fr(language):
         return (
-            "Preuve reçue, merci. Une personne de l'équipe Kora va la vérifier ; je "
+            "Preuve reçue, merci. Une personne de l'équipe idia va la vérifier ; je "
             "te préviens dès que c'est fait. Tu peux ajouter d'autres preuves."
         )
-    return "Proof received. A person from the Kora team will check it; I will let you know."
+    return "Proof received. A person from the idia team will check it; I will let you know."
 
 
 def too_many_searches(language: str) -> str:
@@ -84,7 +84,7 @@ def too_many_searches(language: str) -> str:
 def validated(language: str) -> str:
     if _fr(language):
         return (
-            "Bonne nouvelle : l'équipe Kora a validé que ce document est bien à toi. "
+            "Bonne nouvelle : l'équipe idia a validé que ce document est bien à toi. "
             "La mise en relation avec la personne qui l'a trouvé coûte 1 000 FCFA, "
             "seuls frais à payer : réponds PAYER (Mobile Money sur ce numéro), ou "
             "envoie le numéro à utiliser. "
@@ -92,7 +92,7 @@ def validated(language: str) -> str:
             "d'autre ne peut t'être demandé — signale-nous toute demande d'argent."
         )
     return (
-        "Good news: the Kora team validated that this document is yours. Being put "
+        "Good news: the idia team validated that this document is yours. Being put "
         "in touch with the finder costs 1,000 FCFA, the only fee; payment opens very "
         "soon. The handover happens in a public place or a police station."
     )
@@ -101,11 +101,11 @@ def validated(language: str) -> str:
 def refused(language: str) -> str:
     if _fr(language):
         return (
-            "L'équipe Kora n'a pas pu confirmer que ce document t'appartient. Si tu as "
+            "L'équipe idia n'a pas pu confirmer que ce document t'appartient. Si tu as "
             "d'autres preuves, tu peux les envoyer ici."
         )
     return (
-        "The Kora team could not confirm this document is yours. "
+        "The idia team could not confirm this document is yours. "
         "Send other proof if you have it."
     )
 

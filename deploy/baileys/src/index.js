@@ -598,8 +598,6 @@ app.post('/send', async (req, res) => {
   }
   const jid = jidOf(to);
   try {
-    // « écrit… » ends with the message it announced.
-    gateway.sock.sendPresenceUpdate('paused', jid).catch(() => {});
     const sent = await gateway.sock.sendMessage(jid, content);
     rememberForRetry(sent);
     res.status(200).json({ ok: true, id: sent.key.id });
@@ -659,24 +657,6 @@ function jidOf(to) {
     ? String(to)
     : lidByPhone.get(digits) || `${digits}@s.whatsapp.net`;
 }
-
-// « écrit… » while the platform prepares the reply. Best effort: WhatsApp
-// clears it by itself after a while, and the next /send clears it at once.
-app.post('/typing', async (req, res) => {
-  const { to } = req.body || {};
-  if (!to || !gateway.connected || !gateway.sock) {
-    res.status(202).json({ ok: false });
-    return;
-  }
-  try {
-    const jid = jidOf(to);
-    await gateway.sock.presenceSubscribe(jid).catch(() => {});
-    await gateway.sock.sendPresenceUpdate('composing', jid);
-    res.status(200).json({ ok: true });
-  } catch (error) {
-    res.status(202).json({ ok: false, error: error.message });
-  }
-});
 
 app.post('/logout', async (_req, res) => {
   try {

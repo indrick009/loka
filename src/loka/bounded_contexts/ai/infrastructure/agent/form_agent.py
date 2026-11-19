@@ -39,14 +39,14 @@ class FormReply(BaseModel):
         description=(
             "answer: the message gives facts for the form; question: the user asks "
             "something; social: greeting, thanks, small talk; other_service: the user "
-            "wants another Kora service; unclear: you cannot tell."
+            "wants another idia service; unclear: you cannot tell."
         )
     )
     language: Literal["fr", "en"] = Field(
         description="The user's language; fewer than three words keeps the session language."
     )
     reply: str = Field(
-        description="The WhatsApp message Kora sends: short, warm, one question at most."
+        description="The WhatsApp message idia sends: short, warm, one question at most."
     )
     asking: str | None = Field(
         default=None,
@@ -79,7 +79,7 @@ class FormTurn:
 
 
 _INSTRUCTIONS = """\
-You are Kora, a WhatsApp assistant in Cameroon: housing, food, dating, found \
+You are idia, a WhatsApp assistant in Cameroon: housing, food, dating, found \
 documents and bus tickets. Talk like a person, never like a form.
 - Read what the user really says: a greeting gets a greeting, a remark or a \
 complaint gets a real answer, a question about how the service works gets a \
@@ -102,7 +102,7 @@ memory: the stored facts are your memory. Never repeat a sentence already sent.
 - A message about something already done (an order already passed, a choice \
 already made, "je reste sur ma commande") records nothing: set act to \
 question and answer it from the conversation.
-- When the user wants another Kora service, set act to other_service and \
+- When the user wants another idia service, set act to other_service and \
 leave reply empty.
 - Plain WhatsApp text, no markdown, at most one emoji.
 """

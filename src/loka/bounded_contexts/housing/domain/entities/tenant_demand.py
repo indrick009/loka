@@ -1,6 +1,6 @@
-"""What a tenant is looking for, kept so Kora can come back to him.
+"""What a tenant is looking for, kept so idia can come back to him.
 
-Kora does not answer a search in the thread. It records the demand and says so
+idia does not answer a search in the thread. It records the demand and says so
 — "votre demande est enregistrée, si un logement correspond je reviens vers
 vous" — whether a lodging matches or not. That pause is the point: a direct
 match, a neighbouring area or a price a little above all need preparing, and
@@ -205,7 +205,7 @@ class TenantDemand(AggregateRoot):
     def mark_answered(
         self, *, now: datetime, proposals: Sequence[Mapping[str, Any]] = ()
     ) -> None:
-        """Kora came back to him, first or once more.
+        """idia came back to him, first or once more.
 
         ``proposals`` are the lodgings he is being sent, in the order he will
         read them: the event carries them so whoever writes the message shows

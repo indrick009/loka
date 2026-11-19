@@ -64,9 +64,9 @@ class UnlockContact:
             amount_xaf=UNLOCK_FEE_XAF,
             payer_phone=payer_phone,
             label=(
-                "Kora - questions supplementaires"
+                "idia - questions supplementaires"
                 if purpose == DATING_PLUS
-                else f"Kora - mise en relation {purpose.lower()}"
+                else f"idia - mise en relation {purpose.lower()}"
             ),
         )
         if reference is None:

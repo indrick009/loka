@@ -23,7 +23,7 @@ def card(title: str, subtitle: str = "") -> bytes:
     draw.text((400, 260), title, font=big, fill="white", anchor="mm")
     if subtitle:
         draw.text((400, 340), subtitle, font=small, fill="white", anchor="mm")
-    draw.text((400, 560), "KORA — DÉMO", font=small, fill=(255, 255, 255), anchor="mm")
+    draw.text((400, 560), "IDIA — DÉMO", font=small, fill=(255, 255, 255), anchor="mm")
     out = io.BytesIO()
     image.save(out, format="JPEG", quality=80)
     return out.getvalue()

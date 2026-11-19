@@ -89,7 +89,7 @@ class TenantSearch:
     ) -> tuple[str | None, FlowStep | None]:
         """Take the tenant's search and promise nothing.
 
-        Kora does not answer a search in the thread. It records the demand and
+        idia does not answer a search in the thread. It records the demand and
         says so — whether a lodging matches or not — because a direct match, a
         neighbouring area or a price a little above all need preparing, and
         §8's negotiation with a landlord cannot happen in the time a reply
@@ -184,7 +184,7 @@ class TenantSearch:
 
         This is the step the thread used to die on: the list was printed, the
         number was asked for, the answer was understood — and nothing consumed
-        it. Kora says nothing about a reservation and promises no visit, only
+        it. idia says nothing about a reservation and promises no visit, only
         that the landlord is being asked, because that is the only thing that
         actually happens (housing spec §9).
 

@@ -54,7 +54,7 @@ _logger = get_logger(__name__)
 
 
 # A message shorter than this does not change the thread's language: after
-# « i don't heart french », « cameroun/yaounde » switched Kora back to French
+# « i don't heart french », « cameroun/yaounde » switched idia back to French
 # (journal of 5 Nov 2026).
 MIN_WORDS_TO_SWITCH = 3
 
@@ -173,7 +173,7 @@ class ModelLane:
         reply_text: str | None = result.reply
         if reply_text and parrots(reply_text, thread):
             # Observed with « Taximan tu es trop crue »: the model sent back
-            # Kora's previous sentence word for word, then asked again.
+            # idia's previous sentence word for word, then asked again.
             reply_text = None
         plugged = spec_for(target_flow(session, verdict.intent)) is not None
         if not plugged and not inline_reply_fits(

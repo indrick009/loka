@@ -313,7 +313,7 @@ _PREMIUM_NEIGHBOURHOODS = frozenset(
 
 
 def _canonical(city: str) -> str:
-    """Kora's own spelling of a city the national index names (« Buéa » → « Buea »)."""
+    """idia's own spelling of a city the national index names (« Buéa » → « Buea »)."""
     return CITY_ALIASES.get(normalize(city), city)
 
 

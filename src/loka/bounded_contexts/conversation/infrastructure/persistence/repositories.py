@@ -42,7 +42,7 @@ _EXCHANGE_CHARS = 280
 class SqlAlchemyConversationExchanges:
     """The last lines of a thread, both sides, read from what was stored.
 
-    Kora's side is what the outbound layer actually sent — templates included —
+    idia's side is what the outbound layer actually sent — templates included —
     so the model sees the sentence the user read, not the key it came from.
     """
 
@@ -63,7 +63,7 @@ class SqlAlchemyConversationExchanges:
         if excluding is not None:
             inbound = inbound.where(InboundMessageRow.id != excluding)
         outbound = select(
-            literal("kora").label("speaker"),
+            literal("idia").label("speaker"),
             OutboundMessageRow.text.label("text"),
             OutboundMessageRow.queued_at.label("at"),
         ).where(

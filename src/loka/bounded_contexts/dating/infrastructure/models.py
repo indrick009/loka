@@ -46,7 +46,7 @@ class DatingAnswerRow(Base):
 
 
 class DatingTalkRow(Base):
-    """Two members asking each other questions through Kora before confirming."""
+    """Two members asking each other questions through idia before confirming."""
 
     __tablename__ = "dating_talks"
 

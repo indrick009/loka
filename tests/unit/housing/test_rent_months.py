@@ -15,10 +15,10 @@ Zero is a real answer: "aucune caution" is ordinary. That is why this is not a
 **Quantity.** A landlord with two identical studios publishes one listing with
 quantity two. It decides what "is it still available?" even means: "are any
 left?" rather than "is it gone?". And it only ever decreases when the landlord
-says so — Kora leaves the relationship at the introduction, so it cannot know
+says so — idia leaves the relationship at the introduction, so it cannot know
 whether a lease was signed. Only he knows.
 
-See ``conception_metier/kora-housing-v1.md`` §4, §5 and §9.
+See ``conception_metier/idia-housing-v1.md`` §4, §5 and §9.
 """
 
 from __future__ import annotations

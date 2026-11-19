@@ -10,7 +10,7 @@ The standing is recomputed from the complaints table rather than incremented,
 so a retry or two concurrent complaints cannot inflate the tally and hide a
 provider on complaints that were never filed.
 
-What this use case does **not** do is sanction anybody. Past the threshold Kora
+What this use case does **not** do is sanction anybody. Past the threshold idia
 hides the provider and stops there (§6); the ban, if there is one, is decided by
 a human in :mod:`decide_complaint`.
 """
@@ -107,7 +107,7 @@ class FileComplaintUseCase:
             offer=offer,
         ):
             raise NoStandingToSpeak(
-                "Kora did not introduce this user to this provider",
+                "idia did not introduce this user to this provider",
                 context={
                     "domain": command.domain.value,
                     "introduction_id": str(command.introduction_id),

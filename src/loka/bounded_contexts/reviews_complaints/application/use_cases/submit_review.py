@@ -3,7 +3,7 @@
 Two gates, both from §7, and they are the only reason this use case is not a
 single insert.
 
-The author must have been introduced to the provider by Kora, and one
+The author must have been introduced to the provider by idia, and one
 introduction may leave one mark. Drop either gate and the ranking signal
 becomes a lever: a landlord rates his own three lodgings five times each and
 outranks everybody, at a cost of nothing, because nobody is ever shown the
@@ -100,7 +100,7 @@ class SubmitReviewUseCase:
             offer=offer,
         ):
             raise NoStandingToSpeak(
-                "Kora did not introduce this user to this provider",
+                "idia did not introduce this user to this provider",
                 context={
                     "domain": command.domain.value,
                     "introduction_id": str(command.introduction_id),

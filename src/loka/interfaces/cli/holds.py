@@ -2,7 +2,7 @@
 
 A conversation is held when a reply showed it going round in circles (see
 ``interfaces/worker/stuck_guard``): the user was told an answer is coming and
-Kora stopped answering. Once the defect is understood — the journal has the
+idia stopped answering. Once the defect is understood — the journal has the
 ``incident`` line — and fixed:
 
     python -m loka.interfaces.cli.holds list
@@ -110,10 +110,16 @@ async def run(settings: Settings, args: argparse.Namespace) -> None:
     held = await holds.all()
     if args.command == "list":
         for hold in held:
-            print(f"{hold.phone}  {hold.signal}  since {hold.since}  {hold.pending_message_id}")
+            print(f"{hold.incident or '-'}  {hold.phone}  {hold.signal}  since {hold.since}")
+            print(f"    withheld: {hold.withheld}")
+            if hold.note:
+                print(f"    note: {hold.note}")
         print(f"{len(held)} conversation(s) held")
         return
-    found = next((h for h in held if h.phone.lstrip("+") == args.phone.lstrip("+")), None)
+    wanted = args.phone.lstrip("+").upper()
+    found = next(
+        (h for h in held if wanted in (h.phone.lstrip("+"), h.incident.upper())), None
+    )
     if found is None:
         raise SystemExit(f"no held conversation for {args.phone}")
     database = Database(settings.database, application_name="loka-holds")
@@ -143,8 +149,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Conversations held for a person.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("list", help="the conversations currently held")
-    release = commands.add_parser("release", help="let Kora answer this conversation again")
-    release.add_argument("phone", help="the user's number, as printed by list")
+    release = commands.add_parser("release", help="let idia answer this conversation again")
+    release.add_argument("phone", help="the user's number or the incident, as printed by list")
     release.add_argument("--retry", action="store_true", help="read the withheld turn again")
     release.add_argument("--say", help="send this sentence instead of replaying a message")
     asyncio.run(run(get_settings(), parser.parse_args(argv)))

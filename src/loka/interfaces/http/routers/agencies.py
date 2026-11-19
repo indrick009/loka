@@ -2,7 +2,7 @@
 
 An agency signs in with its WhatsApp number and the access key it was given at
 registration (also sent to it on WhatsApp when that number has written to
-Kora). Only the key's digest is stored.
+idia). Only the key's digest is stored.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ async def register(body: Registration, request: Request) -> dict[str, str]:
         desk = ConversationDesk(uow, uow.repository(CONVERSATION_SESSION_REPOSITORY))
         await desk.notify_phone(
             phone,
-            f"Bienvenue sur Kora Booking, {agency.name} ! Votre clé d'accès au tableau de "
+            f"Bienvenue sur idia Booking, {agency.name} ! Votre clé d'accès au tableau de "
             f"bord : {key}. Gardez-la, elle ne sera plus affichée.",
             now=now,
         )

@@ -1,6 +1,6 @@
-"""Record what a tenant is looking for, so Kora can come back to him.
+"""Record what a tenant is looking for, so idia can come back to him.
 
-Kora answers no search in the thread. It takes the demand, acknowledges it, and
+idia answers no search in the thread. It takes the demand, acknowledges it, and
 replies in a later message once there is something worth sending — a direct
 match, a neighbouring area, a price a little above, or the outcome of a §8
 negotiation with a landlord. None of that fits in the two seconds a reply takes.

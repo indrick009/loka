@@ -1,4 +1,4 @@
-"""The model the agent talks to, reached through the OpenRouter key Kora already has."""
+"""The model the agent talks to, reached through the OpenRouter key idia already has."""
 
 from __future__ import annotations
 
@@ -20,5 +20,5 @@ def openrouter_model(settings: AISettings, model_name: str | None = None) -> Ope
         raise RuntimeError("AI__API_KEY is empty: the agent needs an OpenRouter key")
     return OpenAIChatModel(
         model_name or settings.default_model,
-        provider=OpenRouterProvider(api_key=api_key, app_title="Kora"),
+        provider=OpenRouterProvider(api_key=api_key, app_title="idia"),
     )

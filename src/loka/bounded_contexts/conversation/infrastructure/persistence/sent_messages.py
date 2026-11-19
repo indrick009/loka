@@ -1,8 +1,8 @@
-"""What Kora actually sent, one row per delivered message.
+"""What idia actually sent, one row per delivered message.
 
 The outbound layer renders the final sentence — a template, a model's text or
 its rewrite — so it is the only place that knows the words the user read. Kept
-because a conversation needs both sides: without Kora's lines the model could
+because a conversation needs both sides: without idia's lines the model could
 not tell what "le premier là" or "comme tu as dit" points at.
 """
 

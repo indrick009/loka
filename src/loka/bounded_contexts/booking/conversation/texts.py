@@ -9,6 +9,7 @@ from typing import Any
 from loka.bounded_contexts.booking.domain.line import DOUALA
 from loka.bounded_contexts.booking.domain.reservation import Reservation
 from loka.bounded_contexts.conversation.application.plugs.forms import xaf
+from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 
 
 def when(moment: datetime) -> str:
@@ -103,14 +104,15 @@ def ticket(reservation: Reservation, agency: str, origin: str, destination: str)
         f"Départ : {when(reservation.departs_at)}\n"
         f"Place(s) : {seats}\nVoyageur(s) : {travellers}\n"
         f"Payé : {xaf(reservation.amount_xaf)}\n"
-        "Présente cette référence et ta CNI au guichet au moins 30 minutes avant le départ."
+        "Présente cette référence et ta CNI au guichet au moins 30 minutes avant le départ.\n"
+        f"{report_hint('fr')}"
     )
 
 
 def to_agency(reservation: Reservation, origin: str, destination: str) -> str:
     seats = ", ".join(map(str, reservation.seats))
     return (
-        f"Nouvelle réservation Kora {reservation.reference} : {origin} → {destination}, "
+        f"Nouvelle réservation idia {reservation.reference} : {origin} → {destination}, "
         f"départ le {when(reservation.departs_at)}, place(s) {seats}, "
         f"{', '.join(reservation.passengers)}. Payé : {xaf(reservation.amount_xaf)}."
     )

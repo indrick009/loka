@@ -1,12 +1,12 @@
-"""Whether Kora still puts a provider forward, and who decided that.
+"""Whether idia still puts a provider forward, and who decided that.
 
 This is the one aggregate that can cost a provider his income, so §6 is written
 into its transitions rather than into the use case that calls them.
 
-**Kora never bans on her own.** ``ban`` and ``reinstate`` take a reviewer id
+**idia never bans on her own.** ``ban`` and ``reinstate`` take a reviewer id
 because a ban is a human's decision with a human's name on it. Banning a
 landlord on unverified complaints would cut off his revenue on the word of
-people Kora cannot cross-examine; a competitor or a tenant acting in bad faith
+people idia cannot cross-examine; a competitor or a tenant acting in bad faith
 would take down an honest landlord with a handful of complaints and nobody
 would catch it.
 
@@ -146,7 +146,7 @@ class ProviderStanding(AggregateRoot):
     def reinstate(self, *, decided_by: uuid.UUID, note: str, now: datetime) -> None:
         """A human clears the provider, from a hide or from a ban.
 
-        Needed as much as the ban: the threshold hides on complaints Kora could
+        Needed as much as the ban: the threshold hides on complaints idia could
         not verify, so the honest provider caught by three bad-faith complaints
         has to have a way back that does not wait for them to expire.
         """

@@ -1,6 +1,6 @@
 """Ports this context depends on.
 
-Only one, and it points at the four business domains: Kora has to know whether
+Only one, and it points at the four business domains: idia has to know whether
 she really introduced this person to this provider before accepting a word
 about him. Declared here because the rule — standing follows the introduction
 (§7) — belongs to this context; *what* an introduction is belongs to Housing,
@@ -25,7 +25,7 @@ from loka.bounded_contexts.reviews_complaints.domain.value_objects.provider impo
 
 @runtime_checkable
 class IntroductionDirectory(Protocol):
-    """Did Kora put this user in touch with this provider, over this offer?
+    """Did idia put this user in touch with this provider, over this offer?
 
     One boolean, which is the whole of what this context is allowed to learn
     about a domain's records. It must answer False when it cannot tell: an

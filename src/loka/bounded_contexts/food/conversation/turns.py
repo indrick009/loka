@@ -10,7 +10,7 @@ from typing import Any
 
 from loka.bounded_contexts.conversation.application.plugs.forms import (
     ask_field,
-    chosen,
+    chosen_all,
     say,
     stored,
     xaf,
@@ -192,14 +192,16 @@ class FoodTurns:
             and offered
             and not turn.facts.get("dish")
         ):
-            pick = chosen(turn)
-            if pick is None or not 1 <= pick <= len(offered):
+            picks = chosen_all(turn)
+            if not picks or not all(1 <= pick <= len(offered) for pick in picks):
                 return say(
                     texts.pick_a_number(len(offered), lang),
                     question=FOOD.question_key("choice"),
                     step=FlowStep.COLLECT_CHOICE,
                 )
-            return await self._request(turn, desk, client, offered[pick - 1])
+            # « 1 et 2 »: every dish picked is passed on (journal of 16 Nov
+            # 2026, 09:20: only the Poulet DG was).
+            return await self._request(turn, desk, client, [offered[p - 1] for p in picks])
         known = turn.known
         if not known.get("place"):
             return await self._ask(turn, desk, "place")
@@ -317,36 +319,41 @@ class FoodTurns:
         return varied[:MAX_OFFERS]
 
     async def _request(
-        self, turn: PlugTurn, desk: PlugDesk, client: uuid.UUID, offer: dict[str, Any]
+        self, turn: PlugTurn, desk: PlugDesk, client: uuid.UUID, offers: list[dict[str, Any]]
     ) -> TurnOutcome:
         lang = turn.language
         known_name = await self._name_of(client)
         first_name = known_name or ("Un client" if lang != "en" else "A client")
-        await self._store.record_request(
-            restaurant_id=uuid.UUID(offer["restaurant_id"]),
-            client_user_id=client,
-            dish={"name": offer["dish"], "price": offer["price"]},
-            now=turn.now,
-        )
-        await desk.notify(
-            uuid.UUID(offer["owner"]),
-            texts.to_restaurant(
-                first_name, turn.session.phone.e164, offer["dish"], int(offer["price"]), "fr"
-            ),
-            now=turn.now,
-        )
+        for offer in offers:
+            await self._store.record_request(
+                restaurant_id=uuid.UUID(offer["restaurant_id"]),
+                client_user_id=client,
+                dish={"name": offer["dish"], "price": offer["price"]},
+                now=turn.now,
+            )
+            await desk.notify(
+                uuid.UUID(offer["owner"]),
+                texts.to_restaurant(
+                    first_name, turn.session.phone.e164, offer["dish"], int(offer["price"]), "fr"
+                ),
+                now=turn.now,
+            )
         # Platform words, never rewritten: the voice once confirmed another dish
         # than the one passed on to the restaurant (replay of 1 Nov 2026).
-        sent = texts.request_sent(offer["restaurant"], offer["dish"], lang)
+        sent = texts.requests_sent([(o["restaurant"], o["dish"]) for o in offers], lang)
         # Kept in the session so « tu as ma commande ? » is answered from it.
-        record = {
-            "dish": offer["dish"],
-            "price_xaf": int(offer["price"]),
-            "restaurant": offer["restaurant"],
-            "client_first_name": known_name or "unknown: WhatsApp did not give it",
-            "status": "passed to the restaurant, which calls the client back",
-        }
-        return await self._done(turn, desk, sent, voiced=False, context={SENT_KEY: record})
+        record = [
+            {
+                "dish": offer["dish"],
+                "price_xaf": int(offer["price"]),
+                "restaurant": offer["restaurant"],
+                "client_first_name": known_name or "unknown: WhatsApp did not give it",
+                "status": "passed to the restaurant, which calls the client back",
+            }
+            for offer in offers
+        ]
+        kept = record[0] if len(record) == 1 else record
+        return await self._done(turn, desk, sent, voiced=False, context={SENT_KEY: kept})
 
 
 def _wanted(known: dict[str, Any]) -> list[str]:

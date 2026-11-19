@@ -1,4 +1,4 @@
-"""What Kora writes while two members ask each other questions through it."""
+"""What idia writes while two members ask each other questions through it."""
 
 from __future__ import annotations
 

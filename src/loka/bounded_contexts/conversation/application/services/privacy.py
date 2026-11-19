@@ -65,37 +65,69 @@ def _english(language: str | None) -> bool:
     return (language or "").casefold().startswith("en")
 
 
-def _policy_pointer(language: str | None, url: str) -> str:
-    if url:
-        return url
+def _links(language: str | None, *, policy_url: str, terms_url: str) -> str:
+    """The consent line: links to the hosted documents, or the WhatsApp summary."""
     if _english(language):
-        return "write « privacy » to read it"
-    return "écris « confidentialité » pour la lire"
+        if policy_url or terms_url:
+            parts = [f"terms of use: {terms_url}" if terms_url else "",
+                     f"privacy policy: {policy_url}" if policy_url else ""]
+            return "By continuing, you accept idia's " + " · ".join(p for p in parts if p)
+        return "By continuing, you accept idia's privacy policy (write « privacy » to read it)"
+    if policy_url or terms_url:
+        parts = [f"conditions d'utilisation : {terms_url}" if terms_url else "",
+                 f"politique de confidentialité : {policy_url}" if policy_url else ""]
+        return "En continuant, tu acceptes les " + " · ".join(p for p in parts if p)
+    return (
+        "En continuant, tu acceptes la politique de confidentialité d'idia "
+        "(écris « confidentialité » pour la lire)"
+    )
 
 
-def welcome(language: str | None, *, policy_url: str) -> str:
+def welcome(language: str | None, *, policy_url: str, terms_url: str = "") -> str:
     """The first message a new user receives, with the consent line."""
-    pointer = _policy_pointer(language, policy_url)
+    consent = _links(language, policy_url=policy_url, terms_url=terms_url)
+    # Italics around a link break it on some phones: plain when there is one.
+    consent = consent if policy_url or terms_url else f"_{consent}_"
     if _english(language):
         return (
             "Hi 👋 I'm *idia*, your assistant on WhatsApp.\n"
             "🏠 Housing · 🍲 Food · 🚌 Bus · 💛 Dating · 🪪 Lost item\n"
-            "Just tell me what you're looking for.\n"
-            "A problem with someone (fake landlord, fake profile, scam)? Write « report ».\n\n"
-            f"_By continuing, you accept idia's privacy policy: {pointer}_"
+            "Just tell me what you're looking for.\n\n"
+            f"{consent}"
         )
     return (
         "Bonjour 👋 Moi c'est *idia*, ton assistant sur WhatsApp.\n"
         "🏠 Logement · 🍲 Repas · 🚌 Car · 💛 Rencontre · 🪪 Objet perdu\n"
-        "Dis-moi simplement ce que tu cherches.\n"
-        "Un souci avec quelqu'un (faux bailleur, faux profil, arnaque) ? Écris « réclamation ».\n\n"
-        f"_En continuant, tu acceptes la politique de confidentialité d'idia : {pointer}_"
+        "Dis-moi simplement ce que tu cherches.\n\n"
+        f"{consent}"
     )
 
 
-def policy_summary(language: str | None, *, contact_email: str, policy_url: str) -> str:
+def policy_summary(
+    language: str | None, *, contact_email: str, policy_url: str, terms_url: str = ""
+) -> str:
+    """The answer to « confidentialité »: the links when hosted, the summary otherwise."""
+    if policy_url or terms_url:
+        if _english(language):
+            lines = ["🔒 *Privacy at idia*"]
+            if policy_url:
+                lines.append(f"Privacy policy: {policy_url}")
+            if terms_url:
+                lines.append(f"Terms of use: {terms_url}")
+            lines.append("To erase your history kept by idia: write « delete my data ».")
+            lines.append(f"Questions: {contact_email}")
+            return "\n".join(lines)
+        lines = ["🔒 *Confidentialité chez idia*"]
+        if policy_url:
+            lines.append(f"Politique de confidentialité : {policy_url}")
+        if terms_url:
+            lines.append(f"Conditions d'utilisation : {terms_url}")
+        lines.append(
+            "Pour effacer ton historique gardé par idia : écris « supprimer mes données »."
+        )
+        lines.append(f"Questions : {contact_email}")
+        return "\n".join(lines)
     if _english(language):
-        link = f"\nFull policy: {policy_url}" if policy_url else ""
         return (
             "🔒 *Privacy at idia*\n"
             "• idia only connects people, discreetly. idia sells nobody's data and "
@@ -103,9 +135,8 @@ def policy_summary(language: str | None, *, contact_email: str, policy_url: str)
             "• What you share is used only to answer you and to connect you.\n"
             "• Your conversation history kept by idia can be erased at any time: "
             "write « delete my data ».\n"
-            f"• Questions: {contact_email}{link}"
+            f"• Questions: {contact_email}"
         )
-    link = f"\nPolitique complète : {policy_url}" if policy_url else ""
     return (
         "🔒 *Confidentialité chez idia*\n"
         "• idia met seulement en relation, avec discrétion. idia ne vend les données "
@@ -113,7 +144,7 @@ def policy_summary(language: str | None, *, contact_email: str, policy_url: str)
         "• Ce que tu partages sert uniquement à te répondre et à te mettre en relation.\n"
         "• Ton historique de conversation gardé par idia peut être effacé à tout moment : "
         "écris « supprimer mes données ».\n"
-        f"• Questions : {contact_email}{link}"
+        f"• Questions : {contact_email}"
     )
 
 

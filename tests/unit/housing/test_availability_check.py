@@ -3,7 +3,7 @@
 One sentence of the business spec is the whole point (§9): **the tenant pays
 only if the landlord confirms.** Everything here protects one of its corners.
 
-The landlord decides availability, always. Kora never infers it — not from a
+The landlord decides availability, always. idia never infers it — not from a
 match, not from a payment, not from elapsed time — and a listing stays
 available by default until he writes otherwise. So there is no timer, no
 re-verification schedule and no expiry: a question he never answered simply

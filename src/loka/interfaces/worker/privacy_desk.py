@@ -104,7 +104,10 @@ class PrivacyDesk:
                 return True
             if request == "policy":
                 summary = privacy.policy_summary(
-                    language, contact_email=settings.contact_email, policy_url=settings.policy_url
+                    language,
+                    contact_email=settings.contact_email,
+                    policy_url=settings.policy_url,
+                    terms_url=settings.terms_url,
                 )
                 self._say(uow, session, summary, now)
                 await inbound.mark_processed(message_id)
@@ -119,7 +122,10 @@ class PrivacyDesk:
             )
             if earlier:
                 return False
-            self._say(uow, session, privacy.welcome(language, policy_url=settings.policy_url), now)
+            welcome = privacy.welcome(
+                language, policy_url=settings.policy_url, terms_url=settings.terms_url
+            )
+            self._say(uow, session, welcome, now)
             alone = privacy.is_bare_greeting(text)
             if alone:
                 await inbound.mark_processed(message_id)

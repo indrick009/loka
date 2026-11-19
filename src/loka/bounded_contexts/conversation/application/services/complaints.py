@@ -34,6 +34,16 @@ _DETAILED_WORDS = 10
 _ALERT_LINES = 6
 
 
+def report_hint(language: str | None) -> str:
+    """Said once a request is under way — a lodging, a meal, a ticket, a person.
+
+    Never in the welcome: nobody comes to idia to complain.
+    """
+    if _english(language):
+        return "If anything goes wrong or someone behaves badly, please tell me (write « report »)."
+    return "Au moindre problème ou abus, merci de nous le signaler (écris « réclamation »)."
+
+
 def is_complaint(text: str) -> bool:
     folded = fold(text)
     return bool(_COMPLAINT.search(folded)) and not _FOUND.search(folded)

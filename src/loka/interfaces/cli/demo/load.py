@@ -280,7 +280,7 @@ def _place(district: str) -> dict[str, Any]:
 
 async def run(*, menus_only: bool) -> dict[str, int]:
     settings = get_settings()
-    database = Database(settings.database, application_name="kora-demo")
+    database = Database(settings.database, application_name="idia-demo")
     await database.connect()
     try:
         loader = DemoLoader(settings, database)

@@ -44,7 +44,12 @@ from loka.interfaces.worker.conversation_analysis_consumer import (
     ConversationLockFactory,
     redis_lock_factory,
 )
-from loka.interfaces.worker.stuck_guard import StuckGuard, holding_text
+from loka.interfaces.worker.stuck_guard import (
+    ESCALATE,
+    UNSUPPORTED,
+    StuckGuard,
+    holding_text,
+)
 from loka.interfaces.worker.whatsapp_channels import GatewayDown, channel_for
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import (
@@ -79,6 +84,10 @@ OUTBOUND_QUEUE = "whatsapp.outgoing"
 # reply is stale, and the ordinary retries take over.
 GATEWAY_DOWN_PATIENCE = timedelta(minutes=30)
 GATEWAY_DOWN_RECHECK_MS = 15_000
+# The messages to one phone go out in the order they were meant for.
+_IN_LINE = "outbound:line:{}"
+IN_LINE_RECHECK_MS = 700
+IN_LINE_STALE_SECONDS = 120
 
 __all__ = ["OUTBOUND_QUEUE", "GatewayDown", "WhatsAppOutboundConsumer"]
 
@@ -112,6 +121,7 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         # Built, not awaited: redis-py connects lazily, and a rate limiter whose
         # backend is down must degrade to "allow" rather than stop replies.
         redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        self._redis = redis
         self._rate_limiter = RedisRateLimiter(redis)
         self._guard = StuckGuard(
             database,
@@ -142,9 +152,18 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         if burst_of is not None and await self._a_newer_photo_follows(burst_of):
             _logger.info("photo_ack_superseded", session_id=metadata.get("session_id"))
             return
+        place = str(body.get("event_id") or uuid.uuid4())
+        rank = (not_before or _optional_datetime(body.get("occurred_at")) or datetime.now(UTC))
         try:
             async with self._in_thread_order(recipient):
-                await self._deliver(body, metadata, recipient)
+                if not await self._first_in_line(recipient, place, rank.timestamp()):
+                    raise DeferredHandlerError(IN_LINE_RECHECK_MS)
+                try:
+                    await self._deliver(body, metadata, recipient)
+                except PermanentHandlerError:
+                    await self._leave_line(recipient, place)
+                    raise
+                await self._leave_line(recipient, place)
         except GatewayDown:
             sent_at = _optional_datetime(body.get("occurred_at"))
             if sent_at is not None and datetime.now(UTC) - sent_at < GATEWAY_DOWN_PATIENCE:
@@ -155,7 +174,7 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         """Whether this acknowledgement is not the last of its burst.
 
         A failed check answers "no": an extra "photo reçue" is a small cost,
-        a burst left with no answer at all is the silence Kora must never give.
+        a burst left with no answer at all is the silence idia must never give.
         """
         try:
             async with unit_of_work(self._database) as uow:
@@ -163,6 +182,33 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         except Exception as exc:  # an unanswered burst is worse than two answers
             _logger.warning("photo_burst_check_failed", error=type(exc).__name__)
             return False
+
+    async def _first_in_line(self, recipient: str, place: str, rank: float) -> bool:
+        """Whether every message meant to reach this phone before this one has gone.
+
+        The lock alone does not order: photos staged together all reached it
+        at once and took it in any order — 2, 3, 1, 4, 5 under a list numbered
+        1 to 5 (journal of 16 Nov 2026, 09:20). Each message takes its place
+        by the time it is due; a place older than ``IN_LINE_STALE_SECONDS`` is
+        dropped, so a message that died never blocks the thread. Redis down:
+        unordered, never silent.
+        """
+        key = _IN_LINE.format(recipient)
+        try:
+            await self._redis.zadd(key, {place: rank}, nx=True)
+            await self._redis.zremrangebyscore(key, 0, rank - IN_LINE_STALE_SECONDS)
+            await self._redis.expire(key, 600)
+            first = await self._redis.zrange(key, 0, 0)
+        except Exception as exc:  # see the docstring
+            _logger.warning("outbound_line_unavailable", error=type(exc).__name__)
+            return True
+        return not first or first[0] == place
+
+    async def _leave_line(self, recipient: str, place: str) -> None:
+        try:
+            await self._redis.zrem(_IN_LINE.format(recipient), place)
+        except Exception as exc:  # the stale cut-off frees the line anyway
+            _logger.warning("outbound_line_unavailable", error=type(exc).__name__)
 
     @asynccontextmanager
     async def _in_thread_order(self, recipient: str) -> AsyncIterator[None]:
@@ -192,6 +238,16 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         self, body: dict[str, Any], metadata: dict[str, Any], recipient: str
     ) -> None:
         reply_kind = str(metadata.get("reply_kind") or "ACK")
+        session_id = _optional_uuid(metadata.get("session_id"))
+        if metadata.get("intent") == ESCALATE and session_id is not None:
+            # Not an answer: a request idia does not offer yet. A person decides.
+            if not await self._guard.held(session_id):
+                thread = await self._guard.thread(session_id)
+                request = _optional_str(metadata, "text") or ""
+                await self._hold(
+                    body, metadata, session_id, recipient, request, (UNSUPPORTED, thread)
+                )
+            return
         # A model-written sentence wins; the template is the fallback for the
         # deterministic path and for every deployment without an AI key.
         text = _optional_str(metadata, "text") or render_reply(
@@ -200,7 +256,6 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             intent=_optional_str(metadata, "intent"),
             language=_optional_str(metadata, "language"),
         )
-        session_id = _optional_uuid(metadata.get("session_id"))
         answering = _optional_str(metadata, "answering")
         if answering is not None and session_id is not None:
             text = await self._in_user_voice(
@@ -269,7 +324,7 @@ class WhatsAppOutboundConsumer(ConsumerBase):
         """
         signal, thread = stuck
         language = _optional_str(metadata, "language")
-        waiting = holding_text(language)
+        waiting = holding_text(language, signal)
         await self._channel.send(to=recipient, text=waiting)
         await self._record_sent(
             event_id=body.get("event_id"), session_id=session_id, recipient=recipient, text=waiting

@@ -225,11 +225,11 @@ class TestTheShadow:
         state = turn_state(_session(), "60 mille")
 
         assert state["active_task"] == "housing: tenant search"
-        assert state["kora_is_waiting_for"] is not None
+        assert state["idia_is_waiting_for"] is not None
         assert state["known_facts"] == {"property_type": "STUDIO"}
         assert state["user_message"] == "60 mille"
 
-    def test_every_question_offers_koras_own_options(self) -> None:
+    def test_every_question_offers_idias_own_options(self) -> None:
         assert set(TURN_QUESTIONS) == {"act", "role", "domain", "neighbourhood_change"}
         assert "follow_up" in TURN_QUESTIONS["act"].options
 

@@ -1,7 +1,7 @@
 """The landlord's form, as the business spec actually describes it.
 
 These tests exist because the code and the spec had quietly diverged. The form
-asked nine questions; the spec (conception_metier/kora-housing-v1.md §4) asks
+asked nine questions; the spec (conception_metier/idia-housing-v1.md §4) asks
 ten, and they were not the same ten. Three questions the business dropped were
 still being put to landlords — the minimum duration, the availability date and
 the free-text conditions — while four it had added were never asked at all: how
@@ -72,7 +72,7 @@ class TestTheFormAsksWhatTheSpecAsks:
         "dropped", ["minimum_duration_months", "availability", "conditions"]
     )
     def test_no_step_the_spec_dropped_is_asked(self, dropped: str) -> None:
-        """Kora introduces a landlord to a tenant; it does not negotiate a lease."""
+        """idia introduces a landlord to a tenant; it does not negotiate a lease."""
         assert dropped not in {name for name, _ in PROPERTY_REQUIREMENTS}
 
     @pytest.mark.parametrize("key", ["ask.quantity", "ask.deposit", "ask.advance", "ask.security"])

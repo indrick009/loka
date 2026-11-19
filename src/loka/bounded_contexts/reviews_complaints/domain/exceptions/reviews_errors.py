@@ -6,7 +6,7 @@ from loka.shared.domain.errors import DomainError
 
 
 class NoStandingToSpeak(DomainError):
-    """The author was never introduced to this provider by Kora.
+    """The author was never introduced to this provider by idia.
 
     The gate that keeps the ranking and the sanction queue honest: without it
     anybody could rate his own listing to the top, or file complaints until a
@@ -30,7 +30,7 @@ class AlreadySpoken(DomainError):
 class SanctionRequiresHuman(DomainError):
     """Something tried to ban a provider without a named reviewer.
 
-    Kora may hide; only a person bans (§6). This fires when a caller reaches the
+    idia may hide; only a person bans (§6). This fires when a caller reaches the
     ban path with no reviewer id, which would otherwise record an anonymous
     decision nobody can be asked about.
     """

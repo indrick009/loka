@@ -295,13 +295,13 @@ class TestSuspension:
         with pytest.raises(InvariantViolation):
             prop.set_rent(Money(1), now=now)
 
-def kora_spec_property(now: datetime, *, with_photos: bool = True) -> Property:
-    """A listing carrying exactly what the Kora spec's ten steps collect.
+def idia_spec_property(now: datetime, *, with_photos: bool = True) -> Property:
+    """A listing carrying exactly what the idia spec's ten steps collect.
 
     No minimum duration, no availability date, no entry conditions — the spec
-    never asks for any of them, and the owner confirmed on 11 October that Kora
+    never asks for any of them, and the owner confirmed on 11 October that idia
     connects a landlord and a tenant rather than negotiating a lease. See
-    ``conception_metier/kora-housing-v1.md`` §4.
+    ``conception_metier/idia-housing-v1.md`` §4.
 
     A landlord could follow those ten steps to the letter and still be refused
     publication, because the gate demanded three fields nobody had asked him
@@ -323,7 +323,7 @@ def kora_spec_property(now: datetime, *, with_photos: bool = True) -> Property:
 
 class TestASpecConformingListingCanPublish:
     def test_the_ten_steps_leave_nothing_blocking(self, now: datetime) -> None:
-        assert kora_spec_property(now).blocking_issues() == frozenset()
+        assert idia_spec_property(now).blocking_issues() == frozenset()
 
     @pytest.mark.parametrize(
         "dropped",
@@ -336,7 +336,7 @@ class TestASpecConformingListingCanPublish:
     def test_the_dropped_requirements_no_longer_block(
         self, now: datetime, dropped: DataQualityIssue
     ) -> None:
-        assert dropped not in kora_spec_property(now).blocking_issues()
+        assert dropped not in idia_spec_property(now).blocking_issues()
 
 
 class TestWhatStillBlocks:
@@ -344,7 +344,7 @@ class TestWhatStillBlocks:
 
     def test_photos_are_still_mandatory(self, now: datetime) -> None:
         """Step 10 of the spec, marked 'très important'."""
-        issues = kora_spec_property(now, with_photos=False).blocking_issues()
+        issues = idia_spec_property(now, with_photos=False).blocking_issues()
 
         assert DataQualityIssue.MISSING_PHOTOS in issues
 

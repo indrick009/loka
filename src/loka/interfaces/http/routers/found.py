@@ -1,4 +1,4 @@
-"""The Kora team's review of ownership claims (Found §7).
+"""The idia team's review of ownership claims (Found §7).
 
 A person decides, never the platform: until a claim is validated here, its
 owner learns nothing about the document beyond "a possible match exists".

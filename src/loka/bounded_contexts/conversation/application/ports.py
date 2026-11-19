@@ -100,10 +100,10 @@ class PropertyListing(Protocol):
 
 
 class TenantDemands(Protocol):
-    """Records what a tenant is looking for, so Kora can come back to him.
+    """Records what a tenant is looking for, so idia can come back to him.
 
     Narrow like the other write ports: the pipeline depends on the *act* of
-    recording a demand, not on the catalogue's use cases. Kora answers no
+    recording a demand, not on the catalogue's use cases. idia answers no
     search in the thread, so without this the acknowledgement it sends would
     promise a follow-up to a request nothing kept.
     """
@@ -331,7 +331,7 @@ class Exchange:
     mon budget" point at nothing, and the assistant answers like a form.
     """
 
-    speaker: str  # "user" or "kora"
+    speaker: str  # "user" or "idia"
     text: str
 
 
@@ -407,7 +407,7 @@ class DecisionModel(Protocol):
     """Takes small typed decisions over a state; writes no text.
 
     A separate port from :class:`IntentModel` because it does a different job:
-    it picks among options Kora defines and says how sure it is, in well under
+    it picks among options idia defines and says how sure it is, in well under
     a second. Raises ``ExternalServiceUnavailable`` when it cannot answer.
     """
 
@@ -571,8 +571,8 @@ class FormFiller(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
-class KoraState:
-    """Everything the single Kora agent knows before it reads a message.
+class IdiaState:
+    """Everything the single idia agent knows before it reads a message.
 
     The task under way (``flow``, ``step``, its ``facts``, the question left
     open, the numbered ``offers`` last sent) and ``memory``: the earlier tasks
@@ -589,12 +589,12 @@ class KoraState:
 
 
 @dataclass(frozen=True, slots=True)
-class KoraAnswer:
-    """One message answered by the Kora agent.
+class IdiaAnswer:
+    """One message answered by the idia agent.
 
     ``action`` is what its tools decided — ``food_search``, ``food_order`` or
     ``lodging`` — with the ``entities`` they validated; none: ``reply`` answers
-    alone. ``act`` ``other_service``: another part of Kora takes the message.
+    alone. ``act`` ``other_service``: another part of idia takes the message.
     """
 
     act: str
@@ -609,9 +609,9 @@ class KoraAnswer:
     cost_usd: Decimal
 
 
-class KoraAgent(Protocol):
+class IdiaAgent(Protocol):
     """One model for the whole thread, each service's rules as its tools."""
 
     async def answer(
-        self, text: str, *, state: KoraState, thread: list[Exchange]
-    ) -> KoraAnswer: ...
+        self, text: str, *, state: IdiaState, thread: list[Exchange]
+    ) -> IdiaAnswer: ...

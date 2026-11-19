@@ -2,7 +2,7 @@
 
 Nothing about a found document is ever shown to someone searching: a claim
 learns only that a *possible* match exists, then must prove ownership, and a
-person from the Kora team decides before anyone is put in touch.
+person from the idia team decides before anyone is put in touch.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class Claim:
         self.status = MATCHED
 
     def add_proof(self, proof: dict[str, str]) -> None:
-        """Proof is the owner's to give: Kora never suggests what it should say."""
+        """Proof is the owner's to give: idia never suggests what it should say."""
         self.proofs.append(proof)
         if self.declaration_id is not None:
             self.status = PENDING_REVIEW

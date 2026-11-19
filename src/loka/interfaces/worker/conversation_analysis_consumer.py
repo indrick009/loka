@@ -13,7 +13,6 @@ transient and must be retried.
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from collections.abc import Callable
 from contextlib import AsyncExitStack
@@ -21,7 +20,6 @@ from datetime import UTC, datetime
 from typing import Any, Protocol
 
 from redis.asyncio import Redis
-from sqlalchemy import select
 
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
@@ -33,12 +31,9 @@ from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds impo
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     analyse_conversation_message_use_case,
 )
-from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
-    InboundMessageRow,
-)
 from loka.interfaces.worker.complaint_desk import ComplaintDesk
 from loka.interfaces.worker.privacy_desk import PrivacyDesk
-from loka.interfaces.worker.whatsapp_channels import channel_for
+from loka.interfaces.worker.team_desk import TeamDesk
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
     PermanentHandlerError,
@@ -137,14 +132,13 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._holds = RedisConversationHolds(redis)
         self._privacy = PrivacyDesk(database, redis, settings)
         self._complaints = ComplaintDesk(database, redis, settings)
-        self._channel = channel_for(settings)
-
-    async def stop(self) -> None:
-        await super().stop()
-        await self._channel.aclose()
+        self._team = TeamDesk(database, redis, settings)
 
     async def handle(self, payload: dict[str, Any]) -> None:
         message_id, session_id = parse_analysis_payload(payload)
+        # « I-7F3A2C … » from the admin, even while the admin's own thread is held.
+        if await self._team.note(message_id, session_id):
+            return
         hold = await self._holds.get(session_id)
         if hold is not None:
             # Stored already; answered when a person releases the thread (see
@@ -192,7 +186,9 @@ class ConversationAnalysisConsumer(ConsumerBase):
             # A complaint, from anyone, goes to a person before any model.
             if await self._complaints.handle(message_id, session_id):
                 return
-            await self._show_typing(message_id)
+            # The admin's instructions, and what idia does not offer yet.
+            if await self._team.escalate(message_id, session_id):
+                return
             report = await self._analyse(message_id, session_id)
         _logger.info(
             "conversation_message_analysed",
@@ -208,26 +204,6 @@ class ConversationAnalysisConsumer(ConsumerBase):
             rejected_facts=sorted(report.rejected_facts),
             cost_usd=str(report.cost_usd),
         )
-
-    async def _show_typing(self, message_id: uuid.UUID) -> None:
-        """« écrit… » while the turn is read: the user sees idia is on it.
-
-        A courtesy, bounded to two seconds and never a reason to delay or fail
-        the answer itself.
-        """
-        try:
-            async with unit_of_work(self._database) as uow:
-                query = select(
-                    InboundMessageRow.sender_phone, InboundMessageRow.external_message_id
-                ).where(InboundMessageRow.id == message_id)
-                row = (await uow.session.execute(query)).first()
-            if row is not None:
-                await asyncio.wait_for(
-                    self._channel.typing(to=row.sender_phone, message_id=row.external_message_id),
-                    timeout=2,
-                )
-        except Exception as exc:  # see the docstring
-            _logger.info("typing_not_shown", error=type(exc).__name__)
 
     async def _analyse(
         self, message_id: uuid.UUID, session_id: uuid.UUID

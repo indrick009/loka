@@ -1,6 +1,6 @@
 """What a Dating turn does: build the profile, propose, record a yes or a no.
 
-Two yeses open a talk (see ``talk``): questions relayed by Kora, then each
+Two yeses open a talk (see ``talk``): questions relayed by idia, then each
 confirms. Only then is it a match, and the contact can be unlocked.
 """
 
@@ -210,7 +210,11 @@ class DatingTurns:
                     context={PROPOSED_KEY: str(member.profile_id), "_score": score},
                 ),
             )
-        return await self._propose(turn, desk, member, prefix=texts.liked(lang))
+        # One person at a time: after a yes, idia waits for theirs. Proposing the
+        # next profile in the same breath read as a loop (journal of 16 Nov
+        # 2026, 09:23: « Oui » to Estelle answered with Aïcha). Another profile
+        # comes when the member asks for one.
+        return await self._close(turn, desk, texts.liked(lang))
 
     async def _pay(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, matched: uuid.UUID

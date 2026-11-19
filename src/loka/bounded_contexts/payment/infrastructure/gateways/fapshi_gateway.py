@@ -13,7 +13,7 @@ evidence: :meth:`fetch_status` asks Fapshi what the transaction's status
 actually is, and that answer is what settles a payment.
 
 **Fapshi sends one webhook per event and never retries.** A request dropped
-during a deploy is money the payer sent and access Kora never granted, in
+during a deploy is money the payer sent and access idia never granted, in
 silence. The status endpoint is therefore also the reconciliation path, which
 is why :class:`PaymentStatusSource` is a port with two consumers rather than a
 convenience method.

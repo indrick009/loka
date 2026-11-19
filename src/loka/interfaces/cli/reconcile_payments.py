@@ -2,7 +2,7 @@
 
 Fapshi delivers one webhook per event and never retries, so a request lost
 while the API was restarting is a payer charged and never served. Run this on a
-schedule — every few minutes is plenty at Kora's volume — and during any
+schedule — every few minutes is plenty at idia's volume — and during any
 incident that touched the webhook endpoint.
 
     python -m loka.interfaces.cli.reconcile_payments --older-than 10

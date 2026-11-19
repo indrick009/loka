@@ -1,4 +1,4 @@
-"""The plainte: what someone discovered after Kora had already left.
+"""The plainte: what someone discovered after idia had already left.
 
 A complaint is **punitive** — it exists so the team knows which provider to
 sanction or ban (§2) — and it is the only record in this context that carries
@@ -6,7 +6,7 @@ free text, because a human reads it before deciding (§5).
 
 Every real case the product owner gave is the same shape: « le bailleur avait
 dit avec eau, il n'y a pas l'eau », « elle a menti, photo générée par IA »,
-« on commande, elle ne vient pas ». The person found out *afterwards*. Kora
+« on commande, elle ne vient pas ». The person found out *afterwards*. idia
 cannot verify any of it — she was not there — which is exactly why a complaint
 is the only way she learns, and exactly why she must not act on it alone.
 
@@ -97,7 +97,7 @@ class Complaint(AggregateRoot):
         self.complainant_id = complainant_id
         self.reason = reason
         # Trimmed, not rejected on length: the complainant is already unhappy
-        # and a validation error at this point loses the only account Kora will
+        # and a validation error at this point loses the only account idia will
         # ever get of what happened.
         self.account = account.strip()[:MAX_ACCOUNT_LENGTH]
         self.status = ComplaintStatus.OPEN

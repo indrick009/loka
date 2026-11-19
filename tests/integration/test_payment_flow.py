@@ -241,7 +241,7 @@ async def test_nobody_is_charged_before_the_landlord_confirms(
     """The rule the whole availability check exists for (housing spec §9).
 
     The failure it prevents is concrete: a tenant pays 1 000 FCFA, gets a
-    number, calls, and learns the room went last week. Kora keeps the money and
+    number, calls, and learns the room went last week. idia keeps the money and
     has sold nothing.
     """
     property_id = uuid.uuid4()

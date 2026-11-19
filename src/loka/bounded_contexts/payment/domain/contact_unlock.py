@@ -1,6 +1,6 @@
 """The 1 000 FCFA that buys a way to reach someone, outside housing.
 
-Dating unlocks only after a reciprocal match; Found only after the Kora team
+Dating unlocks only after a reciprocal match; Found only after the idia team
 validated ownership. Consent, or proof, always precedes the payment: this
 record is created by the domain that checked it, never on request alone.
 """
@@ -19,7 +19,7 @@ FAILED = "FAILED"
 
 DATING = "DATING"
 FOUND = "FOUND"
-# Not a contact: 10 more messages and 5 more photos relayed by Kora in a Dating
+# Not a contact: 10 more messages and 5 more photos relayed by idia in a Dating
 # talk, bought by a member who used his own. ``subject_id`` is the talk.
 DATING_PLUS = "DATING_PLUS"
 

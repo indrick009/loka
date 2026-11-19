@@ -23,7 +23,7 @@ _MORE = ("mais", "but", "maintenant", "plutôt", "plutot", "change", "autre")
 _TEXT: dict[str, dict[str, str]] = {
     "fr": {
         "ask": (
-            "Bonjour ! Il y a un mois, vous cherchiez un logement avec Kora. "
+            "Bonjour ! Il y a un mois, vous cherchiez un logement avec idia. "
             "Cherchez-vous toujours ? Répondez OUI pour que je continue à vous "
             "envoyer les logements qui correspondent, ou NON pour arrêter."
         ),
@@ -38,7 +38,7 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "en": {
         "ask": (
-            "Hello! A month ago you were looking for a place with Kora. Are you "
+            "Hello! A month ago you were looking for a place with idia. Are you "
             "still looking? Reply YES and I will keep sending you the places "
             "that match, or NO to stop."
         ),

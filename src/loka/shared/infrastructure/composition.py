@@ -270,7 +270,7 @@ def get_fraud_summary_use_case(uow: SqlAlchemyUnitOfWork) -> GetFraudSummaryUseC
 
 
 def submit_review_use_case(uow: SqlAlchemyUnitOfWork) -> SubmitReviewUseCase:
-    """An avis, gated on the introduction Kora actually made."""
+    """An avis, gated on the introduction idia actually made."""
     return SubmitReviewUseCase(uow, introductions=introduction_directory())
 
 

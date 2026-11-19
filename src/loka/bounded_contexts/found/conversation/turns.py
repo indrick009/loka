@@ -189,7 +189,7 @@ class FoundTurns:
         return say(texts.proof_received(lang), question=PROOFS_KEY, step=FlowStep.AWAITING_REVIEW)
 
     async def _pay(self, turn: PlugTurn, desk: PlugDesk, claim_id: uuid.UUID) -> TurnOutcome:
-        """Only a claim the Kora team validated is ever offered the unlock."""
+        """Only a claim the idia team validated is ever offered the unlock."""
         claim = await self._store.claim(claim_id)
         declaration = (
             await self._store.declaration(claim.declaration_id)

@@ -52,7 +52,7 @@ async def _run(model_name: str | None, language: str, script: Path | None) -> No
     history: list[ModelMessage] = []
 
     lines = script.read_text(encoding="utf-8").splitlines() if script else None
-    print(f"Kora (prototype Pydantic AI, {model_name or settings.default_model})")
+    print(f"idia (prototype Pydantic AI, {model_name or settings.default_model})")
     while True:
         if lines is not None:
             if not lines:
@@ -88,7 +88,7 @@ async def _run(model_name: str | None, language: str, script: Path | None) -> No
             print(f"[erreur modèle : {exc}]", file=sys.stderr)
             continue
         facts, history = turn.facts, turn.messages
-        print(f"Kora [{turn.act}] : {turn.reply}")
+        print(f"idia [{turn.act}] : {turn.reply}")
 
 
 def main() -> None:

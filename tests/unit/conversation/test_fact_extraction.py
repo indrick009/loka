@@ -210,7 +210,7 @@ class TestConversationOrder:
     def test_the_form_walks_the_ten_steps_of_the_spec_in_order(
         self, extractor: FactExtractor
     ) -> None:
-        """The order of conception_metier/kora-housing-v1.md §4, step by step.
+        """The order of conception_metier/idia-housing-v1.md §4, step by step.
 
         What it is, how many, where, for how much, then the real move-in cost —
         water and electricity, the advance in months then the caution, asked
@@ -220,7 +220,7 @@ class TestConversationOrder:
         fact, so requiring one here would park the conversation for ever.
 
         Three fields this form used to ask for are gone: the minimum duration,
-        the availability date and the free-text conditions. Kora introduces a
+        the availability date and the free-text conditions. idia introduces a
         landlord to a tenant, it does not negotiate a lease (§10).
         """
         answered: dict[str, object] = {}

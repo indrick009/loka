@@ -71,7 +71,8 @@ RULES = (
     "'same_menu'. 'Le ndolè est fini' is CLOSE_DISHES with 'closed_dishes'; "
     "'c'est fini pour aujourd'hui' is CLOSE_MENU. Someone who wants to eat or "
     "asks where to find a dish is FOOD_SEARCH, with 'dish' when he names one. A "
-    "line number picked from a list Kora sent goes in 'choice'."
+    "line number picked from a list idia sent goes in 'choice'; several lines "
+    "picked ('1 et 2') go in 'choices'."
 )
 
 ENTITIES: dict[str, Any] = {
@@ -87,6 +88,7 @@ ENTITIES: dict[str, Any] = {
     "closed_dishes": {"type": "array", "items": {"type": "string"}},
     "dish": {"type": "string"},
     "choice": {"type": "integer"},
+    "choices": {"type": "array", "items": {"type": "integer"}},
 }
 
 

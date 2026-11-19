@@ -1929,7 +1929,7 @@ class StubDemands:
 class TestConversationSearch:
     """The tenant's criteria become a recorded demand, and the thread says so.
 
-    Kora answers no search in the thread: a direct match, a neighbouring area or
+    idia answers no search in the thread: a direct match, a neighbouring area or
     a price a little above all need preparing. The acknowledgement is platform
     text — it is a promise, and the model's sentence may not replace it.
     """
@@ -2605,7 +2605,7 @@ class TestTheLandlordsAvailabilityAnswerIsActedOn:
     ``AVAILABILITY_RENTED`` has been in the allowed-intent list from the start,
     and nothing consumed it: a landlord could write "c'est déjà loué" and his
     lodging stayed in every tenant's search results. Nothing else in the system
-    can take a listing out — Kora never infers availability — so if this turn
+    can take a listing out — idia never infers availability — so if this turn
     does nothing, the listing is never withdrawn at all.
     """
 

@@ -2,7 +2,7 @@
 
 Everything vendor-shaped stops here: the application asks a ``DecisionModel``
 for typed choices and learns nothing about ``/systemone`` or its answer shape.
-OpenRouter serves Jev with the same key Kora already uses, at
+OpenRouter serves Jev with the same key idia already uses, at
 ``{base_url}/systemone``. The client is injectable so tests drive it through
 ``httpx.MockTransport`` — no test in this repository reaches the network.
 """

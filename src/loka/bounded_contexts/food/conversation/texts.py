@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.plugs.forms import xaf
+from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 from loka.bounded_contexts.food.domain.menu import MenuDish
 from loka.bounded_contexts.food.domain.restaurant import DishOffer
 from loka.shared.domain.knowledge.where import place_label
@@ -232,24 +233,43 @@ def request_sent(restaurant: str, dish: str, language: str) -> str:
     if _fr(language):
         return (
             f"J'ai transmis ta demande pour « {dish} » à {restaurant}, avec ton prénom et ce "
-            "numéro WhatsApp. Le restaurant va te contacter sur ce numéro d'ici peu. Si ce "
-            "n'est pas le cas, reviens me le dire."
+            "numéro WhatsApp. Le restaurant va te contacter sur ce numéro d'ici peu.\n"
+            f"{report_hint(language)}"
         )
     return (
         f"I passed your request for « {dish} » to {restaurant}, with your first name and "
-        "this WhatsApp number. The restaurant will contact you on this number shortly. If "
-        "it does not, come back and tell me."
+        "this WhatsApp number. The restaurant will contact you on this number shortly.\n"
+        f"{report_hint(language)}"
+    )
+
+
+def requests_sent(picked: list[tuple[str, str]], language: str) -> str:
+    """One confirmation for every dish passed on, each with its restaurant."""
+    if len(picked) == 1:
+        restaurant, dish = picked[0]
+        return request_sent(restaurant, dish, language)
+    lines = "\n".join(f"• « {dish} » — {restaurant}" for restaurant, dish in picked)
+    if _fr(language):
+        return (
+            f"J'ai transmis tes demandes, avec ton prénom et ce numéro WhatsApp :\n{lines}\n"
+            "Chaque restaurant va te contacter sur ce numéro d'ici peu.\n"
+            f"{report_hint(language)}"
+        )
+    return (
+        f"I passed on your requests, with your first name and this WhatsApp number:\n{lines}\n"
+        "Each restaurant will contact you on this number shortly.\n"
+        f"{report_hint(language)}"
     )
 
 
 def to_restaurant(client: str, phone: str, dish: str, price: int, language: str) -> str:
     if _fr(language):
         return (
-            f"Nouvelle demande Kora : {client} souhaite réserver « {dish} » "
+            f"Nouvelle demande idia : {client} souhaite réserver « {dish} » "
             f"({xaf(price)}). Contactez-le sur WhatsApp ou par appel : {phone}. "
             "Merci de le rappeler rapidement."
         )
     return (
-        f"New Kora request: {client} would like to book \"{dish}\" ({xaf(price)}). "
+        f"New idia request: {client} would like to book \"{dish}\" ({xaf(price)}). "
         f"Contact them on WhatsApp or by phone: {phone}."
     )

@@ -1,4 +1,4 @@
-"""Kora as one agent: the whole thread, the user's memory, each service as tools.
+"""idia as one agent: the whole thread, the user's memory, each service as tools.
 
 The model reads every message whatever the service, with what the user said
 before — in this task and in the earlier ones — and decides what he wants.
@@ -31,14 +31,14 @@ from loka.bounded_contexts.ai.infrastructure.agent.tenant_search import (
     check_lodging,
     missing_fields,
 )
-from loka.bounded_contexts.conversation.application.ports import KoraState
+from loka.bounded_contexts.conversation.application.ports import IdiaState
 from loka.bounded_contexts.housing.conversation.facts import FactExtractor
 from loka.shared.domain.knowledge.where import place_from
 
 DOUALA = timezone(timedelta(hours=1))
 TURN_LIMITS = UsageLimits(request_limit=6)
-# Kora's own price, always allowed in a reply.
-_KORA_AMOUNTS = frozenset({1000})
+# idia's own price, always allowed in a reply.
+_IDIA_AMOUNTS = frozenset({1000})
 
 _TASKS = {
     "SUPPORT": "none",
@@ -72,7 +72,7 @@ _LODGING_GLOSS = {
 }
 
 _INSTRUCTIONS = """\
-You are Kora, one WhatsApp assistant in Cameroon for everything: lodging (find \
+You are idia, one WhatsApp assistant in Cameroon for everything: lodging (find \
 or publish), food (find a dish cooking today, or publish a restaurant's \
 menu), dating, lost and found documents, bus tickets. You hold one \
 conversation with the user across all of them: what he said for one service \
@@ -82,8 +82,8 @@ What you do yourself, with your tools:
 - Someone who wants to eat or drink, or asks whether something is served \
 ("il y a des jus ?"): search_food. Every dish or drink he names goes in \
 dishes ("poulet ou poisson" is two); nothing named searches all that cooks today.
-- He picks a dish from the numbered list Kora sent ("le 2", "je prends le \
-poulet de Mama Ngono"): order_food with its line number.
+- He picks dishes from the numbered list idia sent ("le 2", "1 et 2", "je \
+prends le poulet de Mama Ngono"): order_food with every line number.
 - A tenant looking for a lodging: search_lodging with every answer the \
 message gives. Ask only the four questions, in the order the tool returns: \
 kind of lodging, where, maximum monthly rent, months of advance. "60mil", \
@@ -96,7 +96,11 @@ place is known: at_known_place=true, never retyped.
 advance, the visit, "c'est les seuls ?") is yours: answer from the list in \
 the thread and the state. What they do not say, the landlord or the \
 restaurant decides: say so honestly. Never send the list again.
-- Everything else is handled by another part of Kora: a restaurateur and his \
+- He asks for something close to what idia does but which idia does not \
+offer (a furnished flat, a stay by the night, buying or selling land or a \
+house, a car hire…), or something you cannot answer from your tools and the \
+thread: ask_team. Never promise it, never answer it yourself.
+- Everything else is handled by another part of idia: a restaurateur and his \
 menu, a landlord and his lodging, the pick of a lodging from a list or a \
 price offered on it, dating, documents, bus tickets, a payment. Set act to \
 other_service and leave reply empty.
@@ -107,11 +111,11 @@ answer. A message about something already done ("tu as ma commande ?", "je \
 reste sur ce que j'ai commandé", "j'ai déjà envoyé") is answered from the \
 memory and the task below: call no tool for it.
 - At most one question per message, short and warm. Plain WhatsApp text, no \
-markdown, at most one emoji. Never repeat a sentence Kora already sent.
+markdown, at most one emoji. Never repeat a sentence idia already sent.
 - Never invent a dish, a price, a place, a lodging or a person: the lists are \
 written by the system, never by you. Never claim you have no memory.
 - You know only the lodgings and dishes in the list sent: never say more \
-exist, nor what Kora cannot search. To see others, offer to widen one \
+exist, nor what idia cannot search. To see others, offer to widen one \
 criterion (another district, a higher budget).
 - Answer in the language of his message; a message of fewer than three words \
 keeps the session language.
@@ -120,19 +124,19 @@ other_service as above.
 """
 
 
-class KoraReply(BaseModel):
+class IdiaReply(BaseModel):
     act: Literal["done", "answer", "other_service"] = Field(
         description="done: a tool did it; answer: you only reply; other_service: see rules."
     )
     language: Literal["fr", "en"] = Field(
         description="The user's language; fewer than three words keeps the session language."
     )
-    reply: str = Field(description="The WhatsApp message Kora sends; empty for other_service.")
+    reply: str = Field(description="The WhatsApp message idia sends; empty for other_service.")
 
 
 @dataclass(slots=True)
-class KoraDeps:
-    state: KoraState
+class IdiaDeps:
+    state: IdiaState
     user_text: str
     extractor: FactExtractor = field(default_factory=FactExtractor)
     action: str | None = None
@@ -141,7 +145,7 @@ class KoraDeps:
 
 
 @dataclass(frozen=True, slots=True)
-class KoraTurn:
+class IdiaTurn:
     act: str
     reply: str
     language: str
@@ -151,28 +155,28 @@ class KoraTurn:
     output_tokens: int
 
 
-class KoraAgentModel:
+class IdiaAgentModel:
     def __init__(self, model: Model | str, *, retries: int = 2) -> None:
-        self._agent: Agent[KoraDeps, KoraReply] = Agent(
+        self._agent: Agent[IdiaDeps, IdiaReply] = Agent(
             model,
-            deps_type=KoraDeps,
-            output_type=KoraReply,
+            deps_type=IdiaDeps,
+            output_type=IdiaReply,
             instructions=_INSTRUCTIONS,
             retries=retries,
         )
         self._register(self._agent)
 
     async def reply(
-        self, text: str, *, state: KoraState, history: list[ModelMessage]
-    ) -> KoraTurn:
-        deps = KoraDeps(state=state, user_text=text)
+        self, text: str, *, state: IdiaState, history: list[ModelMessage]
+    ) -> IdiaTurn:
+        deps = IdiaDeps(state=state, user_text=text)
         if state.flow == "PROPERTY_SEARCH":
             deps.lodging = {k: v for k, v in state.facts.items() if k in SEARCH_FIELDS}
         result = await self._agent.run(
             text, deps=deps, message_history=history, usage_limits=TURN_LIMITS
         )
         usage = result.usage
-        return KoraTurn(
+        return IdiaTurn(
             act=result.output.act,
             reply=result.output.reply.strip(),
             language=result.output.language,
@@ -183,14 +187,14 @@ class KoraAgentModel:
         )
 
     @staticmethod
-    def _register(agent: Agent[KoraDeps, KoraReply]) -> None:
+    def _register(agent: Agent[IdiaDeps, IdiaReply]) -> None:
         @agent.instructions
-        def state(ctx: RunContext[KoraDeps]) -> str:
+        def state(ctx: RunContext[IdiaDeps]) -> str:
             return describe(ctx.deps.state)
 
         @agent.tool
         def search_food(
-            ctx: RunContext[KoraDeps],
+            ctx: RunContext[IdiaDeps],
             dishes: list[str] | None = None,
             city: str | None = None,
             neighbourhood: str | None = None,
@@ -232,26 +236,28 @@ class KoraAgentModel:
             }
 
         @agent.tool
-        def order_food(ctx: RunContext[KoraDeps], line: int) -> dict[str, Any]:
-            """Pass his order of one dish from the numbered list on to its restaurant.
+        def order_food(ctx: RunContext[IdiaDeps], lines: list[int]) -> dict[str, Any]:
+            """Pass his order from the numbered list on to the restaurants.
 
             Args:
-                line: the line number of the dish in the list Kora sent.
+                lines: every line number he picks in the list idia sent (« 1 et 2 » is two).
             """
             offers = ctx.deps.state.offers
             if not offers:
                 return {"error": "no list is open: search_food first, or answer him"}
-            if not 1 <= line <= len(offers):
+            picks = sorted({line for line in lines if isinstance(line, int)})
+            if not picks or not all(1 <= line <= len(offers) for line in picks):
                 return {"error": f"the list has lines 1 to {len(offers)}: ask which one"}
-            ctx.deps.action, ctx.deps.entities = "food_order", {"choice": line}
+            ctx.deps.action = "food_order"
+            ctx.deps.entities = {"choice": picks[0], "choices": picks}
             return {
-                "ordered": offers[line - 1],
+                "ordered": [offers[line - 1] for line in picks],
                 "advice": "the system passes it on and confirms: one short sentence at most",
             }
 
         @agent.tool
         def search_lodging(
-            ctx: RunContext[KoraDeps],
+            ctx: RunContext[IdiaDeps],
             property_type: Literal["ROOM", "STUDIO", "APARTMENT", "HOUSE"] | None = None,
             neighbourhoods: list[str] | None = None,
             city: str | None = None,
@@ -298,8 +304,18 @@ class KoraAgentModel:
                 ),
             }
 
+        @agent.tool
+        def ask_team(ctx: RunContext[IdiaDeps], request: str) -> dict[str, Any]:
+            """Hand a request idia does not offer to a person of the team.
+
+            Args:
+                request: what he asks, in a few words.
+            """
+            ctx.deps.action, ctx.deps.entities = "ask_team", {"request": request}
+            return {"handed_over": True, "advice": "the system tells him: leave reply empty"}
+
         @agent.output_validator
-        def no_invented_amounts(ctx: RunContext[KoraDeps], output: KoraReply) -> KoraReply:
+        def no_invented_amounts(ctx: RunContext[IdiaDeps], output: IdiaReply) -> IdiaReply:
             invented = amounts_in(output.reply) - allowed_amounts(ctx.deps)
             if invented:
                 raise ModelRetry(
@@ -309,7 +325,7 @@ class KoraAgentModel:
             return output
 
 
-def known_place(state: KoraState) -> dict[str, Any] | None:
+def known_place(state: IdiaState) -> dict[str, Any] | None:
     """The place of this task, else the last one the user gave."""
     for source in (state.facts, state.memory):
         for name in ("place", "location"):
@@ -319,17 +335,17 @@ def known_place(state: KoraState) -> dict[str, Any] | None:
     return None
 
 
-def allowed_amounts(deps: KoraDeps) -> set[int]:
-    """Amounts a reply may quote: the user's, the state's, and Kora's price."""
+def allowed_amounts(deps: IdiaDeps) -> set[int]:
+    """Amounts a reply may quote: the user's, the state's, and idia's price."""
     said = deps.user_text
-    allowed = set(_KORA_AMOUNTS) | amounts_in(said)
+    allowed = set(_IDIA_AMOUNTS) | amounts_in(said)
     allowed.update(int(d) * 1000 for d in re.findall(r"(?<!\d)\d{1,3}(?!\d)", said))
     stated = json.dumps([deps.state.facts, deps.state.offers, deps.state.memory], default=str)
     allowed.update(int(d) for d in re.findall(r"\d{4,}", stated))
     return allowed
 
 
-def describe(state: KoraState) -> str:
+def describe(state: IdiaState) -> str:
     """The state block the model reads before the message."""
     language = "English" if state.language == "en" else "French"
     lines = [
@@ -352,9 +368,9 @@ def describe(state: KoraState) -> str:
     if state.facts:
         lines.append(f"Its facts: {_compact(state.facts)}.")
     if state.open_question:
-        lines.append(f"The question Kora left open: {state.open_question}.")
+        lines.append(f"The question idia left open: {state.open_question}.")
     if state.offers:
-        lines.append("The numbered list Kora sent:")
+        lines.append("The numbered list idia sent:")
         lines.extend(
             f"{i}. {o.get('dish')} — {o.get('price')} FCFA — {o.get('restaurant')}"
             for i, o in enumerate(state.offers, start=1)
@@ -367,14 +383,14 @@ def describe(state: KoraState) -> str:
             # Journal of 7 Nov 2026, 10:39: « le propriétaire demande 6 mois
             # d'avance » — the tenant's own 6, given to the landlord.
             lines.append(
-                "The lodgings Kora listed say only their kind, district, rent and "
+                "The lodgings idia listed say only their kind, district, rent and "
                 "distance. Their landlord's conditions (advance, deposit, visit, "
                 "parking, duration) are unknown to you: the rent and advance in the "
                 "facts are the tenant's answers, never the landlord's. Say the "
-                "landlord decides them: once the tenant picks a number, Kora asks "
+                "landlord decides them: once the tenant picks a number, idia asks "
                 "the landlord whether it is still free, then the tenant gets his "
                 "number for 1 000 FCFA and asks him directly. Never promise that "
-                "Kora will ask the landlord anything else."
+                "idia will ask the landlord anything else."
             )
     return "\n".join(lines)
 

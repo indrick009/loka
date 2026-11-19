@@ -64,7 +64,7 @@ _FIELD_GLOSS: dict[str, str] = {
 
 SEARCH_FIELDS: tuple[str, ...] = tuple(name for name, _ in SEARCH_REQUIREMENTS)
 
-# The 1 000 FCFA unlock may always be named; it is Kora's own price.
+# The 1 000 FCFA unlock may always be named; it is idia's own price.
 _ALWAYS_ALLOWED_AMOUNTS = frozenset({1000})
 _HISTORY_LIMIT = 30
 # More model requests than this in one turn is a loop: it fails over to the pipeline.
@@ -99,7 +99,7 @@ class AgentReply(BaseModel):
     )
     reply: str = Field(
         description=(
-            "The WhatsApp message Kora sends, in the session language. Short, "
+            "The WhatsApp message idia sends, in the session language. Short, "
             "warm, one question at most. When search_listings returned results, "
             "at most one short sentence: the list itself is appended by the system."
         )
@@ -156,8 +156,8 @@ def describe_facts(facts: dict[str, Any]) -> dict[str, Any]:
 
 
 _INSTRUCTIONS = """\
-You are Kora, a WhatsApp assistant in Cameroon. Here you help a tenant find a \
-lodging. Kora connects tenants and landlords directly: once the landlord \
+You are idia, a WhatsApp assistant in Cameroon. Here you help a tenant find a \
+lodging. idia connects tenants and landlords directly: once the landlord \
 confirms the lodging is still available, the tenant pays 1 000 FCFA to receive \
 the landlord's number and the exact location. No agency fee, no visit fee.
 
@@ -179,13 +179,13 @@ price a listing yourself: the system appends the real list.
 give. Never claim to have no memory: the stored facts are your memory.
 - Out of scope (football, politics, code…): decline in one sentence and come \
 back to the search.
-- Kora also does food, dating, lost documents and bus tickets. When the user \
+- idia also does food, dating, lost documents and bus tickets. When the user \
 asks for one of those, set act to other_service and leave reply empty: \
-another part of Kora answers.
+another part of idia answers.
 - When the user picks a listing already sent to him ("le 2", "je prends le \
 premier") or asks for a lower price on one, set act to listing_choice and \
-leave reply empty: Kora asks the landlord, a price offer included.
-- Kora sends the photos of each listing with the list: never say it cannot.
+leave reply empty: idia asks the landlord, a price offer included.
+- idia sends the photos of each listing with the list: never say it cannot.
 - Plain text, WhatsApp style, no markdown headings, at most one emoji.
 """
 

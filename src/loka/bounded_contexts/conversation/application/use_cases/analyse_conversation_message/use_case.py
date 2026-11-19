@@ -41,8 +41,8 @@ from loka.bounded_contexts.conversation.application.ports import (
     DemandFollowUp,
     Exchange,
     FormFiller,
+    IdiaAgent,
     IntentModel,
-    KoraAgent,
     PropertyListing,
     PropertySearchGateway,
     ResponseModel,
@@ -56,9 +56,9 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.form_lane import (  # noqa: E501
     FormLane,
 )
-from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.kora_lane import (  # noqa: E501
+from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.idia_lane import (  # noqa: E501
     THREAD_LINES,
-    KoraLane,
+    IdiaLane,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.model_lane import (  # noqa: E501
     ModelLane,
@@ -151,7 +151,7 @@ class AnalyseConversationMessageUseCase:
         plugs: Mapping[str, DomainTurns] | None = None,
         agent: ConversationAgent | None = None,
         form_filler: FormFiller | None = None,
-        kora: KoraAgent | None = None,
+        idia: IdiaAgent | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -186,11 +186,11 @@ class AnalyseConversationMessageUseCase:
             agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing
         )
         self._agent = tenant if agent is not None else None
-        self._kora = (
-            KoraLane(
-                kora, judge=self._judge, applier=self._applier, ledger=self._ledger, search=tenant
+        self._idia = (
+            IdiaLane(
+                idia, judge=self._judge, applier=self._applier, ledger=self._ledger, search=tenant
             )
-            if kora is not None
+            if idia is not None
             else None
         )
         self._forms = (
@@ -231,12 +231,12 @@ class AnalyseConversationMessageUseCase:
             )
 
         history = await self._turns.recent(session.id, limit=5)
-        # The words, not only the labels: what the user and Kora actually said.
+        # The words, not only the labels: what the user and idia actually said.
         thread = (
             await self._exchanges.recent(
                 session.id,
                 excluding=command.message_id,
-                limit=THREAD_LINES if self._kora is not None else LANE_LINES,
+                limit=THREAD_LINES if self._idia is not None else LANE_LINES,
             )
             if self._exchanges is not None
             else []
@@ -326,24 +326,24 @@ class AnalyseConversationMessageUseCase:
             )
             return await self._finish(session, message_id, reading, now=moment, text=text)
 
-        led_by_kora = self._kora is not None and self._kora.leads(session, text)
-        if led_by_kora and self._kora is not None:
-            led = await self._kora.answer(
+        led_by_idia = self._idia is not None and self._idia.leads(session, text)
+        if led_by_idia and self._idia is not None:
+            led = await self._idia.answer(
                 session, text=text, thread=thread, message_id=message_id, now=moment
             )
             if led is not None:
                 return led
             # Another service, or the agent failed: the reading model answers,
-            # not the per-task agents Kora stands for.
+            # not the per-task agents idia stands for.
         # The task lanes read the last lines only, as before.
         thread = thread[-LANE_LINES:]
-        if not led_by_kora and self._agent is not None and self._agent.leads(session, text):
+        if not led_by_idia and self._agent is not None and self._agent.leads(session, text):
             led = await self._agent.answer(
                 session, text=text, thread=thread, message_id=message_id, now=moment
             )
             if led is not None:
                 return led
-        if not led_by_kora and self._forms is not None and self._forms.leads(session):
+        if not led_by_idia and self._forms is not None and self._forms.leads(session):
             led = await self._forms.answer(
                 session,
                 text=text,

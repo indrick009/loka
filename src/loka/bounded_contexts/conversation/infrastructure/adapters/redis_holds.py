@@ -1,6 +1,6 @@
 """Conversations held for a person to look at, kept in Redis.
 
-A hold is operational state, not business state: it says "Kora stopped
+A hold is operational state, not business state: it says "idia stopped
 answering this thread until someone releases it". It lives beside the locks
 and the rate limiter rather than in the session, so the outbound worker can
 set it without racing the turn that owns the session row.
@@ -23,6 +23,7 @@ _logger = get_logger(__name__)
 
 _HOLD = "hold:{}"
 _INDEX = "hold:index"
+_INCIDENT = "hold:incident:{}"
 _MISREAD = "misread:{}"
 # A run of misread turns is only meaningful within one sitting.
 _MISREAD_TTL_SECONDS = 6 * 3600
@@ -40,6 +41,10 @@ class Hold:
     withheld: str
     # The last message received while held: answered first on release.
     pending_message_id: str | None = None
+    # « I-7F3A2C »: what the alert names, and what the admin answers with a note.
+    incident: str = ""
+    # The admin's instruction for the fix, sent on WhatsApp as « I-7F3A2C … ».
+    note: str = ""
 
 
 class RedisConversationHolds:
@@ -58,13 +63,30 @@ class RedisConversationHolds:
         try:
             await self._redis.set(_HOLD.format(hold.session_id), json.dumps(asdict(hold)))
             await self._redis.sadd(_INDEX, hold.session_id)
+            if hold.incident:
+                await self._redis.set(_INCIDENT.format(hold.incident), hold.session_id)
         except RedisError as exc:
             _logger.warning("holds_unavailable", error=type(exc).__name__)
 
     async def note_pending(self, hold: Hold, message_id: uuid.UUID) -> None:
         await self.put(Hold(**{**asdict(hold), "pending_message_id": str(message_id)}))
 
+    async def by_incident(self, incident: str) -> Hold | None:
+        try:
+            session_id = await self._redis.get(_INCIDENT.format(incident.upper()))
+        except RedisError as exc:
+            _logger.warning("holds_unavailable", error=type(exc).__name__)
+            return None
+        return await self.get(str(session_id)) if session_id else None
+
+    async def add_note(self, hold: Hold, note: str) -> None:
+        joined = f"{hold.note}\n{note}".strip()
+        await self.put(Hold(**{**asdict(hold), "note": joined}))
+
     async def release(self, session_id: uuid.UUID | str) -> None:
+        hold = await self.get(session_id)
+        if hold is not None and hold.incident:
+            await self._redis.delete(_INCIDENT.format(hold.incident))
         await self._redis.delete(_HOLD.format(session_id), _MISREAD.format(session_id))
         await self._redis.srem(_INDEX, str(session_id))
 

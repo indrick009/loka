@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 from loka.bounded_contexts.dating.domain.profile import Profile
 
 
@@ -11,8 +12,8 @@ def _fr(language: str) -> bool:
 
 def minor(language: str) -> str:
     if _fr(language):
-        return "Kora Rencontres est réservé aux personnes majeures. Je ne peux pas créer de profil."
-    return "Kora Dating is for adults only. I cannot create a profile."
+        return "idia Rencontres est réservé aux personnes majeures. Je ne peux pas créer de profil."
+    return "idia Dating is for adults only. I cannot create a profile."
 
 
 def inappropriate(language: str) -> str:
@@ -28,7 +29,7 @@ def ready(language: str) -> str:
 
 
 def proposal(other: Profile, language: str) -> str:
-    # Never the description: members write it for Kora's matching alone, on the
+    # Never the description: members write it for idia's matching alone, on the
     # promise that nobody else reads it.
     where = f"{other.city} ({other.country})"
     if _fr(language):
@@ -64,8 +65,16 @@ def yes_or_no(language: str) -> str:
 
 def liked(language: str) -> str:
     if _fr(language):
-        return "C'est noté ! Je lui présente ton profil ; si c'est réciproque, je te préviens."
-    return "Noted! I am introducing your profile; if it is mutual, I will let you know."
+        return (
+            "C'est noté ! Je lui présente ton profil ; si c'est réciproque, je te préviens. "
+            "Si tu veux découvrir quelqu'un d'autre en attendant, dis-le-moi.\n"
+            f"{report_hint(language)}"
+        )
+    return (
+        "Noted! I am introducing your profile; if it is mutual, I will let you know. "
+        "If you'd like to meet someone else meanwhile, just tell me.\n"
+        f"{report_hint(language)}"
+    )
 
 
 def passed(language: str) -> str:
@@ -76,7 +85,7 @@ def match(other: Profile, language: str) -> str:
     if _fr(language):
         return (
             f"C'est un match ! {other.first_name} ({other.age} ans, {other.city}) a dit oui "
-            "aussi. Kora ne donne jamais un contact sans l'accord des deux : c'est le "
+            "aussi. idia ne donne jamais un contact sans l'accord des deux : c'est le "
             "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : 1 000 FCFA par "
             "Mobile Money sur ce numéro, ou envoie le numéro à utiliser."
         )

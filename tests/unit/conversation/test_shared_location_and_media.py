@@ -575,7 +575,7 @@ class TestWhatTheLiveTestShowed:
         assert not is_a_question(text)
 
     async def test_the_photo_that_publishes_moves_the_thread_to_published(self) -> None:
-        """Left on COLLECT_MEDIA, Kora kept asking for the photos it had."""
+        """Left on COLLECT_MEDIA, idia kept asking for the photos it had."""
         session = _session(
             flow=FlowName.PROPERTY_CREATION,
             step=FlowStep.COLLECT_MEDIA,

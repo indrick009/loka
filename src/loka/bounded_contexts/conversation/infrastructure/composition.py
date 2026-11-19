@@ -171,7 +171,7 @@ def analyse_conversation_message_use_case(
         # The tenant's half: his line number becomes a question to the owner of
         # the lodging he picked.
         availability_requests=ConversationAvailabilityRequests(uow),
-        # A tenant's search is recorded, not answered in the thread: Kora
+        # A tenant's search is recorded, not answered in the thread: idia
         # acknowledges and comes back once it has something worth sending.
         demands=ConversationTenantDemands(uow),
         # A month on, his "oui"/"non" to "cherchez-vous toujours ?".
@@ -194,7 +194,7 @@ def analyse_conversation_message_use_case(
         # The forms of Food, Dating, Found and Booking, filled by the same agent.
         form_filler=form_filler(settings),
         # One agent for the whole thread, Food and the tenant search as tools.
-        kora=kora_agent(settings),
+        idia=idia_agent(settings),
     )
 
 
@@ -209,13 +209,13 @@ def conversation_agent(settings: Settings) -> Any | None:
     return PydanticTenantSearchAgent(settings.ai)
 
 
-def kora_agent(settings: Settings) -> Any | None:
-    """The single Kora agent behind ``AI__KORA_AGENT_ENABLED``."""
-    if not (settings.ai.kora_agent_enabled and settings.ai.pipeline_enabled):
+def idia_agent(settings: Settings) -> Any | None:
+    """The single idia agent behind ``AI__IDIA_AGENT_ENABLED``."""
+    if not (settings.ai.idia_agent_enabled and settings.ai.pipeline_enabled):
         return None
-    from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import PydanticKora
+    from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import PydanticIdia
 
-    return PydanticKora(settings.ai)
+    return PydanticIdia(settings.ai)
 
 
 def form_filler(settings: Settings) -> Any | None:

@@ -123,7 +123,7 @@ class ComplaintReportRow(Base):
 
 
 class ProviderStandingRow(Base):
-    """Whether Kora still puts this provider forward, and who decided that.
+    """Whether idia still puts this provider forward, and who decided that.
 
     One row per provider, created the first time someone complains. Providers
     with no row are visible, which is the common case and must not cost a write

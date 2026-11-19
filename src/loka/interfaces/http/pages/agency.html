@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kora Booking — Agences</title>
+<title>idia Booking — Agences</title>
 <style>
   :root { --bg:#f6f7f5; --card:#fff; --ink:#1d2320; --muted:#5f6b66; --line:#dfe4e1;
           --brand:#1f7a4d; --brand-ink:#fff; --danger:#b3261e; }
@@ -40,7 +40,7 @@
 </head>
 <body>
 <header>
-  <h1>Kora Booking — Espace agence</h1>
+  <h1>idia Booking — Espace agence</h1>
   <p>Publiez vos lignes et vos horaires : les voyageurs réservent leur place sur WhatsApp.</p>
 </header>
 <main>
@@ -60,7 +60,7 @@
     </form>
     <p class="error" id="register-error"></p>
     <div id="new-key" class="hidden">
-      <p class="note">Votre clé d'accès (elle est aussi envoyée sur WhatsApp si ce numéro a déjà écrit à Kora) :</p>
+      <p class="note">Votre clé d'accès (elle est aussi envoyée sur WhatsApp si ce numéro a déjà écrit à idia) :</p>
       <span class="key" id="key-value"></span>
     </div>
   </section>
@@ -104,7 +104,7 @@
   const $ = (id) => document.getElementById(id);
   const money = (n) => new Intl.NumberFormat("fr-FR").format(n) + " FCFA";
   let creds = null;
-  try { creds = JSON.parse(localStorage.getItem("kora-agency") || "null"); } catch (_) {}
+  try { creds = JSON.parse(localStorage.getItem("idia-agency") || "null"); } catch (_) {}
 
   async function call(path, options = {}) {
     const headers = { "Content-Type": "application/json" };
@@ -121,7 +121,7 @@
     $("auth").classList.add("hidden");
     ["space", "lines", "reservations"].forEach((id) => $(id).classList.remove("hidden"));
     $("agency-name").textContent = me.name;
-    $("agency-meta").textContent = `${me.phone} · commission Kora : ${money(me.commission_xaf)} par place`;
+    $("agency-meta").textContent = `${me.phone} · commission idia : ${money(me.commission_xaf)} par place`;
     $("lines-body").innerHTML = me.lines.map((l) => `<tr><td>${esc(l.origin)} → ${esc(l.destination)}</td>
       <td>${esc(l.bus_class)}</td><td>${money(l.price_xaf)}</td><td>${l.seats} (${esc(l.layout)})</td>
       <td>${l.times.map(esc).join(", ")}</td></tr>`).join("") || `<tr><td colspan="5">Aucune ligne pour l'instant.</td></tr>`;
@@ -135,7 +135,7 @@
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.target));
     creds = { phone: data.phone, key: data.key.trim() };
-    try { await load(); localStorage.setItem("kora-agency", JSON.stringify(creds)); $("login-error").textContent = ""; }
+    try { await load(); localStorage.setItem("idia-agency", JSON.stringify(creds)); $("login-error").textContent = ""; }
     catch (error) { creds = null; $("login-error").textContent = error.message; }
   });
 
@@ -147,7 +147,7 @@
       $("key-value").textContent = made.key; $("new-key").classList.remove("hidden");
       $("register-error").textContent = "";
       creds = { phone: made.phone, key: made.key };
-      localStorage.setItem("kora-agency", JSON.stringify(creds));
+      localStorage.setItem("idia-agency", JSON.stringify(creds));
       setTimeout(load, 1500);
     } catch (error) { $("register-error").textContent = error.message; }
   });
@@ -163,10 +163,10 @@
   });
 
   $("logout").addEventListener("click", () => {
-    creds = null; localStorage.removeItem("kora-agency"); location.reload();
+    creds = null; localStorage.removeItem("idia-agency"); location.reload();
   });
 
-  if (creds) load().catch(() => { creds = null; localStorage.removeItem("kora-agency"); });
+  if (creds) load().catch(() => { creds = null; localStorage.removeItem("idia-agency"); });
 </script>
 </body>
 </html>

@@ -33,7 +33,7 @@ class LandlordAvailability:
 
         These intents were recognised and then discarded: a landlord could
         write "c'est déjà loué" and the lodging stayed in every tenant's search
-        results. Nothing else in the system can take a listing out — Kora never
+        results. Nothing else in the system can take a listing out — idia never
         infers availability — so this answer is the only thing that does.
 
         ``None`` when the turn was not one of these answers, or when the

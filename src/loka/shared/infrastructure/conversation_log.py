@@ -2,7 +2,7 @@
 
 One JSON line per event, appended to ``CONVERSATION_LOG_PATH`` (empty: off).
 It is a file, not a table, so ``_empty_all_data`` never erases it: it is what
-a test conversation is read back from afterwards, to see where Kora went wrong.
+a test conversation is read back from afterwards, to see where idia went wrong.
 It holds what users write, so it is for the test phase, not for real traffic.
 """
 

@@ -12,7 +12,7 @@ lodging, which needs two translations: a listing names a landlord *profile*
 while a WhatsApp thread belongs to an *account*, and the account is what holds
 the phone number.
 
-Kora promises nothing here. No reservation, no visit: only that the landlord is
+idia promises nothing here. No reservation, no visit: only that the landlord is
 being asked, because that is all that actually happens (housing spec §9).
 """
 
@@ -72,7 +72,7 @@ class TestTellingALandlordFromATenant:
     @pytest.mark.parametrize(
         "text",
         [
-            "Bonjour, j'ai un studio moderne à louer à Douala, je veux le mettre sur Kora",
+            "Bonjour, j'ai un studio moderne à louer à Douala, je veux le mettre sur idia",
             "J'ai une chambre à louer à Biyem-Assi",
             "Je loue mon appart de 2 chambres à Bastos",
         ],
@@ -111,7 +111,7 @@ class TestReadingSeveralNeighbourhoods:
         assert match.entities["neighbourhoods"] == ["Bonamoussadi", "Makepe"]
 
     def test_mon_frere_is_a_way_of_speaking_not_a_source(self) -> None:
-        """Read as "heard of Kora through family", it swallowed the studio."""
+        """Read as "heard of idia through family", it swallowed the studio."""
         match = DeterministicClassifier().classify(
             "Bonsoir mon frère, je cherche un studio moderne à Douala, c'est comment ?",
             pending=None,

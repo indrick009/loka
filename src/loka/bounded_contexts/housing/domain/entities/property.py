@@ -249,9 +249,9 @@ class Property(AggregateRoot):
         """The refundable caution, in months of rent.
 
         Zero is a real answer — "aucune caution" is ordinary here — which is why
-        it is recorded rather than left unset. The landlord fixes it; Kora
+        it is recorded rather than left unset. The landlord fixes it; idia
         stores it, shows it, and neither holds the money nor arbitrates its
-        return (see conception_metier/kora-housing-v1.md §4.7).
+        return (see conception_metier/idia-housing-v1.md §4.7).
         """
         self._assert_editable()
         self.deposit_months = deposit
@@ -319,7 +319,7 @@ class Property(AggregateRoot):
     def declare_one_taken(self, *, now: datetime) -> None:
         """The landlord says one of them is gone.
 
-        Only he can say it. Kora leaves the relationship at the introduction, so
+        Only he can say it. idia leaves the relationship at the introduction, so
         it never learns whether a lease was signed — which is why nothing here
         decrements on a match, a confirmation or a payment (§9).
 
@@ -431,9 +431,9 @@ class Property(AggregateRoot):
         if self.rent is None or self.charging_policy is ChargingPolicy.UNKNOWN:
             issues.add(DataQualityIssue.MISSING_CHARGES)
         # The minimum duration, the availability date and the entry conditions
-        # are deliberately *not* blocking. Kora's ten collection steps never ask
+        # are deliberately *not* blocking. idia's ten collection steps never ask
         # for them: it puts a landlord and a tenant in touch, it does not
-        # negotiate a lease — see conception_metier/kora-housing-v1.md §4 and
+        # negotiate a lease — see conception_metier/idia-housing-v1.md §4 and
         # §10. Requiring them meant a landlord could answer every question he
         # was actually asked and still be refused publication, for three fields
         # nobody had mentioned to him.
@@ -630,7 +630,7 @@ class Property(AggregateRoot):
     ) -> None:
         """Apply the landlord's answer to "le logement est encore disponible ?".
 
-        The landlord decides availability, always. Kora never infers it — not
+        The landlord decides availability, always. idia never infers it — not
         from a match, not from a payment, not from elapsed time — and a listing
         stays available by default until he writes otherwise (§9).
         """

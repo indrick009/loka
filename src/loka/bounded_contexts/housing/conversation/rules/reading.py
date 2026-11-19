@@ -71,7 +71,7 @@ def classify(text: str, *, pending: str | None = None) -> DeterministicMatch | N
             entities={"availability": availability},
         )
 
-    # Only an answer to "comment avez-vous connu Kora ?". Read unprompted,
+    # Only an answer to "comment avez-vous connu idia ?". Read unprompted,
     # "mon frère" — how half of Douala addresses anyone — became "heard of
     # us through family", and "Bonsoir mon frère, je cherche un studio
     # moderne à Douala" lost the studio, the standing and the city.

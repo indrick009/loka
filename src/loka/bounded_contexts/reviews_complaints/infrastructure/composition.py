@@ -44,7 +44,7 @@ REVIEWS_REPOSITORY_FACTORIES: dict[str, Any] = {
 
 
 def introduction_directory() -> IntroductionDirectory:
-    """Bind the adapter that confirms Kora really made the introduction.
+    """Bind the adapter that confirms idia really made the introduction.
 
     Only the refusing one exists today: each domain owns the records that prove
     an introduction, and none of them publishes that adapter yet. Swapping it in

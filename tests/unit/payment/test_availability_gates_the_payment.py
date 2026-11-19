@@ -1,11 +1,11 @@
 """Nobody is charged before the landlord says the lodging is still free.
 
-The business rule is one line of the spec (§9): "Avant tout paiement, Kora
+The business rule is one line of the spec (§9): "Avant tout paiement, idia
 demande toujours au bailleur si le logement est encore disponible. Le locataire
 ne paie que si le bailleur confirme la disponibilité."
 
 The failure it prevents is concrete: a tenant pays 1 000 FCFA, receives a
-landlord's number, calls, and learns the room went last week. Kora keeps the
+landlord's number, calls, and learns the room went last week. idia keeps the
 money and has sold nothing. The state really can change between publication
 and the request, and the only person who knows is the landlord.
 

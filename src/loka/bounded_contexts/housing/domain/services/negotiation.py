@@ -1,13 +1,13 @@
 """One round of negotiation, carried by the availability question (§8).
 
 When a tenant picks a lodging that asks more than he said he could give — a
-little dearer, or more months up front — Kora may put his terms to the
+little dearer, or more months up front — idia may put his terms to the
 landlord, **only if the lodging gets little demand**: people interested at the
 asking price mean the price is right. The offer rides on the question the
 landlord is asked anyway (§9), so negotiating costs him no extra message.
 
 Then it stops. He accepts, keeps his price, or names his own once; that answer
-goes to the tenant and nothing goes back. Kora is a matchmaker with one round
+goes to the tenant and nothing goes back. idia is a matchmaker with one round
 of negotiation, not a broker — and the same offer is never made twice about
 the same lodging.
 """

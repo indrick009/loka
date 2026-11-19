@@ -33,7 +33,7 @@ _logger = get_logger(__name__)
 SWEEP_INTERVAL_SECONDS = 10.0
 HANDOVER = (
     "Pour la restitution : rencontrez-vous dans un lieu public ou au commissariat. "
-    "Aucun argent n'est dû entre vous : signalez à Kora toute demande d'argent."
+    "Aucun argent n'est dû entre vous : signalez à idia toute demande d'argent."
 )
 
 
@@ -106,7 +106,7 @@ async def settle_once(database: Database, settings: Settings) -> None:
                 await desk.notify(
                     unlock.target_user_id,
                     f"Le propriétaire du document que tu as déclaré a été vérifié par "
-                    f"l'équipe Kora et va te contacter : {payer_phone}. {HANDOVER}",
+                    f"l'équipe idia et va te contacter : {payer_phone}. {HANDOVER}",
                     now=now,
                 )
         await uow.commit()

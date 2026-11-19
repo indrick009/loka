@@ -165,7 +165,7 @@ ACQUISITION_SOURCE_PATTERNS: dict[str, re.Pattern[str]] = {
 LISTING_INTENT_PATTERN = re.compile(
     r"\b(je\s+(?:voudrais|souhaite|veux|dois|ai)\s+"
     r"(?:publier|mettre\s+en\s+ligne|vendre|proposer)|"
-    # "je veux le mettre sur Kora" — the pronoun is the lodging he has just
+    # "je veux le mettre sur idia" — the pronoun is the lodging he has just
     # named; read as "je veux ..." it sent a landlord to the tenant's form.
     r"je\s+(?:voudrais|souhaite|veux)\s+(?:le|la|les)\s+(?:mettre|publier|proposer)|"
     r"annonce[er]?|je\s+propose|disponible\s+[aà]\s+louer)\b",

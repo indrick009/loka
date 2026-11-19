@@ -7,7 +7,7 @@ A worse reply beats no reply, but not a reply about the wrong service.
 
 Two readings, both narrow on purpose:
 - an opening, from the words each domain declares in ``DomainSpec.cues``;
-- an answer to the field Kora just asked, when its shape is simple — an
+- an answer to the field idia just asked, when its shape is simple — an
   age, a count, a seat, a day, a name, a city, a yes or a no.
 Anything else stays unread, and the user is asked to rephrase as before.
 """

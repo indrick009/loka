@@ -1,6 +1,6 @@
 """Say the platform's sentence in the user's own voice.
 
-The state machine decides *what* Kora says — a demand recorded, a lodging being
+The state machine decides *what* idia says — a demand recorded, a lodging being
 checked, criteria waiting for a match. Those sentences used to go out as stock
 copy, in formal French, whatever the user had just written. Observed live:
 "c'est combien d'avance ?", "tu me comprends même ?" and "rappelle-moi mon
@@ -28,8 +28,8 @@ from loka.bounded_contexts.conversation.application.services.prompts import (
 VOICE_SYSTEM_PROMPT = (
     f"{PERSONA} You receive the user's last message, the recent messages of the "
     "thread, and 'platform_message': what the platform has decided to tell the user, "
-    "written as stock copy. It is Kora speaking to the user: its questions are "
-    "Kora's questions to the user, never questions to you. Rewrite it as Kora's "
+    "written as stock copy. It is idia speaking to the user: its questions are "
+    "idia's questions to the user, never questions to you. Rewrite it as idia's "
     "next WhatsApp message, in your own "
     "words and in the user's language and register (French, English or Cameroonian "
     "Pidgin; 'tu' when the user says 'tu' or writes casually) — never copy its "
@@ -79,14 +79,14 @@ def build_voice_prompt(
     )
 
 
-# How close to one of Kora's recent lines a reply may come before it counts as
+# How close to one of idia's recent lines a reply may come before it counts as
 # the same sentence sent again.
 PARROT_RATIO = 0.85
 
 
 def parrots(reply: str, thread: list[Exchange], *, lines: int = 3) -> bool:
-    """Whether the reply repeats one of Kora's last lines."""
-    said = [line.text for line in thread if line.speaker == "kora"][-lines:]
+    """Whether the reply repeats one of idia's last lines."""
+    said = [line.text for line in thread if line.speaker == "idia"][-lines:]
     folded = reply.casefold().strip()
     return any(
         SequenceMatcher(None, folded, line.casefold().strip()).ratio() >= PARROT_RATIO

@@ -70,7 +70,7 @@ class InitiateServiceFeeUseCase:
         gateway: PaymentGateway,
         availability: ListingAvailability | None = None,
         service_fee_xaf: int = 1000,
-        payment_message: str = "Kora - contact du bailleur",
+        payment_message: str = "idia - contact du bailleur",
         logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
         self._uow = uow
@@ -78,8 +78,8 @@ class InitiateServiceFeeUseCase:
         self._availability = availability
         self._service_fee_xaf = service_fee_xaf
         # What the payer reads on the provider's checkout page and on their
-        # mobile-money confirmation. It is the only wording in this flow Kora
-        # does not control the layout of, so it stays short and names Kora.
+        # mobile-money confirmation. It is the only wording in this flow idia
+        # does not control the layout of, so it stays short and names idia.
         self._payment_message = payment_message
         self._logger = logger or structlog.get_logger(self.name)
 

@@ -1,6 +1,6 @@
-"""The single Kora agent: one model for the thread, the services' rules as its tools.
+"""The single idia agent: one model for the thread, the services' rules as its tools.
 
-Behind ``AI__KORA_AGENT_ENABLED``. Before any task, in a food search and in a
+Behind ``AI__IDIA_AGENT_ENABLED``. Before any task, in a food search and in a
 tenant search, the agent reads the message with the whole thread and the
 user's memory, and decides: a food search, an order, a tenant's answers, or
 only a reply. Each action then runs through the code that already owns it —
@@ -13,14 +13,15 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import replace
 from datetime import datetime
 
 from loka.bounded_contexts.conversation.application.ports import (
     AgentAnswer,
     Exchange,
-    KoraAgent,
-    KoraAnswer,
-    KoraState,
+    IdiaAgent,
+    IdiaAnswer,
+    IdiaState,
 )
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.agent_lane import (  # noqa: E501
     MIN_WORDS_TO_SWITCH,
@@ -54,6 +55,8 @@ from loka.bounded_contexts.food.conversation.spec import HITS_KEY
 from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.logging import get_logger
 
+# The intent of a request handed to a person; the outbound worker holds on it.
+ESCALATE = "ESCALATE"
 # The lines of the thread the agent reads; the other lanes keep their six.
 THREAD_LINES = 20
 _BARE_NUMBER = re.compile(r"\s*\d\s*\.?\s*")
@@ -62,10 +65,10 @@ _OFFER_FIELDS = ("dish", "price", "restaurant")
 _logger = get_logger(__name__)
 
 
-class KoraLane:
+class IdiaLane:
     def __init__(
         self,
-        agent: KoraAgent,
+        agent: IdiaAgent,
         *,
         judge: Judge,
         applier: TurnApplier,
@@ -106,11 +109,11 @@ class KoraLane:
             reply = await self._agent.answer(text, state=state_of(session), thread=thread)
         except Exception as exc:  # the pipeline still answers
             _logger.warning(
-                "kora_agent_failed", session_id=str(session.id), error=type(exc).__name__
+                "idia_agent_failed", session_id=str(session.id), error=type(exc).__name__
             )
             return None
         journal(
-            "reading", session.phone.e164, lane="kora", act=reply.act, action=reply.action,
+            "reading", session.phone.e164, lane="idia", act=reply.act, action=reply.action,
             flow=session.flow.value, step=session.step.value, entities=reply.entities,
             model_reply=reply.reply,
         )
@@ -131,6 +134,17 @@ class KoraLane:
                 now=now,
             )
         cost, call = _cost(reply, message_id=message_id, now=now)
+        if reply.action == "ask_team":
+            # A person answers it (see ``interfaces/worker/stuck_guard``): the
+            # outbound worker holds the thread and alerts the admin.
+            verdict = replace(
+                self._judge(session, intent="SUPPORT", confidence=1.0, entities={}, reason=None),
+                intent=ESCALATE,
+            )
+            request = str(reply.entities.get("request") or "")
+            return await self._applier.aside(
+                session, verdict, cost, call=call, reply_text=f"{request} — « {text} »", text=text
+            )
         if reply.action in ("food_search", "food_order"):
             intent = "FOOD_SEARCH" if reply.action == "food_search" else "COLLECT_CHOICE"
             verdict = self._judge(
@@ -156,7 +170,7 @@ class KoraLane:
         )
 
 
-def state_of(session: ConversationSession) -> KoraState:
+def state_of(session: ConversationSession) -> IdiaState:
     """What the agent is told before the message: the task, its list, the memory."""
     offered = session.context.get(HITS_KEY)
     offers = (
@@ -164,7 +178,7 @@ def state_of(session: ConversationSession) -> KoraState:
         if session.step is FlowStep.COLLECT_CHOICE and isinstance(offered, list)
         else []
     )
-    return KoraState(
+    return IdiaState(
         flow=session.flow.value,
         step=session.step.value,
         language=session.language,
@@ -175,7 +189,7 @@ def state_of(session: ConversationSession) -> KoraState:
     )
 
 
-def _as_search(reply: KoraAnswer) -> AgentAnswer:
+def _as_search(reply: IdiaAnswer) -> AgentAnswer:
     facts = {k: v for k, v in reply.entities.items() if k in SEARCH_FIELDS}
     return AgentAnswer(
         act="slot_answer",
@@ -192,7 +206,7 @@ def _as_search(reply: KoraAnswer) -> AgentAnswer:
 
 
 def _cost(
-    reply: KoraAnswer, *, message_id: uuid.UUID, now: datetime
+    reply: IdiaAnswer, *, message_id: uuid.UUID, now: datetime
 ) -> tuple[TurnCost, CallUsage]:
     cost = TurnCost(
         message_id=message_id,

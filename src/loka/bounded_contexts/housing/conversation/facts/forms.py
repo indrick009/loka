@@ -18,10 +18,10 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 # up front) plus a *caution* (refundable, on top of the advance) plus the
 # monthly charges. Both are counted in months of rent, not in francs.
 #
-# This is the ten-step form of conception_metier/kora-housing-v1.md §4, in its
+# This is the ten-step form of conception_metier/idia-housing-v1.md §4, in its
 # order. Three fields the form used to ask for — the minimum duration, the
 # availability date and the free-text conditions — are deliberately absent:
-# Kora introduces a landlord to a tenant and does not negotiate a lease (§10).
+# idia introduces a landlord to a tenant and does not negotiate a lease (§10).
 # Their steps, entities and setters all remain, so a landlord who volunteers
 # "disponible immédiatement" still has it recorded. Optional, not asked.
 PROPERTY_REQUIREMENTS: tuple[tuple[str, FlowStep], ...] = (
@@ -128,7 +128,7 @@ def question_to_ask(
     """The question this turn puts to the user, decided once and in one place.
 
     The form's next question comes first. When the turn moved no field — a
-    thank-you, a confirmation, a question about what Kora already knows — the
+    thank-you, a confirmation, a question about what idia already knows — the
     one still open is asked again instead of nothing, because a turn that
     acknowledges and then asks nothing reads as the end of the conversation.
     That was the single most common dead end in the thread: "c'est bien noté,
@@ -136,12 +136,12 @@ def question_to_ask(
     followed by silence.
 
     ``None`` means there is genuinely nothing open — a greeting on a fresh
-    session — and the outbound layer answers with what Kora can do instead.
+    session — and the outbound layer answers with what idia can do instead.
 
     Callers record exactly what this returns, which is what keeps the stored
     pending question and the question actually asked from drifting apart.
 
-    A step that *was* decided but asks nothing — the demand is recorded and Kora
+    A step that *was* decided but asks nothing — the demand is recorded and idia
     now waits — closes the old question instead of inheriting it. Observed
     live: after "votre demande est enregistrée" the session still awaited the
     budget, every later reply went out as that question, and a tenant's next

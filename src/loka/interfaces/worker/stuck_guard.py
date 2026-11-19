@@ -16,6 +16,7 @@ the guard broke would be the failure it exists to prevent.
 
 from __future__ import annotations
 
+import secrets
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -40,26 +41,45 @@ _logger = get_logger(__name__)
 THREAD_LINES = 10
 _ALERT_LINES = 6
 
+UNSUPPORTED = "unsupported"
 _HOLDING = {
-    "fr": "Je vérifie un point pour vous répondre correctement, je vous reviens très vite 🙏",
+    "fr": "Je vérifie un point pour bien te répondre, je te reviens très vite 🙏",
     "en": "Let me check something so I answer you properly, I'll get back to you shortly 🙏",
 }
+_ASKING_TEAM = {
+    "fr": "Bonne question 🙏 Je vérifie avec l'équipe et je te reviens très vite.",
+    "en": "Good question 🙏 I'm checking with the team and will get back to you shortly.",
+}
+# The intent of a reply that asks for a person instead of an answer: a request
+# close to what idia does but not offered yet (see ``services/unsupported``).
+ESCALATE = "ESCALATE"
 
 
-def holding_text(language: str | None) -> str:
-    return _HOLDING["en" if (language or "").casefold().startswith("en") else "fr"]
+def holding_text(language: str | None, signal: str | None = None) -> str:
+    texts = _ASKING_TEAM if signal == UNSUPPORTED else _HOLDING
+    return texts["en" if (language or "").casefold().startswith("en") else "fr"]
+
+
+# What the alert calls each reason a conversation was paused.
+_SIGNALS = {
+    "repeated_reply": "idia répète la même réponse",
+    "not_understood": "idia ne comprend plus l'utilisateur",
+    UNSUPPORTED: "demande liée à idia mais pas encore proposée",
+}
 
 
 def alert_text(hold: Hold, thread: list[Exchange]) -> str:
     lines = "\n".join(
         f"{'👤' if line.speaker == 'user' else '🤖'} {line.text}" for line in thread[-_ALERT_LINES:]
     )
+    held = "Demande" if hold.signal == UNSUPPORTED else "Réponse retenue"
     return (
-        f"⚠️ Conversation en pause : {hold.phone}\n"
-        f"Signal : {hold.signal}\n\n"
+        f"⚠️ Incident {hold.incident} : {hold.phone}\n"
+        f"{_SIGNALS.get(hold.signal, hold.signal)}\n\n"
         f"{lines}\n\n"
-        f"Réponse retenue :\n{hold.withheld}\n\n"
-        f"Reprendre : holds release {hold.phone}"
+        f"{held} :\n{hold.withheld}\n\n"
+        f"L'utilisateur attend (« je te reviens très vite »). Pour une consigne, réponds :\n"
+        f"{hold.incident} ta consigne"
     )
 
 
@@ -107,6 +127,17 @@ class StuckGuard:
         signal = stuck_signal(text, thread, misread_run=misread)
         return (signal, thread) if signal is not None else None
 
+    async def thread(self, session_id: uuid.UUID) -> list[Exchange]:
+        """The last lines of the thread, for an alert; empty when unreadable."""
+        try:
+            async with unit_of_work(self._database) as uow:
+                return await SqlAlchemyConversationExchanges(uow.session).recent(
+                    session_id, limit=THREAD_LINES
+                )
+        except Exception as exc:  # the alert still goes, without the lines
+            _logger.warning("stuck_guard_unreadable", error=type(exc).__name__)
+            return []
+
     async def hold(
         self,
         *,
@@ -119,6 +150,7 @@ class StuckGuard:
     ) -> list[tuple[str, str]]:
         """Hold the conversation; the alerts to send, one per person to tell."""
         hold = Hold(
+            incident=f"I-{secrets.token_hex(3).upper()}",
             session_id=str(session_id),
             phone=recipient,
             signal=signal,
@@ -127,7 +159,10 @@ class StuckGuard:
             withheld=withheld,
         )
         await self._holds.put(hold)
-        journal("incident", recipient, signal=signal, withheld=withheld, session_id=str(session_id))
+        journal(
+            "incident", recipient, incident=hold.incident, signal=signal, withheld=withheld,
+            session_id=str(session_id),
+        )
         _logger.error(
             "conversation_held", session_id=str(session_id), signal=signal, recipient=recipient
         )

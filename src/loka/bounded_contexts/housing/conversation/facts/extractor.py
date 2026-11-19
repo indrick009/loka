@@ -216,7 +216,7 @@ class FactExtractor:
             #
             # A turn that states something only a lodging conversation
             # produces is therefore answered with the one question that
-            # resolves it. Kora does not guess the side: "je veux un studio"
+            # resolves it. idia does not guess the side: "je veux un studio"
             # is a landlord or a tenant, and reading it wrong puts someone
             # through the opposite form.
             if _states_a_lodging(facts) and not _already_asked_the_role(known):
@@ -250,7 +250,7 @@ class FactExtractor:
                 and not _places_the_lodging(facts, already_known)
             ):
                 # Housing §4: the shared location places a lodging reliably;
-                # without it Kora asks "la ville et le quartier", and the step
+                # without it idia asks "la ville et le quartier", and the step
                 # must be validated before moving on. "Douala" alone used to
                 # close it, and a tenant then read "Studio - Douala".
                 return step

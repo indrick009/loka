@@ -105,8 +105,8 @@ def build_analysis_prompt(
         "required_fields": (
             [
                 {"field": item.name, "ask": item.topic}
-                # What Kora says itself after the reply: not to be said twice.
-                | ({"kora_adds": item.warn(default_language)} if item.notice else {})
+                # What idia says itself after the reply: not to be said twice.
+                | ({"idia_adds": item.warn(default_language)} if item.notice else {})
                 for item in spec.missing(flow, public_known)
             ]
             if spec

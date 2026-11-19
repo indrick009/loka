@@ -1,4 +1,4 @@
-"""The agent ports, answered by Pydantic AI: Kora, the tenant search and the domain forms."""
+"""The agent ports, answered by Pydantic AI: idia, the tenant search and the domain forms."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from pydantic_ai.messages import (
 )
 
 from loka.bounded_contexts.ai.infrastructure.agent.form_agent import FormAgent
-from loka.bounded_contexts.ai.infrastructure.agent.kora_agent import KoraAgentModel
+from loka.bounded_contexts.ai.infrastructure.agent.idia_agent import IdiaAgentModel
 from loka.bounded_contexts.ai.infrastructure.agent.models import openrouter_model
 from loka.bounded_contexts.ai.infrastructure.agent.tenant_search import TenantSearchAgent
 from loka.bounded_contexts.conversation.application.plugs.registry import spec_for
@@ -24,8 +24,8 @@ from loka.bounded_contexts.conversation.application.ports import (
     AgentAnswer,
     Exchange,
     FormAnswer,
-    KoraAnswer,
-    KoraState,
+    IdiaAnswer,
+    IdiaState,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.shared.infrastructure.config.settings import AISettings
@@ -37,14 +37,14 @@ def as_history(thread: list[Exchange]) -> list[ModelMessage]:
     # one speaker are joined, and the history opens on the user's words.
     turns: list[tuple[str, str]] = []
     for line in thread:
-        speaker = "kora" if line.speaker == "kora" else "user"
+        speaker = "idia" if line.speaker == "idia" else "user"
         if turns and turns[-1][0] == speaker:
             turns[-1] = (speaker, f"{turns[-1][1]}\n{line.text}")
         elif turns or speaker == "user":
             turns.append((speaker, line.text))
     return [
         ModelResponse(parts=[TextPart(content=said)])
-        if speaker == "kora"
+        if speaker == "idia"
         else ModelRequest(parts=[UserPromptPart(content=said)])
         for speaker, said in turns
     ]
@@ -144,16 +144,16 @@ class PydanticFormFiller:
         )
 
 
-class PydanticKora:
+class PydanticIdia:
     def __init__(self, settings: AISettings) -> None:
         self._settings = settings
         self._model = settings.default_model
-        self._agent = KoraAgentModel(openrouter_model(settings, self._model))
+        self._agent = IdiaAgentModel(openrouter_model(settings, self._model))
 
-    async def answer(self, text: str, *, state: KoraState, thread: list[Exchange]) -> KoraAnswer:
+    async def answer(self, text: str, *, state: IdiaState, thread: list[Exchange]) -> IdiaAnswer:
         started = time.monotonic()
         turn = await self._agent.reply(text, state=state, history=as_history(thread))
-        return KoraAnswer(
+        return IdiaAnswer(
             act=turn.act,
             reply=turn.reply,
             language=turn.language,

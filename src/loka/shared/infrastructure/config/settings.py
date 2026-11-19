@@ -104,7 +104,7 @@ class AISettings(BaseModel):
     agent_enabled: bool = False
     # One agent for the whole thread, the services as its tools (Food and the
     # tenant search for now); off: the lanes above, one per task.
-    kora_agent_enabled: bool = False
+    idia_agent_enabled: bool = False
 
     def pricing_for(self, model: str) -> ModelPricing | None:
         return self.model_pricing_usd_per_million.get(model)
@@ -157,12 +157,15 @@ class WhatsAppSettings(BaseModel):
 class PrivacySettings(BaseModel):
     """What the first message and the privacy answer tell the user.
 
-    ``policy_url`` is the hosted privacy policy; empty, the user is told to
-    write « confidentialité » to read its summary on WhatsApp instead.
+    Both documents are hosted elsewhere, and only linked:
+    ``PRIVACY__POLICY_URL`` (privacy policy) and ``PRIVACY__TERMS_URL`` (terms
+    of use). Empty, the user is told to write « confidentialité » to read the
+    summary on WhatsApp instead.
     """
 
     contact_email: str = "indrick.kamdem@gmail.com"
     policy_url: str = ""
+    terms_url: str = ""
 
 
 class FapshiSettings(BaseModel):
@@ -186,7 +189,7 @@ class FapshiSettings(BaseModel):
     request_timeout_seconds: float = 15.0
     # Where the payer lands after the checkout page. Empty on purpose: on
     # WhatsApp the conversation resumes in the thread, not on a web page, and
-    # the confirmation the payer should trust is the one Kora sends.
+    # the confirmation the payer should trust is the one idia sends.
     redirect_url: str = ""
     # Fapshi payment links live 24 hours. Kept here rather than in the
     # aggregate because it is the provider's rule, not the platform's.
@@ -224,7 +227,7 @@ class ReviewsSettings(BaseModel):
     """The two numbers the Avis et plaintes spec leaves to be set, not designed.
 
     ``complaint_hide_threshold`` is the N of §6: past this many complaints still
-    owed an answer, Kora stops putting the provider forward until a human
+    owed an answer, idia stops putting the provider forward until a human
     decides. It hides, it never bans. Set it too low and three bad-faith
     complaints take an honest landlord out of search; too high and a scammer
     keeps trading while the queue fills.

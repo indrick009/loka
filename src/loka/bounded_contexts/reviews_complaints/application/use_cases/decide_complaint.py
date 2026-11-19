@@ -16,7 +16,7 @@ Three outcomes, kept separate on purpose:
   provider, with his name on it.
 
 The ban is never implied by a count. Banning a landlord cuts off a revenue on
-the strength of complaints Kora could not verify — she was not there — and a
+the strength of complaints idia could not verify — she was not there — and a
 competitor could otherwise take down an honest provider with a handful of them.
 """
 
@@ -161,7 +161,7 @@ class ReinstateProviderUseCase:
     about one grievance: a provider hidden by three complaints is cleared once,
     not three times.
 
-    It exists because the automatic hide acts on complaints Kora could not
+    It exists because the automatic hide acts on complaints idia could not
     verify. Without a way back, the honest landlord caught by a competitor's
     complaints would wait for them to be decided one by one while his listings
     stayed invisible.
@@ -204,7 +204,7 @@ class ReinstateProviderUseCase:
 def _require_reviewer(reviewer_id: uuid.UUID) -> uuid.UUID:
     """Refuse the nil UUID on the sanction path.
 
-    Kora may hide a provider, never ban or clear one (§6). A transport that
+    idia may hide a provider, never ban or clear one (§6). A transport that
     reaches here without an authenticated operator carries ``UUID(int=0)``
     rather than nothing, and that would be stored as the human who decided —
     a decision with nobody to ask about it.

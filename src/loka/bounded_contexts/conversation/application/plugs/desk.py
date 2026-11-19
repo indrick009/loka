@@ -105,7 +105,7 @@ class ConversationDesk:
 
     async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool:
         """Write to a number that is not a user, such as an agency's, on the
-        thread it last used with Kora. ``False`` when it never wrote."""
+        thread it last used with idia. ``False`` when it never wrote."""
         try:
             number = PhoneNumber.normalize(phone)
         except DomainError:

@@ -1,10 +1,10 @@
-"""What Kora says, and reads, around the 1 000 FCFA unlock.
+"""What idia says, and reads, around the 1 000 FCFA unlock.
 
 Platform text and rules, never the model's. This is the one exchange where a
 misread costs money: "oui" must mean pay with the number shown, a number must
 mean that number, and nothing else may start a withdrawal. The amount is
 always stated in words before anything is requested, and the payer validates
-on his own phone — Kora never asks for a PIN.
+on his own phone — idia never asks for a PIN.
 """
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any
 
+from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import (
     ContactCard,
     Option,
@@ -72,7 +73,7 @@ _TEXT: dict[str, dict[str, str]] = {
         "offer": (
             "Bonne nouvelle : le propriétaire confirme que le logement est toujours "
             "disponible.\nPour recevoir son numéro et la localisation du logement, "
-            "les frais Kora sont de 1 000 FCFA, payés une seule fois.\n"
+            "les frais idia sont de 1 000 FCFA, payés une seule fois.\n"
             "Voulez-vous payer avec ce numéro ({phone}) ? Répondez OUI, ou envoyez le "
             "numéro Mobile Money ou Orange Money à utiliser. Répondez NON pour annuler."
         ),
@@ -122,7 +123,7 @@ _TEXT: dict[str, dict[str, str]] = {
     "en": {
         "offer": (
             "Good news: the landlord confirms the place is still available.\nTo get "
-            "their number and the location of the place, Kora's fee is 1,000 FCFA, "
+            "their number and the location of the place, idia's fee is 1,000 FCFA, "
             "paid once.\nDo you want to pay with this number ({phone})? Reply YES, or "
             "send the Mobile Money or Orange Money number to use. Reply NO to cancel."
         ),
@@ -191,6 +192,7 @@ def contact_text(
     if point is not None:
         lines.append(words["map"].format(lat=point["latitude"], lon=point["longitude"]))
     lines.append(words["contact_end"])
+    lines.append(report_hint(language))
     return "\n".join(lines)
 
 

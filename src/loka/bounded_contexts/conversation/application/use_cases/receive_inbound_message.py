@@ -145,7 +145,7 @@ class ReceiveInboundMessageUseCase:
         # created in this same transaction, after the dedupe check, so a
         # redelivery cannot mint a second one.
         # The WhatsApp profile name, when it reads as a name, names an account
-        # that has none — what lets Kora greet him without asking.
+        # that has none — what lets idia greet him without asking.
         user_id = await self._users.ensure_user(
             phone,
             now=received_at,

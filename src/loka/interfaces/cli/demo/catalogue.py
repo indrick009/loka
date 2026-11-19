@@ -1,7 +1,7 @@
 """DEMO ONLY — what the demo Yaoundé is made of.
 
 Every owner has a number in +237 600 000 xxx, a range no operator hands out:
-nothing Kora sends them reaches a real person, and ``_empty_all_data`` (which
+nothing idia sends them reaches a real person, and ``_empty_all_data`` (which
 only removes the two test numbers' data) leaves all of this in place.
 """
 

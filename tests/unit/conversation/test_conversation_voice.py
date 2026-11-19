@@ -44,7 +44,7 @@ WAITING = (
 )
 THREAD = [
     Exchange(speaker="user", text="mon budget c'est 150 mil le mois, pas plus hein"),
-    Exchange(speaker="kora", text="Votre demande est enregistrée."),
+    Exchange(speaker="idia", text="Votre demande est enregistrée."),
 ]
 
 
@@ -115,7 +115,7 @@ class TestThePrompts:
             exchanges=THREAD,
         )
 
-        assert json.loads(prompt.user)["recent_messages"][1]["from"] == "kora"
+        assert json.loads(prompt.user)["recent_messages"][1]["from"] == "idia"
         assert "football" in prompt.system
 
     def test_an_empty_thread_costs_no_tokens(self) -> None:

@@ -1,4 +1,4 @@
-"""Two members who both said yes, asking each other questions through Kora.
+"""Two members who both said yes, asking each other questions through idia.
 
 Every message is relayed as written, under the sender's first name; a photo is
 relayed as a photo. Nothing that would reach the other without the unlock — a

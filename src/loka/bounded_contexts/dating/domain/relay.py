@@ -1,4 +1,4 @@
-"""What Kora refuses to pass between two members who have not both confirmed.
+"""What idia refuses to pass between two members who have not both confirmed.
 
 A number, an account or a link handed over in a relayed message would give a
 contact without the other's consent and without the unlock: it is never

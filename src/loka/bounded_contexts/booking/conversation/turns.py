@@ -219,7 +219,7 @@ class BookingTurns:
             reservation_id=reservation.reservation_id,
             amount_xaf=reservation.amount_xaf,
             payer_phone=payer,
-            label=f"Kora - billet {trip.get('agency', '')} {reservation.reference}",
+            label=f"idia - billet {trip.get('agency', '')} {reservation.reference}",
         )
         if reference is None:
             return say(texts.payment_refused(), voiced=False)

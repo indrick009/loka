@@ -1,6 +1,6 @@
 """Shadow decisions: a decision model reads every turn, and changes nothing.
 
-The pilot behind the question "can a System One model take Kora's small
+The pilot behind the question "can a System One model take idia's small
 decisions?" — which kind of message this is, which side of the market the user
 is on, which service it concerns, whether a place is added or replaces the
 others. Those are the decisions behind most defects found in live tests: a
@@ -44,26 +44,26 @@ _logger = get_logger(__name__)
 
 USE_CASE = "decision_shadow"
 
-# The questions, written once. Options are Kora's own vocabulary so a stored
+# The questions, written once. Options are idia's own vocabulary so a stored
 # answer can be compared with the pipeline's without translation.
 TURN_QUESTIONS: dict[str, ChoiceQuestion] = {
     "act": ChoiceQuestion(
         instructions="What is the user doing with this WhatsApp message?",
         options={
             "business_intent": "says what he wants: to rent, to find or to publish a lodging",
-            "slot_answer": "answers the question Kora is waiting for",
+            "slot_answer": "answers the question idia is waiting for",
             "correction": "changes or adds to something he already said",
             "follow_up": "asks about progress, a delay, availability or a visit",
             "question": (
-                "asks Kora something: a price, a condition, how it works, what "
-                "he said earlier, whether Kora understood"
+                "asks idia something: a price, a condition, how it works, what "
+                "he said earlier, whether idia understood"
             ),
-            "confirmation": "agrees to what Kora proposed",
-            "refusal": "declines or cancels what Kora proposed",
+            "confirmation": "agrees to what idia proposed",
+            "refusal": "declines or cancels what idia proposed",
             "social": "greeting, thanks or small talk only",
             "topic_switch": "now wants something else than the active task",
             "out_of_scope": (
-                "talks about something Kora does not handle: football, news, a "
+                "talks about something idia does not handle: football, news, a "
                 "joke, politics"
             ),
         },
@@ -114,7 +114,7 @@ def turn_state(session: ConversationSession, text: str) -> dict[str, Any]:
     return {
         "active_task": _ACTIVE_TASK.get(session.flow, "none"),
         "step": session.step.value,
-        "kora_is_waiting_for": question_topic(pending_key, session.flow),
+        "idia_is_waiting_for": question_topic(pending_key, session.flow),
         "known_facts": {
             name: value
             for name, value in session.context.items()

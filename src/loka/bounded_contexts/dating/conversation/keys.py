@@ -6,7 +6,7 @@ from loka.bounded_contexts.dating.conversation.spec import DATING
 
 LIKE_KEY = DATING.question_key("like")
 UNLOCK_KEY = DATING.question_key("unlock")
-# Two members asking each other questions through Kora; buying more of them.
+# Two members asking each other questions through idia; buying more of them.
 TALK_KEY = DATING.question_key("talk")
 PLUS_KEY = DATING.question_key("plus")
 

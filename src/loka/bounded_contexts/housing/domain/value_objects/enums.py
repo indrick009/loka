@@ -88,7 +88,7 @@ class AvailabilityAnswer(StrEnum):
     landlord with two studios loses the second one by letting the first go.
 
     "No answer" is not a value here: it is the absence of one, and the spec is
-    explicit that Kora keeps no availability state over time. An unanswered
+    explicit that idia keeps no availability state over time. An unanswered
     question simply never confirms, so the tenant never pays.
 
     ``TEMPORARILY_UNAVAILABLE`` is not one of the four, but a landlord does say

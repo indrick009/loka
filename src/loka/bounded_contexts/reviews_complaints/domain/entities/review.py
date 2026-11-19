@@ -1,6 +1,6 @@
 """The avis: a mark one introduced user leaves on one offer.
 
-An avis is **valorisant** — it decides which offers Kora puts forward (§2) —
+An avis is **valorisant** — it decides which offers idia puts forward (§2) —
 and it is never shown to anyone (§5). At 1 000 users/day a listing collects two
 or three of them: far too few for a displayed average to mean anything, and
 plenty to sort with.

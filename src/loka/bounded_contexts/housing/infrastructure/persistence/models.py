@@ -271,7 +271,7 @@ class PropertyDataQualityIssueRow(Base):
 
 
 class TenantDemandRow(Base):
-    """What a tenant asked for, kept so Kora can come back to him.
+    """What a tenant asked for, kept so idia can come back to him.
 
     The partial unique index is the rule, not an optimisation: one open demand
     per tenant. He refines his search as he talks, and five rows for one

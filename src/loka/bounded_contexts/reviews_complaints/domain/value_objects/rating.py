@@ -3,7 +3,7 @@
 Deliberately this small. An avis is an **internal ranking signal and nothing
 more** (§5), so it needs only enough to order offers. Free text would have to
 be moderated, defended against fake reviews, and argued over with a provider
-Kora cannot contradict — it was never present for the relationship. Text
+idia cannot contradict — it was never present for the relationship. Text
 belongs on a complaint, because a human reads that one before sanctioning.
 """
 

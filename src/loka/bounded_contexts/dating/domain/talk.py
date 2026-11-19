@@ -1,7 +1,7 @@
-"""Two members who both said yes, asking each other questions through Kora.
+"""Two members who both said yes, asking each other questions through idia.
 
 Before a match is confirmed each may ask the other questions and trade a few
-photos, relayed by Kora: their numbers stay hidden until both confirm. The
+photos, relayed by idia: their numbers stay hidden until both confirm. The
 exchange is bounded — ``MESSAGES_PER_PACK`` messages and ``PHOTOS_PER_PACK``
 photos each — and a member who wants more buys another pack for 1 000 FCFA.
 """

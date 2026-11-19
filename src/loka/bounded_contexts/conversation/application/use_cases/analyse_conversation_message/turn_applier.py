@@ -49,7 +49,7 @@ from loka.bounded_contexts.housing.conversation.turns.turns import (
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.conversation_log import journal
 
-# Steps where Kora waits for what comes next rather than for a free text: a
+# Steps where idia waits for what comes next rather than for a free text: a
 # question asked there is an aside, answered without redoing the task. Never
 # COLLECT_CHOICE or AWAITING_REVIEW: Dating relays and Found proofs read the
 # raw text there.
@@ -315,7 +315,7 @@ class TurnApplier:
             # Small talk mid-form: the model's own answer, which was told the
             # open question and comes back to it, beats the bare question. Only
             # then: observed live, « oui envoie moi sa photo » recorded a yes in
-            # Dating, and the model's guess replaced Kora's answer to it.
+            # Dating, and the model's guess replaced idia's answer to it.
             return replace(outcome, reply_text=reply_text, platform_text=None)
         if outcome.asks and reply_text and asking == outcome.asks and asking not in facts:
             # The domain decides what is asked, the model how: its sentence,

@@ -1,7 +1,7 @@
 """An answered search keeps watching, and is asked after a month.
 
 Observed in the spec review: a tenant whose chosen lodging was taken was told
-"décrivez une nouvelle recherche" and then never heard from Kora again, even
+"décrivez une nouvelle recherche" and then never heard from idia again, even
 when the right studio was published the next morning.
 """
 

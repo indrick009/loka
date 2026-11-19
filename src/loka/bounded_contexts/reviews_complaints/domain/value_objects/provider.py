@@ -12,7 +12,7 @@ does not even designate the same person across domains — in Food the
 *restaurant* pays the subscription and the *client* complains, and in Dating the
 person who was unlocked paid nothing yet is the one who must be able to report
 harassment. So the thing that opens the right to file is an
-:class:`IntroductionRef`: the moment Kora put the two people in touch.
+:class:`IntroductionRef`: the moment idia put the two people in touch.
 """
 
 from __future__ import annotations

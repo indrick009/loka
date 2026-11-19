@@ -1,6 +1,6 @@
 """A WhatsApp position pin is content, not an empty message.
 
-The four Kora specifications all name shared location as the preferred way to
+The four idia specifications all name shared location as the preferred way to
 locate something, so a delivery that carries only a pin has to survive
 admission. It used to be dropped at the gateway as ``no_text``.
 """

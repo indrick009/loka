@@ -1,1 +1,1 @@
-"""AI: the language models Kora calls, what they cost, and the Jev pilot."""
+"""AI: the language models idia calls, what they cost, and the Jev pilot."""

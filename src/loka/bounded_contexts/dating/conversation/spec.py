@@ -10,6 +10,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.conversation.domain.services.extracted_facts import ExtractedFacts
 from loka.bounded_contexts.dating.domain.profile import LOOKING, SEXES
 from loka.shared.domain.knowledge import market
+from loka.shared.domain.knowledge.jobs import jobs_glossary
 
 # Said word for word before the photo is sent, whoever writes the question.
 PHOTO_RULE = {
@@ -20,9 +21,9 @@ PHOTO_RULE = {
 }
 # The privacy promise that makes people say everything in their description.
 DESCRIPTION_PROMISE = {
-    "fr": "Ta description n'est lue que par Kora pour te trouver la bonne personne : "
+    "fr": "Ta description n'est lue que par idia pour te trouver la bonne personne : "
     "elle ne sera jamais montrée à personne.",
-    "en": "Only Kora reads your description, to find you the right person: it is "
+    "en": "Only idia reads your description, to find you the right person: it is "
     "never shown to anyone.",
 }
 
@@ -31,8 +32,8 @@ PROFILE_FORM = (
         "first_name",
         "the member's first name",
         {
-            "fr": "Bienvenue sur Kora Rencontres ! Quel est ton prénom ?",
-            "en": "Welcome to Kora Dating! What is your first name?",
+            "fr": "Bienvenue sur idia Rencontres ! Quel est ton prénom ?",
+            "en": "Welcome to idia Dating! What is your first name?",
         },
     ),
     FormField("age", "the member's age", {"fr": "Quel âge as-tu ?", "en": "How old are you?"}),
@@ -46,7 +47,7 @@ PROFILE_FORM = (
     ),
     FormField(
         "profession",
-        "the member's profession",
+        "the member's profession, in their own word; Cameroonian jobs: " + jobs_glossary(),
         {
             "fr": "Que fais-tu dans la vie ?",
             "en": "What do you do for a living?",
@@ -80,15 +81,20 @@ PROFILE_FORM = (
     FormField(
         "description",
         "the most important answer, the one matches are made on: who the member "
-        "is and the love they look for, what they like and expect from the other; "
-        "a few words are not enough, invite them to say more",
+        "is and the love they look for, what they like and expect from the other, "
+        "and their red flags (what they will not accept in a partner); a few words "
+        "are not enough, invite them to say more, red flags included",
         {
             "fr": "Maintenant le plus important : ta description. Présente-toi et dis "
             "clairement quel type d'amour tu recherches, ce que tu aimes, ce que tu "
-            "attends de l'autre. Plus tu es précis, meilleur sera le match.",
+            "attends de l'autre. Dis aussi tes red flags : ce que tu n'acceptes pas "
+            "chez l'autre (le mensonge, la cigarette, l'alcool…). Plus tu es précis, "
+            "meilleur sera le match.",
             "en": "Now the most important part: your description. Tell me about yourself "
             "and say clearly what kind of love you are looking for, what you like and "
-            "what you expect from the other person. The more precise, the better the match.",
+            "what you expect from the other person. Tell me your red flags too: what you "
+            "won't accept in a partner (lying, smoking, drinking…). The more precise, "
+            "the better the match.",
         },
         notice=DESCRIPTION_PROMISE,
     ),
@@ -107,14 +113,15 @@ PROFILE_FORM = (
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
     "DATING_PROFILE. Fill first_name, age (integer), sex (HOMME or FEMME), "
-    "profession, country, city, description (their own words, unchanged) and "
+    "profession, country, city, description (their own words, unchanged, red "
+    "flags included) and "
     "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). Set "
     "'seeking' (HOMME or FEMME) only when the description says whom they want "
     "to meet. Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
-    "to another member. To a profile Kora proposed, 'oui' is AFFIRMATIVE "
+    "to another member. To a profile idia proposed, 'oui' is AFFIRMATIVE "
     "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
-    "message is written to another member and Kora relays it: extract nothing, "
+    "message is written to another member and idia relays it: extract nothing, "
     "and set 'inappropriate' to true only when it is sexual, insulting or asks "
     "for money."
 )
@@ -182,8 +189,8 @@ DATING = DomainSpec(
     name="dating",
     roles={
         FlowName.DATING_PROFILE: "a member creating a dating profile, then "
-        "answering the profiles Kora proposes, then asking questions to a match "
-        "through Kora"
+        "answering the profiles idia proposes, then asking questions to a match "
+        "through idia"
     },
     forms={FlowName.DATING_PROFILE: PROFILE_FORM},
     opening_intents={"DATING_PROFILE": FlowName.DATING_PROFILE},

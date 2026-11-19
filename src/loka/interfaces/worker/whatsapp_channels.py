@@ -54,8 +54,6 @@ class WhatsAppChannel(Protocol):
         self, *, to: str, text: str, image_url: str | None = None, rich: RichReply | None = None
     ) -> None: ...
 
-    async def typing(self, *, to: str, message_id: str | None) -> None: ...
-
     async def aclose(self) -> None: ...
 
 
@@ -147,12 +145,6 @@ class BaileysChannel(_Channel):
         }
         await _post(self._client, "/send", {"to": to, "location": location})
 
-    async def typing(self, *, to: str, message_id: str | None) -> None:
-        try:
-            await self._client.post("/typing", json={"to": to})
-        except httpx.HTTPError:
-            return
-
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -192,21 +184,6 @@ class CloudApiChannel(_Channel):
         await _post(
             self._client, "/messages", _addressed(to, {"type": "location", "location": location})
         )
-
-    async def typing(self, *, to: str, message_id: str | None) -> None:
-        """Marks the user's message read and shows « écrit… » until the reply."""
-        if not message_id:
-            return
-        body = {
-            "messaging_product": "whatsapp",
-            "status": "read",
-            "message_id": message_id,
-            "typing_indicator": {"type": "text"},
-        }
-        try:
-            await self._client.post("/messages", json=body)
-        except httpx.HTTPError:
-            return
 
     async def aclose(self) -> None:
         await self._client.aclose()

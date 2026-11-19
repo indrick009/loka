@@ -132,7 +132,7 @@ QUESTION_TEXT: dict[str, str] = {
     ),
     "ask.search_choice": "Indiquez le numéro du logement qui vous intéresse.",
     "ask.payment_number": (
-        "Pour recevoir le contact du propriétaire, les frais Kora sont de "
+        "Pour recevoir le contact du propriétaire, les frais idia sont de "
         "1 000 FCFA. Répondez OUI pour payer avec ce numéro, envoyez le numéro "
         "Mobile Money ou Orange Money à utiliser, ou répondez NON pour annuler."
     ),
@@ -240,7 +240,7 @@ _QUESTION_TEXT_EN: dict[str, str] = {
     ),
     "ask.search_choice": "Give the number of the property you are interested in.",
     "ask.payment_number": (
-        "To get the landlord's contact, Kora's fee is 1,000 FCFA. Reply YES to "
+        "To get the landlord's contact, idia's fee is 1,000 FCFA. Reply YES to "
         "pay with this number, send the Mobile Money or Orange Money number to "
         "use, or reply NO to cancel."
     ),
@@ -268,7 +268,7 @@ _CLARIFY_TEXT_EN = (
     'for a studio in Douala at 150,000 FCFA".'
 )
 
-# Offering to schedule a viewing was a promise the platform cannot keep: Kora
+# Offering to schedule a viewing was a promise the platform cannot keep: idia
 # introduces a tenant to a landlord and stops there. Naming it here is how a
 # user ends up waiting for a visit nobody will arrange.
 SUPPORT_TEXT = (

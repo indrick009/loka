@@ -33,6 +33,11 @@ def common_facts(entities: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str,
     choice = entities.get("choice")
     if isinstance(choice, int) and not isinstance(choice, bool) and 1 <= choice <= 9:
         facts["choice"] = choice
+    picks = entities.get("choices")
+    if isinstance(picks, list):
+        kept = [p for p in picks if isinstance(p, int) and not isinstance(p, bool) and 1 <= p <= 9]
+        if kept:
+            facts["choices"] = sorted(set(kept))
     for name in MEDIA_KEYS:
         if isinstance(entities.get(name), str):
             facts[name] = entities[name]
@@ -50,6 +55,20 @@ def chosen(turn: PlugTurn) -> int | None:
         return int(turn.facts["choice"])
     match = re.fullmatch(r"\s*(?:le\s+|n°\s*|numero\s+|numéro\s+)?(\d)\s*\.?\s*", turn.text or "")
     return int(match.group(1)) if match else None
+
+
+_SEVERAL = re.compile(r"\s*(?:le\s+|les\s+)?\d(?:\s*(?:,|et|and|&|\+|/)\s*(?:le\s+)?\d)+\s*\.?\s*")
+
+
+def chosen_all(turn: PlugTurn) -> list[int]:
+    """Every line number picked: « 1 et 2 », « 1, 3 », or a single one."""
+    picks = turn.facts.get("choices")
+    if isinstance(picks, list) and picks:
+        return [int(p) for p in picks]
+    if _SEVERAL.fullmatch(turn.text or ""):
+        return sorted({int(d) for d in re.findall(r"\d", turn.text or "")})
+    one = chosen(turn)
+    return [one] if one is not None else []
 
 
 def stored(known: Mapping[str, Any]) -> dict[str, Any]:

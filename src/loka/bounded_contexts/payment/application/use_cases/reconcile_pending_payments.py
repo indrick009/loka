@@ -1,7 +1,7 @@
 """Settle payments whose webhook never arrived.
 
 Fapshi sends one webhook per event and never retries, so a request lost to a
-deploy, a timeout or a 500 is money the payer sent and a contact Kora never
+deploy, a timeout or a 500 is money the payer sent and a contact idia never
 revealed — and nothing in the system would ever say so. The payer's only
 remaining signal is a complaint.
 

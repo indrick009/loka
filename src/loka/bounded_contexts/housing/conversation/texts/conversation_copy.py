@@ -147,7 +147,7 @@ _NO_RESULTS_TEXT: dict[str, str] = {
 # heard nothing after three days would be right to feel misled; the condition
 # already explains a silence. First person, like the rest of the thread. And
 # "qui correspond à ce que vous cherchez" rather than "adapté", because
-# whether a lodging suits him is his judgement, not Kora's.
+# whether a lodging suits him is his judgement, not idia's.
 #
 # Said while the catalogue is searched: the lodgings found, or the promise
 # below, follow it seconds later. It used to be the promise itself, followed at
@@ -424,7 +424,7 @@ def availability_answer_text(
     return table["available"]
 
 
-# What the tenant reads once he has picked a lodging. Kora does not say
+# What the tenant reads once he has picked a lodging. idia does not say
 # "réservé" and does not promise a visit: it says the landlord is being asked,
 # which is the only thing that is actually happening (housing spec §9).
 _AVAILABILITY_PENDING_TEXT: dict[str, str] = {
@@ -463,14 +463,14 @@ def choice_out_of_range_text(language: str) -> str:
 
 
 def nothing_yet_text(language: str) -> str:
-    """The search found nothing yet: the demand waits, and Kora will write."""
+    """The search found nothing yet: the demand waits, and idia will write."""
     return _copy(_NOTHING_YET_TEXT, language)
 
 
 def demand_recorded_text(language: str) -> str:
     """Acknowledge a tenant's search, promising nothing.
 
-    Sent on every completed search, match or no match. Kora takes the time to
+    Sent on every completed search, match or no match. idia takes the time to
     prepare an answer — a direct match, a neighbouring area, a price a little
     above — and this is what stands in the thread meanwhile.
     """

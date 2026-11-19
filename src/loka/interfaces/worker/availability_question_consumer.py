@@ -11,7 +11,7 @@ to an *account*, and the account is what holds the phone number.
 
 A landlord with no session at all is a permanent failure, not a retry: no
 amount of waiting will produce a thread for someone who has never written to
-Kora, and the question would be redelivered for ever.
+idia, and the question would be redelivered for ever.
 """
 
 from __future__ import annotations

@@ -17,7 +17,7 @@ The question may carry the tenant's terms (§8, see ``negotiation``): computed
 here, from his demand and the listing, so the conversation never has to know
 either.
 
-Nothing here reads a clock to decide availability. Kora never infers it: not
+Nothing here reads a clock to decide availability. idia never infers it: not
 from a match, not from a payment, not from elapsed time. An unanswered question
 simply never confirms, and the tenant is offered other lodgings instead.
 """

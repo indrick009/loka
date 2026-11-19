@@ -9,7 +9,7 @@ read, reviewed and tested without opening the state machine.
 Two prompts live here and they share their persona, their price rule and their
 topic glosses on purpose: when only one of them carried a name, the assistant
 introduced itself as "Loka" on one turn and "Kasa" on another, from an account
-called Kora."""
+called idia."""
 
 from loka.bounded_contexts.conversation.application.services.prompts.analysis import (
     build_analysis_prompt,
