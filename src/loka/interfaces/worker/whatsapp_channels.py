@@ -163,7 +163,31 @@ class CloudApiChannel(_Channel):
     async def _main(
         self, to: str, text: str, image_url: str | None, rich: RichReply | None
     ) -> None:
-        await _post(self._client, "/messages", _addressed(to, cloud_content(text, image_url, rich)))
+        image = await self._uploaded(image_url) if image_url else None
+        await _post(self._client, "/messages", _addressed(to, cloud_content(text, image, rich)))
+
+    async def _uploaded(self, url: str) -> dict[str, str] | None:
+        """The photo uploaded to Meta, as ``{"id": …}``; ``None`` sends the words alone.
+
+        Our photos live in a private store Meta cannot read: the presigned URL
+        works from this network only, so the bytes are fetched here and handed
+        to ``POST /{phone-number-id}/media`` first.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30) as fetch:
+                got = await fetch.get(url)
+                got.raise_for_status()
+            mime = (got.headers.get("content-type") or "image/jpeg").split(";")[0].strip()
+            response = await self._client.post(
+                "/media",
+                data={"messaging_product": "whatsapp", "type": mime},
+                files={"file": ("photo", got.content, mime)},
+            )
+            response.raise_for_status()
+            return {"id": str(response.json()["id"])}
+        except Exception as exc:  # the sentence still goes, without its photo
+            _logger.warning("cloud_media_upload_failed", error=type(exc).__name__)
+            return None
 
     async def _card(self, to: str, contact: ContactCard) -> None:
         digits = "".join(c for c in contact.phone if c.isdigit())
@@ -199,7 +223,9 @@ def _addressed(to: str, content: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def cloud_content(text: str, image_url: str | None, rich: RichReply | None) -> dict[str, Any]:
+def cloud_content(
+    text: str, image: dict[str, str] | None, rich: RichReply | None
+) -> dict[str, Any]:
     """The first message on the Cloud API: buttons or a list when answers are expected.
 
     Up to three answers become buttons, under the photo when there is one —
@@ -218,10 +244,10 @@ def cloud_content(text: str, image_url: str | None, rich: RichReply | None) -> d
                 ]
             },
         }
-        if image_url:
-            interactive["header"] = {"type": "image", "image": {"link": image_url}}
+        if image:
+            interactive["header"] = {"type": "image", "image": image}
         return {"type": "interactive", "interactive": interactive}
-    if options and not image_url and len(text) <= _LIST_BODY:
+    if options and not image and len(text) <= _LIST_BODY:
         rows = []
         for o in options:
             row: dict[str, Any] = {"id": o.id, "title": o.title[:_ROW_TITLE]}
@@ -237,6 +263,6 @@ def cloud_content(text: str, image_url: str | None, rich: RichReply | None) -> d
                 "action": {"button": menu, "sections": [{"rows": rows}]},
             },
         }
-    if image_url:
-        return {"type": "image", "image": {"link": image_url, "caption": text}}
+    if image:
+        return {"type": "image", "image": {**image, "caption": text}}
     return {"type": "text", "text": {"body": text, "preview_url": True}}
