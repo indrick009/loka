@@ -35,6 +35,7 @@ from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
+from loka.shared.domain.knowledge.nearby import FAR_KM
 
 # How far around the tenant's budget a lodging is worth proposing. Below, a
 # floor: far too cheap reads as an insult — a 90 000 tenant is not looking for a
@@ -45,14 +46,16 @@ BUDGET_UPPER_TOLERANCE = 0.05
 
 # How far from the point a tenant shared a lodging still counts as "there". A
 # pin is where he wants to live — his workplace, a relative's street — and a
-# district boundary means nothing to him: three kilometres is a short moto ride.
-NEAR_RADIUS_KM = 3.0
+# district boundary means nothing to him; past a 300 F moto ride it is no
+# longer "there" (see ``knowledge/nearby``).
+NEAR_RADIUS_KM = FAR_KM
 
 # §8's "écart": when nothing matches exactly, a lodging a little dearer or a
 # little further is still worth proposing — said as such, never passed off as a
 # match, so the tenant decides whether he can consider it.
 GAP_UPPER_TOLERANCE = 0.15
-GAP_RADIUS_KM = 6.0
+# Further still is not proposed at all: the same 300 F limit.
+GAP_RADIUS_KM = FAR_KM
 # The advance the landlord asks may exceed what the tenant said he can pay by
 # this many months and still be put to him as a gap: two months is something a
 # family can stretch to, a year against five months is not (§8).

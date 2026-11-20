@@ -51,7 +51,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowName,
     FlowStep,
 )
-from loka.bounded_contexts.food.conversation.spec import HITS_KEY
+from loka.bounded_contexts.food.conversation.spec import FAR_KEY, HITS_KEY
 from loka.shared.infrastructure.conversation_log import journal
 from loka.shared.infrastructure.logging import get_logger
 
@@ -89,6 +89,9 @@ class IdiaLane:
         if session.flow is FlowName.PROPERTY_SEARCH:
             return AgentLane.leads(session, text)
         if session.flow is FlowName.FOOD_SEARCH and session.step is FlowStep.COLLECT_CHOICE:
+            # « tu le veux toujours ? » is answered by the rules, OUI or NON.
+            if session.context.get(FAR_KEY):
+                return False
             # « 2 » is read exactly by the rules, without a model.
             return not _BARE_NUMBER.fullmatch(text)
         return session.flow in (FlowName.SUPPORT, FlowName.FOOD_SEARCH)

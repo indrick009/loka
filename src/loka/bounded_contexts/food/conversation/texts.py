@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from loka.bounded_contexts.conversation.application.plugs.forms import xaf
 from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 from loka.bounded_contexts.food.domain.menu import MenuDish
 from loka.bounded_contexts.food.domain.restaurant import DishOffer
+from loka.shared.domain.knowledge.nearby import reach
 from loka.shared.domain.knowledge.where import place_label
 
 
@@ -21,7 +22,36 @@ def _distance(km: float | None, language: str) -> str:
         return ""
     if km < 0.15:
         return " (à deux pas)" if _fr(language) else " (right next to you)"
+    if reach(km) != "near":
+        # Past a 100 F moto ride: said in the list, asked again before ordering.
+        far = "un peu plus loin" if _fr(language) else "a bit further"
+        return f" ({km:.1f} km, {far})"
     return f" ({km:.1f} km)"
+
+
+def confirm_far(picked: Sequence[Mapping[str, Any]], language: str) -> str:
+    """Before ordering a dish past a 100 F moto ride: still want it, knowing where?"""
+    lines = "\n".join(
+        f"• « {o.get('dish')} » — {o.get('restaurant')}, {o.get('where') or ''}"
+        + (f" (≈ {float(o['distance_km']):.1f} km)" if o.get("distance_km") is not None else "")
+        for o in picked
+    )
+    if _fr(language):
+        return (
+            f"Ce que tu as choisi n'est pas tout près de toi :\n{lines}\n"
+            "Tu le veux toujours ? Réponds OUI ou NON."
+        )
+    return f"What you picked is not right next to you:\n{lines}\nStill want it? Reply YES or NO."
+
+
+def far_declined(language: str) -> str:
+    if _fr(language):
+        return "D'accord. Choisis un autre plat de la liste, ou dis-moi ce que tu cherches."
+    return "All right. Pick another dish from the list, or tell me what you're looking for."
+
+
+def yes_or_no(language: str) -> str:
+    return "Réponds OUI ou NON." if _fr(language) else "Reply YES or NO."
 
 
 def registered(name: str, place: dict[str, Any], language: str) -> str:
@@ -194,17 +224,16 @@ def offers(found: Sequence[DishOffer], language: str, *, wide: bool = False) -> 
 
 def nothing_found(dish: str | None, place: dict[str, Any], language: str) -> str:
     where = place_label(place)
-    city = place.get("city") or where
     if _fr(language):
         what = dish or "menu du jour"
         return (
-            f"Aucun restaurant n'a encore publié de {what} aujourd'hui près de {where}, "
-            f"ni ailleurs à {city}. Essaie un autre plat, ou une autre ville."
+            f"Aucun restaurant n'a encore publié de {what} aujourd'hui près de {where} "
+            "(à moins de 300 F de moto). Essaie un autre plat, ou réessaie un peu plus tard."
         )
     what = dish or "menu of the day"
     return (
-        f"No restaurant has published a {what} today near {where}, nor elsewhere in "
-        f"{city}. Try another dish, or another town."
+        f"No restaurant has published a {what} today near {where} (within a 300 F moto "
+        "ride). Try another dish, or try again a bit later."
     )
 
 

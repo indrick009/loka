@@ -43,6 +43,7 @@ from loka.bounded_contexts.housing.domain.entities.property_media import (
 )
 from loka.bounded_contexts.housing.domain.entities.tenant_demand import (
     GAP_RADIUS_KM,
+    NEAR_RADIUS_KM,
     TenantDemand,
 )
 from loka.bounded_contexts.housing.domain.repositories.property_repository import (
@@ -201,7 +202,7 @@ def _criteria(demand: TenantDemand, *, gap: bool = False) -> PropertySearchCrite
         verified_only=False,
         sort="price_nearest" if band else "recent",
         near=near,
-        near_radius_km=GAP_RADIUS_KM if gap else 3.0,
+        near_radius_km=GAP_RADIUS_KM if gap else NEAR_RADIUS_KM,
         max_advance_months=demand.advance_ceiling(gap=gap),
     )
 

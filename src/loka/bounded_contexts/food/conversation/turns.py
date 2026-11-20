@@ -25,16 +25,18 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 )
 from loka.bounded_contexts.food.conversation import texts
 from loka.bounded_contexts.food.conversation.photos import DishPhotos
-from loka.bounded_contexts.food.conversation.spec import FOOD, HITS_KEY
+from loka.bounded_contexts.food.conversation.spec import FAR_KEY, FOOD, HITS_KEY
 from loka.bounded_contexts.food.domain.menu import DailyMenu, MenuDish, menu_day
 from loka.bounded_contexts.food.domain.reader import MenuReader
 from loka.bounded_contexts.food.domain.restaurant import DishOffer, Restaurant
 from loka.bounded_contexts.food.domain.store import FoodStore
 from loka.shared.domain.knowledge.dishes import related_keys
-from loka.shared.domain.knowledge.where import km_between
+from loka.shared.domain.knowledge.nearby import FAR_KM, reach
+from loka.shared.domain.knowledge.where import km_between, place_label
 
-NEARBY_KM = 15.0
 PER_RESTAURANT = 2
+# The question that asks « tu le veux toujours ? » (picks kept under FAR_KEY).
+FAR_QUESTION = "ask.food.far"
 MAX_OFFERS = 5
 SENT_KEY = "request_sent"
 PHOTO_SPACING_SECONDS = 2
@@ -192,6 +194,9 @@ class FoodTurns:
             and offered
             and not turn.facts.get("dish")
         ):
+            pending = turn.session.context.get(FAR_KEY)
+            if isinstance(pending, list) and pending:
+                return await self._far_answer(turn, desk, client, offered, pending)
             picks = chosen_all(turn)
             if not picks or not all(1 <= pick <= len(offered) for pick in picks):
                 return say(
@@ -199,18 +204,31 @@ class FoodTurns:
                     question=FOOD.question_key("choice"),
                     step=FlowStep.COLLECT_CHOICE,
                 )
+            chosen_offers = [offered[p - 1] for p in picks]
+            further = [o for o in chosen_offers if reach(o.get("distance_km")) != "near"]
+            if further:
+                # Past a 100 F moto ride: the client says yes knowing where it is.
+                await desk.settle(
+                    turn,
+                    step=FlowStep.COLLECT_CHOICE,
+                    question_key=FAR_QUESTION,
+                    context={**turn.session.context, FAR_KEY: picks},
+                )
+                return say(
+                    texts.confirm_far(further, lang), question=FAR_QUESTION, voiced=False
+                )
             # « 1 et 2 »: every dish picked is passed on (journal of 16 Nov
             # 2026, 09:20: only the Poulet DG was).
-            return await self._request(turn, desk, client, [offered[p - 1] for p in picks])
+            return await self._request(turn, desk, client, chosen_offers)
         known = turn.known
         if not known.get("place"):
             return await self._ask(turn, desk, "place")
         place, dish = known["place"], known.get("dish")
         wanted = _wanted(known)
+        # Within a 300 F moto ride only (``knowledge/nearby``): nobody takes a
+        # bus to bring one dish, so the rest of the town is never offered.
         found = await self._search(place, wanted, dish, turn, wide=False)
-        wide = not found
-        if wide:
-            found = await self._search(place, wanted, dish, turn, wide=True)
+        wide = False
         if not found:
             # Asked again with nothing new: say so differently, never the same
             # sentence twice (replay of 2 Nov 2026).
@@ -232,6 +250,8 @@ class FoodTurns:
                     "restaurant_id": str(offer.restaurant.restaurant_id),
                     "dish": offer.dish_name,
                     "price": offer.price_xaf,
+                    "distance_km": offer.distance_km,
+                    "where": place_label(offer.restaurant.place),
                 }
                 for offer in found
             ],
@@ -245,6 +265,34 @@ class FoodTurns:
             step=FlowStep.COLLECT_CHOICE,
             voiced=False,
         )
+
+    async def _far_answer(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        client: uuid.UUID,
+        offered: list[dict[str, Any]],
+        picks: list[int],
+    ) -> TurnOutcome:
+        """« Tu le veux toujours ? »: yes passes it on, no goes back to the list."""
+        lang = turn.language
+        answer = _yes_no(turn)
+        context = {k: v for k, v in turn.session.context.items() if k != FAR_KEY}
+        if answer is True:
+            return await self._request(
+                turn, desk, client, [offered[p - 1] for p in picks if 1 <= p <= len(offered)]
+            )
+        if answer is False:
+            await desk.settle(
+                turn,
+                step=FlowStep.COLLECT_CHOICE,
+                question_key=FOOD.question_key("choice"),
+                context=context,
+            )
+            return say(
+                texts.far_declined(lang), question=FOOD.question_key("choice"), voiced=False
+            )
+        return say(texts.yes_or_no(lang), question=FAR_QUESTION, voiced=False)
 
     async def _show_photos(
         self, found: list[DishOffer], client: uuid.UUID, desk: PlugDesk, turn: PlugTurn
@@ -292,7 +340,7 @@ class FoodTurns:
             if wide and not same_city:
                 continue
             if not wide and (
-                (distance is not None and distance > NEARBY_KM)
+                (distance is not None and distance > FAR_KM)
                 or (distance is None and not same_city)
             ):
                 continue
@@ -354,6 +402,23 @@ class FoodTurns:
         ]
         kept = record[0] if len(record) == 1 else record
         return await self._done(turn, desk, sent, voiced=False, context={SENT_KEY: kept})
+
+
+_YES = ("oui", "yes", "ok", "d'accord", "dac", "vas-y", "go", "toujours")
+_NO = ("non", "no", "laisse", "pas", "trop loin")
+
+
+def _yes_no(turn: PlugTurn) -> bool | None:
+    if turn.intent == "AFFIRMATIVE":
+        return True
+    if turn.intent == "NEGATIVE":
+        return False
+    folded = (turn.text or "").strip().casefold()
+    if folded.startswith(_NO):
+        return False
+    if folded.startswith(_YES):
+        return True
+    return None
 
 
 def _wanted(known: dict[str, Any]) -> list[str]:

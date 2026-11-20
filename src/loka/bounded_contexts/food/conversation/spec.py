@@ -14,6 +14,8 @@ from loka.shared.domain.knowledge.dishes import dish_key, dish_keys
 
 # Where a client's search keeps the dishes it listed, numbered as sent.
 HITS_KEY = "_food_offers"
+# The picks past a 100 F moto ride, waiting for « tu le veux toujours ? ».
+FAR_KEY = "_far_picks"
 
 _SHARE = (
     "Le plus simple : partage ta position WhatsApp. Sinon, donne la ville et le "

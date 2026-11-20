@@ -28,6 +28,7 @@ from loka.bounded_contexts.housing.domain.entities.property_media import (
     PropertyMedia,
 )
 from loka.bounded_contexts.housing.domain.entities.tenant_demand import (
+    GAP_RADIUS_KM,
     NEAR_RADIUS_KM,
     DemandStatus,
     TenantDemand,
@@ -478,7 +479,7 @@ class TestAGapIsProposedAsAGap:
         assert proposed == 1
         exact, wider = search.calls
         assert exact.near is None  # a district's centre never widens a match
-        assert wider.near == ODZA and wider.near_radius_km == 6.0
+        assert wider.near == ODZA and wider.near_radius_km == GAP_RADIUS_KM  # a 300 F moto ride
         assert wider.max_price_xaf == int(45_000 * 1.15)
         gap = answered_proposals(demand)[0]["gap"]
         assert gap == {"over_budget_xaf": 5_000, "distance_km": 1.3}
