@@ -88,6 +88,8 @@ GATEWAY_DOWN_RECHECK_MS = 15_000
 _IN_LINE = "outbound:line:{}"
 IN_LINE_RECHECK_MS = 700
 IN_LINE_STALE_SECONDS = 120
+IN_LINE_MAX_WAIT_SECONDS = 10
+_IN_LINE_WAIT = "outbound:waiting:{}"
 
 __all__ = ["OUTBOUND_QUEUE", "GatewayDown", "WhatsAppOutboundConsumer"]
 
@@ -184,29 +186,40 @@ class WhatsAppOutboundConsumer(ConsumerBase):
             return False
 
     async def _first_in_line(self, recipient: str, place: str, rank: float) -> bool:
-        """Whether every message meant to reach this phone before this one has gone.
+        """Whether this message may go now, keeping the order it was meant in.
 
         The lock alone does not order: photos staged together all reached it
         at once and took it in any order — 2, 3, 1, 4, 5 under a list numbered
         1 to 5 (journal of 16 Nov 2026, 09:20). Each message takes its place
-        by the time it is due; a place older than ``IN_LINE_STALE_SECONDS`` is
-        dropped, so a message that died never blocks the thread. Redis down:
-        unordered, never silent.
+        by the time it is due, and waits for those before it — but never more
+        than ``IN_LINE_MAX_WAIT_SECONDS``: a message ahead that died, or a
+        gateway down, must not stop the thread (20 Nov 2026, 17:52: the
+        WhatsApp session was logged out and the line held every reply after
+        it). Places are dropped by the clock, not by the ranks waiting.
+        Redis down: unordered, never silent.
         """
         key = _IN_LINE.format(recipient)
+        waited = _IN_LINE_WAIT.format(place)
+        now = datetime.now(UTC).timestamp()
         try:
             await self._redis.zadd(key, {place: rank}, nx=True)
-            await self._redis.zremrangebyscore(key, 0, rank - IN_LINE_STALE_SECONDS)
+            await self._redis.zremrangebyscore(key, 0, now - IN_LINE_STALE_SECONDS)
             await self._redis.expire(key, 600)
+            await self._redis.set(waited, now, nx=True, ex=600)
+            since = float(await self._redis.get(waited) or now)
             first = await self._redis.zrange(key, 0, 0)
         except Exception as exc:  # see the docstring
             _logger.warning("outbound_line_unavailable", error=type(exc).__name__)
+            return True
+        if now - since > IN_LINE_MAX_WAIT_SECONDS:
+            _logger.info("outbound_line_overtaken", recipient=recipient)
             return True
         return not first or first[0] == place
 
     async def _leave_line(self, recipient: str, place: str) -> None:
         try:
             await self._redis.zrem(_IN_LINE.format(recipient), place)
+            await self._redis.delete(_IN_LINE_WAIT.format(place))
         except Exception as exc:  # the stale cut-off frees the line anyway
             _logger.warning("outbound_line_unavailable", error=type(exc).__name__)
 
