@@ -42,7 +42,7 @@ const {
   mediaDescriptorOf,
   uploadMedia,
 } = require('./media');
-const { createLidMap } = require('./lid-map');
+const { createLidMap, FILE_NAME: LID_MAP_FILE } = require('./lid-map');
 
 const PORT = Number(process.env.PORT || 3000);
 const AUTH_DIR = process.env.AUTH_DIR || path.join(process.cwd(), 'auth');
@@ -124,6 +124,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function clearAuthState(reason) {
   try {
     for (const entry of fs.readdirSync(AUTH_DIR)) {
+      // Which LID a phone number has belongs to the contact, not to this
+      // pairing: wiped with it, every reply after a re-scan went to the
+      // phone-number address and stayed on "waiting for this message".
+      if (entry === LID_MAP_FILE) continue;
       try {
         fs.rmSync(path.join(AUTH_DIR, entry), { recursive: true, force: true });
       } catch (error) {

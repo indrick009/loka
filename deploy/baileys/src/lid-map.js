@@ -8,7 +8,7 @@
 // on restart sent every reply to the `@s.whatsapp.net` form until that
 // contact wrote again — observed live, each one stuck on "waiting for this
 // message". It is written next to the auth state, on the same volume, and
-// cleared with it on logout.
+// kept when a logout clears the pairing: the mapping is the contact's.
 
 const fs = require('fs');
 const path = require('path');
