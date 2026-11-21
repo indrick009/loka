@@ -161,6 +161,7 @@ services:
       PLATFORM_URL: http://api:8000/integrations/whatsapp/events
       PLATFORM_API_KEY: ${WHATSAPP__API_KEY:-}
       LOG_LEVEL: ${OBSERVABILITY__LOG_LEVEL:-INFO}
+      BAILEYS_LOG_LEVEL: ${WHATSAPP__BAILEYS_LOG_LEVEL:-warn}
     volumes:
       - baileys-auth:/app/auth
     ports:

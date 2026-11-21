@@ -104,8 +104,14 @@ const lidByPhone = createLidMap(AUTH_DIR, { log });
 
 function rememberLid(phone, key) {
   if (!phone || !key) return;
+  // Baileys 7 names the other address of the chat `remoteJidAlt` /
+  // `participantAlt`; 6.x called it senderLid / senderPn.
   const lid =
-    key.senderLid || (key.remoteJid && String(key.remoteJid).endsWith('@lid') ? key.remoteJid : null);
+    key.senderLid ||
+    [key.remoteJid, key.remoteJidAlt, key.participant, key.participantAlt].find(
+      (jid) => jid && String(jid).endsWith('@lid')
+    ) ||
+    null;
   if (lid) lidByPhone.set(digitsOf(phone), lid);
 }
 
@@ -156,7 +162,13 @@ function jidDigits(jid) {
  * unmatchable number downstream, which is why there is no fallback at all.
  */
 function senderPhone(key) {
-  const jid = key.senderPn || key.participantPn || null;
+  const jid =
+    key.senderPn ||
+    key.participantPn ||
+    [key.remoteJidAlt, key.participantAlt].find(
+      (alt) => alt && String(alt).endsWith('@s.whatsapp.net')
+    ) ||
+    null;
   if (jid && String(jid).endsWith('@s.whatsapp.net')) return jidDigits(jid);
   if (key.remoteJid && String(key.remoteJid).endsWith('@s.whatsapp.net')) {
     return jidDigits(key.remoteJid);
@@ -280,6 +292,8 @@ async function handleOne(entry, upsertType) {
       sender_lid: key.senderLid || null,
       participant_pn: key.participantPn || null,
       participant_lid: key.participantLid || null,
+      remote_jid_alt: key.remoteJidAlt || null,
+      participant_alt: key.participantAlt || null,
     },
     'delivery accepted'
   );
