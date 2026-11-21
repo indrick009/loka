@@ -398,6 +398,19 @@ async function handleConnectionUpdate(sock, update) {
     // requested.
     clearAuthState('logged_out');
     gateway.restarts += 1;
+  } else if (statusCode === DisconnectReason.restartRequired) {
+    // WhatsApp asks for this right after a QR is scanned. The pairing only
+    // survives a prompt reconnect: waiting out the backoff piled up by expired
+    // QR codes gets it refused a minute later (401).
+    gateway.restarts = 0;
+    gateway.reconnectTimer = setTimeout(() => {
+      startSocket().catch((err) => log.error({ error: err.message }, 'reconnect failed'));
+    }, 500);
+    return;
+  } else if (statusCode === DisconnectReason.timedOut && gateway.qr) {
+    // An unscanned QR expiring is not a failure; it must not stretch the wait
+    // that follows the scan that eventually comes.
+    gateway.restarts = 1;
   } else {
     gateway.restarts += 1;
   }
