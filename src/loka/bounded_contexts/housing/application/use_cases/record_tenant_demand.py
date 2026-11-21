@@ -22,10 +22,10 @@ from loka.bounded_contexts.housing.domain.entities.tenant_demand import TenantDe
 from loka.bounded_contexts.housing.domain.repositories.property_repository import (
     TenantDemandRepository,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import ConcurrencyConflict
 from loka.shared.domain.identifiers import new_id
+from loka.shared.domain.money import Money
 
 
 @dataclass(frozen=True, slots=True)

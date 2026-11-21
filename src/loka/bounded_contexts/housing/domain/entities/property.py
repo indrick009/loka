@@ -35,10 +35,10 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
+from loka.shared.domain.money import Money
 
 _ALLOWED_TRANSITIONS: dict[PropertyStatus, frozenset[PropertyStatus]] = {
     PropertyStatus.DRAFT: frozenset({PropertyStatus.AVAILABLE}),

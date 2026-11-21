@@ -32,11 +32,11 @@ from loka.bounded_contexts.housing.domain.value_objects.location import (
     Coordinates,
     Location,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     PropertyMediaRow,
     PropertyRow,
 )
+from loka.shared.domain.money import Money
 
 
 def _optional_bool(value: Any) -> bool | None:

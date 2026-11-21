@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
+from loka.shared.domain.money import Money
 from loka.shared.domain.value_object import ValueObject
 
 

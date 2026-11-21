@@ -36,8 +36,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     RentMonths,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import InvalidStateTransition, InvariantViolation
+from loka.shared.domain.money import Money
 
 pytestmark = pytest.mark.unit
 

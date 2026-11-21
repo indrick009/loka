@@ -23,11 +23,11 @@ from loka.bounded_contexts.housing.domain.entities.tenant_demand import (
     DemandStatus,
     TenantDemand,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     TenantDemandRow,
 )
 from loka.shared.domain.errors import ConcurrencyConflict
+from loka.shared.domain.money import Money
 
 _IS_WATCHING = TenantDemandRow.status.in_(
     (DemandStatus.OPEN.value, DemandStatus.ANSWERED.value)

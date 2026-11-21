@@ -30,8 +30,8 @@ import pytest
 
 from loka.bounded_contexts.housing.domain.entities.property import Property
 from loka.bounded_contexts.housing.domain.value_objects.enums import RentMonths
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import InvariantViolation
+from loka.shared.domain.money import Money
 
 pytestmark = pytest.mark.unit
 

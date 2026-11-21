@@ -21,6 +21,7 @@ from loka.bounded_contexts.ai.domain.ai_provider import (
     LlmResponse,
     Prompt,
 )
+from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import RichReply
 
 if TYPE_CHECKING:
     from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
@@ -615,3 +616,17 @@ class IdiaAgent(Protocol):
     async def answer(
         self, text: str, *, state: IdiaState, thread: list[Exchange]
     ) -> IdiaAnswer: ...
+
+
+class WhatsAppChannel(Protocol):
+    """The port every WhatsApp provider implements (``infrastructure/adapters/whatsapp``).
+
+    ``rich`` is shown as richly as the provider allows; ``text`` always
+    stands on its own.
+    """
+
+    async def send(
+        self, *, to: str, text: str, image_url: str | None = None, rich: RichReply | None = None
+    ) -> None: ...
+
+    async def aclose(self) -> None: ...

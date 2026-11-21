@@ -38,7 +38,6 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     PropertySearchDocumentRow,
 )
@@ -52,6 +51,7 @@ from loka.interfaces.worker.search_projection_consumer import (
     SEARCH_PROJECTION_QUEUE,
     SearchProjectionConsumer,
 )
+from loka.shared.domain.money import Money
 from loka.shared.infrastructure.broker.topology import QUEUES, Broker
 from loka.shared.infrastructure.config.settings import Settings
 

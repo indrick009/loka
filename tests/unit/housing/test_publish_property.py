@@ -29,9 +29,9 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import ResourceNotFound
+from loka.shared.domain.money import Money
 
 
 class FakePropertyRepository:

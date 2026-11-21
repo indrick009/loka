@@ -11,7 +11,6 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.payment.application.ports import (
     PaymentInitiation,
     VerifiedCallback,
@@ -25,6 +24,7 @@ from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
 from loka.bounded_contexts.payment.domain.repositories import RawCallbackRecord
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.identifiers import new_id
+from loka.shared.domain.money import Money
 
 NOW = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
 LISTING_ID = uuid.uuid4()

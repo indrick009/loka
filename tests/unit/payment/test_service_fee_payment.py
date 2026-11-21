@@ -7,7 +7,6 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
     CALLBACK_TOLERANCE_SECONDS,
     GRANT_TTL_DAYS,
@@ -18,6 +17,7 @@ from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
     ServiceFeePayment,
 )
 from loka.shared.domain.errors import InvalidStateTransition
+from loka.shared.domain.money import Money
 
 NOW = datetime(2026, 3, 1, 9, 0, tzinfo=UTC)
 REFERENCE = "provider_ref_1"

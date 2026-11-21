@@ -33,12 +33,12 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
 from loka.bounded_contexts.housing.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
 )
 from loka.shared.domain.errors import AuthorizationDenied, ResourceNotFound
+from loka.shared.domain.money import Money
 from loka.shared.infrastructure.composition import (
     publish_property_use_case,
     unit_of_work,

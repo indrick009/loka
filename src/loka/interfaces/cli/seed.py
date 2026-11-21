@@ -40,13 +40,13 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.composition import (
     PROPERTY_REPOSITORY,
     PROPERTY_SEARCH_PROJECTOR,
 )
 from loka.bounded_contexts.housing.infrastructure.persistence.models import LandlordProfileRow
 from loka.interfaces.http.auth import generate_token, hash_token
+from loka.shared.domain.money import Money
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings, get_settings
 from loka.shared.infrastructure.crypto.blind_index import blind_index, derive_blind_index_key

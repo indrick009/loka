@@ -29,7 +29,6 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Coordinates, Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.models import (
     PropertyMediaRow,
     PropertyRow,
@@ -47,6 +46,7 @@ from loka.bounded_contexts.housing.infrastructure.persistence.search_projector i
     SqlAlchemySearchProjector,
 )
 from loka.shared.domain.errors import ConcurrencyConflict
+from loka.shared.domain.money import Money
 
 pytestmark = pytest.mark.integration
 

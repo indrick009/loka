@@ -36,8 +36,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     RentMonths,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.interfaces.worker.whatsapp_replies import QUESTION_TEXT, render_reply
+from loka.shared.domain.money import Money
 
 pytestmark = pytest.mark.unit
 

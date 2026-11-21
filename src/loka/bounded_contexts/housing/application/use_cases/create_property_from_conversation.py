@@ -49,10 +49,10 @@ from loka.bounded_contexts.housing.domain.value_objects.location import (
     Coordinates,
     Location,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.domain.errors import DomainError
 from loka.shared.domain.identifiers import new_id
+from loka.shared.domain.money import Money
 
 
 @dataclass(frozen=True, slots=True)

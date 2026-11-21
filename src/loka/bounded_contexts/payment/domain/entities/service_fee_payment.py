@@ -18,10 +18,10 @@ import uuid
 from datetime import datetime, timedelta
 from enum import StrEnum
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
+from loka.shared.domain.money import Money
 
 CALLBACK_TOLERANCE_SECONDS = 300
 

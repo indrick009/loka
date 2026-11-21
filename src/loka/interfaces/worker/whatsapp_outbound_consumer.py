@@ -31,6 +31,10 @@ from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import R
 from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds import (
     RedisConversationHolds,
 )
+from loka.bounded_contexts.conversation.infrastructure.adapters.whatsapp import (
+    GatewayDown,
+    channel_for,
+)
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     voice_platform_reply_use_case,
 )
@@ -50,7 +54,6 @@ from loka.interfaces.worker.stuck_guard import (
     StuckGuard,
     holding_text,
 )
-from loka.interfaces.worker.whatsapp_channels import GatewayDown, channel_for
 from loka.interfaces.worker.whatsapp_replies import render_reply
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,

@@ -1,23 +1,14 @@
-"""The two ways a reply reaches WhatsApp: the official Cloud API, or Baileys.
+"""The Cloud API adapter: Meta's official WhatsApp API, the target.
 
-``WHATSAPP__PROVIDER`` picks one. The conversation never knows which: it writes
-a sentence and, sometimes, a :class:`RichReply`. Each channel shows what it can.
-
-- **Cloud API** (the target): buttons or a list for the expected answers, the
-  photo as the header of a card with its button, a contact card, a map pin.
-- **Baileys** (the tests, today): the sentence, the photo with its caption, a
-  contact card and a map pin, which Baileys sends natively. Buttons are left
-  out on purpose: sent through an unofficial client they show badly or not at
-  all, and the sentence already says « réponds 1 ».
-
-Both map their failures the same way: unreachable or 502-504 is the platform
-down (``GatewayDown``, waited for), 429 and other 5xx are retried, the rest is
-a send that will never succeed.
+Expected answers become buttons (three at most, under the photo when there is
+one: the card « photo, line, Choisir » of the ads) or a list (ten at most); a
+contact card and a map pin follow. Our photos are uploaded to Meta first: it
+cannot read the private store.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import Any
 
 import httpx
 
@@ -26,13 +17,12 @@ from loka.bounded_contexts.conversation.domain.value_objects.rich_reply import (
     Place,
     RichReply,
 )
-from loka.shared.infrastructure.broker.consumer import (
-    PermanentHandlerError,
-    RetryableHandlerError,
+from loka.bounded_contexts.conversation.infrastructure.adapters.whatsapp.delivery import (
+    Delivery,
+    post,
 )
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.logging import get_logger
-from loka.shared.infrastructure.metrics import whatsapp_failures_total
 
 _logger = get_logger(__name__)
 
@@ -45,111 +35,7 @@ _BUTTON_BODY = 1024
 _LIST_BODY = 4096
 
 
-class GatewayDown(RetryableHandlerError):
-    """The gateway or its WhatsApp socket is down, not this message."""
-
-
-class WhatsAppChannel(Protocol):
-    async def send(
-        self, *, to: str, text: str, image_url: str | None = None, rich: RichReply | None = None
-    ) -> None: ...
-
-    async def aclose(self) -> None: ...
-
-
-def channel_for(settings: Settings) -> WhatsAppChannel:
-    if settings.whatsapp.provider == "cloud":
-        return CloudApiChannel(settings)
-    return BaileysChannel(settings)
-
-
-async def _post(client: httpx.AsyncClient, url: str, body: dict[str, Any]) -> None:
-    try:
-        response = await client.post(url, json=body)
-    except (httpx.TimeoutException, httpx.TransportError) as exc:
-        whatsapp_failures_total.labels(operation="send", reason="unreachable").inc()
-        raise GatewayDown(f"whatsapp unreachable: {exc}") from exc
-    if response.status_code < 300:
-        return
-    reason = f"http_{response.status_code}"
-    whatsapp_failures_total.labels(operation="send", reason=reason).inc()
-    detail = response.text[:512]
-    if response.status_code in (502, 503, 504):
-        raise GatewayDown(f"whatsapp returned {reason}: {detail}")
-    if response.status_code == 429 or response.status_code >= 500:
-        raise RetryableHandlerError(f"whatsapp returned {reason}: {detail}")
-    # Up, and refusing this send: the number or the body is wrong, and neither
-    # changes on the fourth attempt.
-    raise PermanentHandlerError(f"whatsapp rejected the send {reason}: {detail}")
-
-
-class _Channel:
-    """The order every channel keeps: the sentence, then the card, then the pin."""
-
-    async def send(
-        self, *, to: str, text: str, image_url: str | None = None, rich: RichReply | None = None
-    ) -> None:
-        await self._main(to, text, image_url, rich)
-        if rich is None:
-            return
-        # Best effort: the sentence already holds the number and the map link,
-        # so a card that fails must not have the whole reply sent twice.
-        try:
-            if rich.contact is not None:
-                await self._card(to, rich.contact)
-            if rich.place is not None:
-                await self._pin(to, rich.place)
-        except Exception as exc:  # see above
-            _logger.warning("whatsapp_extra_failed", error=type(exc).__name__)
-
-    async def _main(
-        self, to: str, text: str, image_url: str | None, rich: RichReply | None
-    ) -> None:
-        raise NotImplementedError
-
-    async def _card(self, to: str, contact: ContactCard) -> None:
-        raise NotImplementedError
-
-    async def _pin(self, to: str, place: Place) -> None:
-        raise NotImplementedError
-
-
-class BaileysChannel(_Channel):
-    def __init__(self, settings: Settings) -> None:
-        whatsapp = settings.whatsapp
-        api_key = whatsapp.api_key.get_secret_value()
-        self._client = httpx.AsyncClient(
-            base_url=whatsapp.gateway_url.rstrip("/"),
-            timeout=httpx.Timeout(whatsapp.request_timeout_seconds),
-            headers={"X-Api-Key": api_key} if api_key else {},
-        )
-
-    async def _main(
-        self, to: str, text: str, image_url: str | None, rich: RichReply | None
-    ) -> None:
-        body: dict[str, Any] = {"to": to, "text": text}
-        if image_url:
-            body = {"to": to, "image": image_url, "caption": text}
-        await _post(self._client, "/send", body)
-
-    async def _card(self, to: str, contact: ContactCard) -> None:
-        card = {"name": contact.name, "phone": contact.phone}
-        await _post(self._client, "/send", {"to": to, "contact": card})
-
-    async def _pin(self, to: str, place: Place) -> None:
-        location = {
-            "latitude": place.latitude,
-            "longitude": place.longitude,
-            "label": place.name,
-            "address": place.address,
-        }
-        await _post(self._client, "/send", {"to": to, "location": location})
-
-    async def aclose(self) -> None:
-        await self._client.aclose()
-
-
-class CloudApiChannel(_Channel):
+class CloudApiChannel(Delivery):
     """Meta's WhatsApp Cloud API: ``POST /{phone-number-id}/messages``."""
 
     def __init__(self, settings: Settings) -> None:
@@ -164,7 +50,7 @@ class CloudApiChannel(_Channel):
         self, to: str, text: str, image_url: str | None, rich: RichReply | None
     ) -> None:
         image = await self._uploaded(image_url) if image_url else None
-        await _post(self._client, "/messages", _addressed(to, cloud_content(text, image, rich)))
+        await post(self._client, "/messages", _addressed(to, cloud_content(text, image, rich)))
 
     async def _uploaded(self, url: str) -> dict[str, str] | None:
         """The photo uploaded to Meta, as ``{"id": …}``; ``None`` sends the words alone.
@@ -195,7 +81,7 @@ class CloudApiChannel(_Channel):
             "name": {"formatted_name": contact.name, "first_name": contact.name},
             "phones": [{"phone": f"+{digits}", "type": "CELL", "wa_id": digits}],
         }
-        await _post(
+        await post(
             self._client, "/messages", _addressed(to, {"type": "contacts", "contacts": [card]})
         )
 
@@ -205,7 +91,7 @@ class CloudApiChannel(_Channel):
             location["name"] = place.name
         if place.address:
             location["address"] = place.address
-        await _post(
+        await post(
             self._client, "/messages", _addressed(to, {"type": "location", "location": location})
         )
 

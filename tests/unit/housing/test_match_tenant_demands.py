@@ -40,8 +40,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     PropertyType,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.domain.money import Money
 
 pytestmark = pytest.mark.unit
 

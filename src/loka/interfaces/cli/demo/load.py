@@ -48,7 +48,6 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     RentMonths,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Coordinates, Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.composition import (
     PROPERTY_REPOSITORY,
     PROPERTY_SEARCH_PROJECTOR,
@@ -56,6 +55,7 @@ from loka.bounded_contexts.housing.infrastructure.composition import (
 from loka.interfaces.cli.demo import catalogue, pictures
 from loka.interfaces.cli.seed import _upsert_landlord
 from loka.shared.domain.knowledge.where import place_from
+from loka.shared.domain.money import Money
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings, get_settings
 from loka.shared.infrastructure.crypto.blind_index import blind_index, derive_blind_index_key

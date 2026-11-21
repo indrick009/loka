@@ -17,8 +17,8 @@ from loka.bounded_contexts.housing.domain.value_objects.location import (
     Coordinates,
     Location,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import InvariantViolation
+from loka.shared.domain.money import Money
 
 
 class TestMoney:

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.payment.domain.entities.service_fee_payment import (
     GrantStatus,
     PaymentMethod,
@@ -23,6 +22,7 @@ from loka.bounded_contexts.payment.infrastructure.persistence.models import (
     ServiceAccessGrantRow,
     ServiceFeePaymentRow,
 )
+from loka.shared.domain.money import Money
 
 
 def payment_to_row(payment: ServiceFeePayment) -> dict[str, Any]:

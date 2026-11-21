@@ -30,8 +30,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     RentMonths,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import InvariantViolation
+from loka.shared.domain.money import Money
 
 
 def build_media(count: int = 2) -> list[PropertyMedia]:

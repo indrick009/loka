@@ -31,11 +31,11 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.aggregate import AggregateRoot
 from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
 from loka.shared.domain.knowledge.nearby import FAR_KM
+from loka.shared.domain.money import Money
 
 # How far around the tenant's budget a lodging is worth proposing. Below, a
 # floor: far too cheap reads as an insult — a 90 000 tenant is not looking for a

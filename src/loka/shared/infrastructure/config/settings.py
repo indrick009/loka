@@ -139,7 +139,7 @@ class WhatsAppCloudSettings(BaseModel):
 
 class WhatsAppSettings(BaseModel):
     # ``baileys`` for the tests today; ``cloud`` once the official API is set up
-    # (see ``interfaces/worker/whatsapp_channels``).
+    # (see ``conversation/infrastructure/adapters/whatsapp``).
     provider: Literal["baileys", "cloud"] = "baileys"
     cloud: WhatsAppCloudSettings = Field(default_factory=WhatsAppCloudSettings)
     gateway_url: str = "http://localhost:3000"

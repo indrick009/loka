@@ -15,11 +15,11 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-import httpx
 from sqlalchemy import bindparam, text
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from loka.bounded_contexts.conversation.infrastructure.adapters.whatsapp import channel_for
 from loka.interfaces.http.container import Container
 from loka.shared.infrastructure.logging import get_logger
 
@@ -178,23 +178,17 @@ def _count(result: object) -> int:
 
 
 async def _confirm(container: Container, phone: str) -> None:
-    whatsapp = container.settings.whatsapp
-    api_key = whatsapp.api_key.get_secret_value()
-    async with httpx.AsyncClient(
-        base_url=whatsapp.gateway_url.rstrip("/"),
-        timeout=whatsapp.request_timeout_seconds,
-        headers={"X-Api-Key": api_key} if api_key else {},
-    ) as client:
-        # A failed confirmation must not fail the request: the gateway would
-        # redeliver the command and wipe a second time.
-        try:
-            await client.post(
-                "/send",
-                json={
-                    "to": phone,
-                    "text": "Démo : les données des numéros de test sont effacées. "
-                    "Les données de démonstration restent.",
-                },
-            )
-        except httpx.HTTPError as exc:
-            _logger.warning("demo_reset_confirm_failed", error=type(exc).__name__)
+    # Through the port, whichever provider is active. A failed confirmation
+    # must not fail the request: the transport would redeliver the command and
+    # wipe a second time.
+    channel = channel_for(container.settings)
+    try:
+        await channel.send(
+            to=phone,
+            text="Démo : les données des numéros de test sont effacées. "
+            "Les données de démonstration restent.",
+        )
+    except Exception as exc:  # see above
+        _logger.warning("demo_reset_confirm_failed", error=type(exc).__name__)
+    finally:
+        await channel.aclose()

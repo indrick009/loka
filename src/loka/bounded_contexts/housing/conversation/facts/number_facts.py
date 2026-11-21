@@ -12,8 +12,8 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     BedroomCount,
     ChargingPolicy,
 )
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.shared.domain.errors import ValidationFailed
+from loka.shared.domain.money import Money
 
 
 def _as_int(raw: Any) -> int:

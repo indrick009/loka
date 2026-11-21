@@ -32,7 +32,6 @@ from loka.bounded_contexts.housing.domain.value_objects.enums import (
     SurfaceArea,
 )
 from loka.bounded_contexts.housing.domain.value_objects.location import Location
-from loka.bounded_contexts.housing.domain.value_objects.money import Money
 from loka.bounded_contexts.housing.infrastructure.persistence.property_repository import (
     SqlAlchemyPropertyRepository,
 )
@@ -40,6 +39,7 @@ from loka.bounded_contexts.housing.infrastructure.persistence.search_projector i
     SqlAlchemySearchProjector,
 )
 from loka.interfaces.http.app import create_app
+from loka.shared.domain.money import Money
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
 
