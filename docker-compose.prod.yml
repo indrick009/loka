@@ -173,20 +173,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Meta's webhook for the official WhatsApp API, for tests: a Cloudflare quick
-  # tunnel (its URL changes on every restart) through a filter that lets only
-  # /integrations/whatsapp/cloud/webhook reach the API. Started on demand:
-  #   docker compose -f docker-compose.prod.yml --profile tunnel up -d
+  # Meta's webhook for the official WhatsApp API. Public address:
+  # https://idia.147-79-115-80.sslip.io/integrations/whatsapp/cloud/webhook,
+  # served by the server's shared Caddy (/opt/robotcspsmart/deploy/Caddyfile),
+  # which reaches this filter on the bridge address only — never on the
+  # internet directly. The filter lets that one path reach the API; anything
+  # else is 404.
   webhook-filter:
     image: caddy:2.8.4-alpine
-    profiles: ["tunnel"]
     volumes:
       - ./deploy/tunnel/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "172.16.1.1:18090:8080"
     depends_on:
       api:
         condition: service_healthy
     restart: unless-stopped
 
+  # Fallback when the shared proxy is unavailable: a Cloudflare quick tunnel
+  # (new URL on each start), on demand only:
+  #   docker compose -f docker-compose.prod.yml --profile tunnel up -d tunnel
   tunnel:
     image: cloudflare/cloudflared:2024.12.2
     profiles: ["tunnel"]
