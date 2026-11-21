@@ -173,6 +173,28 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Meta's webhook for the official WhatsApp API, for tests: a Cloudflare quick
+  # tunnel (its URL changes on every restart) through a filter that lets only
+  # /integrations/whatsapp/cloud/webhook reach the API. Started on demand:
+  #   docker compose -f docker-compose.prod.yml --profile tunnel up -d
+  webhook-filter:
+    image: caddy:2.8.4-alpine
+    profiles: ["tunnel"]
+    volumes:
+      - ./deploy/tunnel/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    profiles: ["tunnel"]
+    command: ["tunnel", "--no-autoupdate", "--url", "http://webhook-filter:8080"]
+    depends_on:
+      - webhook-filter
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   redis-data:

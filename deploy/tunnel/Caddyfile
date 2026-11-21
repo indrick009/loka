@@ -1,0 +1,9 @@
+# idia — only Meta's webhook goes through the public tunnel; everything else is 404.
+:8080 {
+	handle /integrations/whatsapp/cloud/webhook* {
+		reverse_proxy api:8000
+	}
+	handle {
+		respond 404
+	}
+}
