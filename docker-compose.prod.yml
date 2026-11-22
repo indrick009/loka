@@ -16,7 +16,9 @@ x-network-env: &network-env
   BROKER__URL: amqp://${RABBITMQ_USER:-kora}:${RABBITMQ_PASS:-kora}@rabbitmq:5672/
   REDIS_URL: redis://redis:6379/0
   OBJECT_STORAGE__ENDPOINT: http://minio:9000
-  WHATSAPP__GATEWAY_URL: http://baileys:3000
+  # The WhatsApp gateway the API sends through: whatsapp-web (default) or
+  # baileys (profile "baileys"). Both speak the same HTTP contract.
+  WHATSAPP__GATEWAY_URL: ${WHATSAPP__GATEWAY_URL:-http://whatsapp-web:3000}
 
 x-app: &app
   build:
@@ -152,7 +154,34 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # WhatsApp Web in Chromium: the gateway, since Baileys' messages stay on
+  # « waiting for this message » once the number is linked to the Business
+  # Platform (coexistence). Same HTTP contract as baileys below.
+  whatsapp-web:
+    build:
+      context: ./deploy/wwebjs
+    environment:
+      PORT: "3000"
+      SESSION_NAME: ${WHATSAPP__SESSION_NAME:-kora-main}
+      PLATFORM_URL: http://api:8000/integrations/whatsapp/events
+      PLATFORM_API_KEY: ${WHATSAPP__API_KEY:-}
+      LOG_LEVEL: ${OBSERVABILITY__LOG_LEVEL:-INFO}
+      AUTH_DIR: /app/auth
+    volumes:
+      - wwebjs-auth:/app/auth
+    shm_size: "512m"
+    ports:
+      # Loopback only: http://localhost:13000/qr through an SSH tunnel.
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Kept for a number never linked to the Business Platform: start it with
+  # --profile baileys and set WHATSAPP__GATEWAY_URL=http://baileys:3000.
   baileys:
+    profiles: ["baileys"]
     build:
       context: ./deploy/baileys
     environment:
@@ -165,10 +194,10 @@ services:
     volumes:
       - baileys-auth:/app/auth
     ports:
-      # Loopback only: open http://localhost:13000/qr through an SSH tunnel to
+      # Loopback only: open http://localhost:13001/qr through an SSH tunnel to
       # scan the pairing QR. The API talks to the gateway over the compose
       # network regardless.
-      - "127.0.0.1:13000:3000"
+      - "127.0.0.1:13001:3000"
     depends_on:
       api:
         condition: service_healthy
@@ -208,3 +237,4 @@ volumes:
   rabbitmq-data:
   minio-data:
   baileys-auth:
+  wwebjs-auth:
