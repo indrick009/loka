@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from loka.shared.domain.value_object import ValueObject
 
 _DIGITS = re.compile(r"\d+")
-_ALLOWED_PREFIXES = ("+237", "+225", "+223", "+242", "+221", "+233", "+254")
 
 DEFAULT_COUNTRY_CODE = "+237"
 
@@ -27,10 +26,10 @@ class PhoneNumber(ValueObject):
         if not self.e164.startswith("+"):
             self._reject("phone number must be in E.164 format", value=self.e164)
         digits = "".join(_DIGITS.findall(self.e164))
-        if not 9 <= len(digits) <= 13:
+        # Every country: idia answers whoever writes (22 Nov 2026). E.164 caps
+        # a number at 15 digits; below 8 no country has one.
+        if not 8 <= len(digits) <= 15:
             self._reject("phone number length is implausible", value=self.e164)
-        if not any(self.e164.startswith(prefix) for prefix in _ALLOWED_PREFIXES):
-            self._reject("unsupported country code", value=self.e164)
         object.__setattr__(self, "e164", f"+{digits}")
 
     @classmethod
@@ -51,13 +50,7 @@ class PhoneNumber(ValueObject):
         if digits.startswith("00"):
             digits = digits[2:]
         country_code = default_country_code.lstrip("+")
-        if not digits.startswith(country_code):
-            if has_explicit_country_code:
-                raise cls._violation(
-                    "unsupported country code for this deployment",
-                    value=raw,
-                    default_country_code=country_code,
-                )
+        if not has_explicit_country_code and not digits.startswith(country_code):
             digits = country_code + digits.lstrip("0")
         return cls(e164=f"+{digits}")
 

@@ -55,15 +55,18 @@ class TestPhoneNumber:
         with pytest.raises(InvariantViolation):
             PhoneNumber(e164="699123456")
 
-    def test_rejects_unsupported_country(self) -> None:
-        with pytest.raises(InvariantViolation):
-            PhoneNumber.normalize("+99912345678", default_country_code="+237")
+    @pytest.mark.parametrize(
+        ("raw", "e164"),
+        [("+33612345678", "+33612345678"), ("00447712345636", "+447712345636"),
+         ("+1 202 555 0143", "+12025550143")],
+    )
+    def test_a_foreign_number_keeps_its_own_country_code(self, raw: str, e164: str) -> None:
+        """Every country is served; rewriting "+33612345678" would store an unreachable contact."""
+        assert PhoneNumber.normalize(raw).e164 == e164
 
-    @pytest.mark.parametrize("raw", ["+33612345678", "00233612345678", "+1 202 555 0143"])
-    def test_a_foreign_number_is_rejected_instead_of_being_rewritten(self, raw: str) -> None:
-        """Rewriting "+33612345678" would store an unreachable contact."""
+    def test_an_implausibly_long_number_is_refused(self) -> None:
         with pytest.raises(InvariantViolation):
-            PhoneNumber.normalize(raw)
+            PhoneNumber.normalize("+1234567890123456")
 
     def test_empty_input_is_an_invariant_violation_not_a_type_error(self) -> None:
         with pytest.raises(InvariantViolation):

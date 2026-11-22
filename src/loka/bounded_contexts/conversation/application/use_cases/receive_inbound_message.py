@@ -101,7 +101,7 @@ class ReceiveInboundMessageUseCase:
         self, command: ReceiveInboundMessageCommand, *, now: datetime
     ) -> InboundMessageReceipt:
         received_at = ensure_utc(now)
-        phone = PhoneNumber.normalize(command.sender_phone)
+        phone = PhoneNumber.normalize(_international(command.sender_phone))
         kind = _resolve_kind(command.message_kind)
 
         existing = await self._inbound.get_by_external_id(
@@ -301,3 +301,12 @@ def _bounded_timestamp(value: datetime, received_at: datetime) -> datetime:
         if drift > timedelta(0)
         else received_at - MAX_PROVIDER_TIMESTAMP_DRIFT
     )
+
+
+def _international(sender: str) -> str:
+    """WhatsApp gives the full number, country code included: « 447… » is
+    British, never a Cameroonian « 237447… ». Nine digits or fewer is a local
+    number (Cameroon's are nine), and gets the default country code."""
+    raw = sender.strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    return f"+{digits}" if not raw.startswith("+") and len(digits) > 9 else raw
