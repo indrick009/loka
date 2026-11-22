@@ -22,8 +22,12 @@ from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 
+from loka.bounded_contexts.conversation.application.services.privacy import fold
 from loka.bounded_contexts.conversation.application.services.unsupported import (
     unsupported_topic,
+)
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
+    ConversationSession,
 )
 from loka.bounded_contexts.conversation.domain.events.message_events import (
     WhatsAppMessageSendRequested,
@@ -37,7 +41,9 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.conversation_
 from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_message_repository import (  # noqa: E501
     SqlAlchemyInboundMessageRepository,
 )
+from loka.interfaces.worker import signups
 from loka.interfaces.worker.stuck_guard import ESCALATE
+from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.conversation_log import journal
@@ -47,6 +53,13 @@ from loka.shared.infrastructure.logging import get_logger
 _logger = get_logger(__name__)
 
 _NOTE = re.compile(r"^\s*(I-[0-9A-F]{6})\b[\s:,-]*(.*)$", re.IGNORECASE | re.DOTALL)
+# An admin asking for the numbers: answered here, never handed to the team —
+# handed over, « combien d'utilisateurs ? » held the admin's own conversation
+# (22 Nov 2026, 18:41 UTC).
+_FIGURES_ASKED = re.compile(
+    r"\b(stats?|statistiques?|chiffres?)\b"
+    r"|\b(combien|nombre)\b.*\b(utilisateurs?|inscrits?|users?|clients?|membres?)\b"
+)
 
 
 def _digits(phone: str) -> str:
@@ -88,7 +101,15 @@ class TeamDesk:
                 return False
             text = (message.text or "").strip()
             phone = session.phone.e164
-            note = _NOTE.match(text) if notes and _digits(phone) in self._admins else None
+            admin = notes and _digits(phone) in self._admins
+            if admin and _FIGURES_ASKED.search(fold(text)):
+                answer = await signups.figures(uow.session)
+                self._say(uow, session, answer, now, intent=None)
+                await inbound.mark_processed(message_id)
+                await uow.commit()
+                journal("team", phone, figures=True)
+                return True
+            note = _NOTE.match(text) if admin else None
             if notes and note is None:
                 return False
             if note is not None:
@@ -98,27 +119,38 @@ class TeamDesk:
                 if topic is None:
                     return False
                 answer = f"{topic} — « {text} »"
-            uow.events.stage(
-                [
-                    WhatsAppMessageSendRequested(
-                        aggregate_type="ConversationSession",
-                        aggregate_id=session.id,
-                        aggregate_version=session.revision,
-                        occurred_at=now,
-                        actor_id=session.user_id,
-                        session_id=session.id,
-                        recipient_phone=phone,
-                        text=answer,
-                        intent=None if note is not None else ESCALATE,
-                        language=session.language,
-                    )
-                ],
-                correlation_id=f"team-{session.id}",
-            )
+            self._say(uow, session, answer, now, intent=None if note is not None else ESCALATE)
             await inbound.mark_processed(message_id)
             await uow.commit()
             journal("team", phone, note=note is not None, text=answer)
             return True
+
+    @staticmethod
+    def _say(
+        uow: UnitOfWork,
+        session: ConversationSession,
+        text: str,
+        now: datetime,
+        *,
+        intent: str | None,
+    ) -> None:
+        uow.events.stage(
+            [
+                WhatsAppMessageSendRequested(
+                    aggregate_type="ConversationSession",
+                    aggregate_id=session.id,
+                    aggregate_version=session.revision,
+                    occurred_at=now,
+                    actor_id=session.user_id,
+                    session_id=session.id,
+                    recipient_phone=session.phone.e164,
+                    text=text,
+                    intent=intent,
+                    language=session.language,
+                )
+            ],
+            correlation_id=f"team-{session.id}",
+        )
 
     async def _note(self, incident: str, note: str) -> str:
         hold = await self._holds.by_incident(incident)

@@ -11,7 +11,8 @@ from __future__ import annotations
 from datetime import datetime
 
 import phonenumbers
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
@@ -53,7 +54,7 @@ async def announce(
     name = await uow.session.scalar(
         select(UserRow.display_name).where(UserRow.id == session.user_id)
     )
-    text = announcement(phone=session.phone.e164, name=name, total=total)
+    message = announcement(phone=session.phone.e164, name=name, total=total)
     uow.events.stage(
         [
             WhatsAppMessageSendRequested(
@@ -62,7 +63,7 @@ async def announce(
                 aggregate_version=session.revision,
                 occurred_at=now,
                 recipient_phone=phone,
-                text=text,
+                text=message,
                 intent="SIGNUP_ALERT",
                 language="fr",
             )
@@ -70,3 +71,31 @@ async def announce(
         ],
         correlation_id=f"signup-{session.id}",
     )
+
+
+# What an admin reads when asking « combien d'utilisateurs ? » or « stats ».
+_FIGURES = (
+    ("Inscrits", "select count(*) from users"),
+    (
+        "dont nouveaux en 24 h",
+        "select count(*) from users where created_at > now() - interval '24 hours'",
+    ),
+    ("Logements publiés", "select count(*) from properties where status = 'AVAILABLE'"),
+    ("Restaurants", "select count(*) from food_restaurants"),
+    ("Profils rencontre", "select count(*) from dating_profiles"),
+    ("Objets trouvés déclarés", "select count(*) from found_declarations"),
+    (
+        "Paiements logement réussis",
+        "select count(*) from service_fee_payments where status = 'SUCCEEDED'",
+    ),
+    ("Mises en relation payées", "select count(*) from contact_unlocks where status = 'PAID'"),
+    ("Billets de car payés", "select count(*) from booking_reservations where status = 'PAID'"),
+)
+
+
+async def figures(session: AsyncSession) -> str:
+    lines = ["📊 idia en chiffres"]
+    for label, query in _FIGURES:
+        count = int(await session.scalar(text(query)) or 0)
+        lines.append(f"{label} : {count}")
+    return "\n".join(lines)
