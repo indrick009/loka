@@ -44,6 +44,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_messa
 from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     InboundMessageRow,
 )
+from loka.interfaces.worker import signups
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
@@ -129,6 +130,9 @@ class PrivacyDesk:
                 language, policy_url=settings.policy_url, terms_url=settings.terms_url
             )
             self._say(uow, session, welcome, now)
+            await signups.announce(
+                uow, session, alert_phones=self._settings.whatsapp.alert_phones, now=now
+            )
             alone = privacy.is_bare_greeting(text)
             if alone:
                 await inbound.mark_processed(message_id)
