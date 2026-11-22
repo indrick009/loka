@@ -78,6 +78,7 @@ from loka.bounded_contexts.payment.infrastructure.gateways.fapshi_gateway import
 )
 from loka.bounded_contexts.payment.infrastructure.gateways.mock_gateway import (
     MockPaymentGateway,
+    MockSettlement,
 )
 from loka.bounded_contexts.reviews_complaints.application.use_cases.decide_complaint import (
     DecideComplaintUseCase,
@@ -221,7 +222,9 @@ def handle_payment_callback_use_case(
 def reconcile_pending_payments_use_case(
     uow: SqlAlchemyUnitOfWork, settings: Settings
 ) -> ReconcilePendingPaymentsUseCase:
-    source = payment_status_source(settings)
+    source: PaymentStatusSource | None = (
+        MockSettlement() if settings.payment.gateway == "mock" else payment_status_source(settings)
+    )
     if source is None:
         raise ValueError(
             f"{settings.payment.gateway!r} cannot be reconciled: it exposes no status endpoint"

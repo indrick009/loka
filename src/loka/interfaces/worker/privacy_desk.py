@@ -24,6 +24,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import func, select
 
 from loka.bounded_contexts.conversation.application.services import privacy
+from loka.bounded_contexts.conversation.application.services.message_language import language_of
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
@@ -83,6 +84,8 @@ class PrivacyDesk:
                 return False
             text = message.text or ""
             phone = session.phone.e164
+            # This message's language, not the previous turn's.
+            session.language = language_of(text, session.language)
             language = session.language
             request = privacy.privacy_request(text, erase_pending=await self._pending(session_id))
 

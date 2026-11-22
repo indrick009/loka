@@ -86,6 +86,10 @@ def _count(result: object) -> int:
     return int(getattr(result, "rowcount", 0) or 0)
 
 
+def _digits(value: object) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
 def erase_journal(path: str, *, phone: str) -> None:
     """Drop the user's lines from the conversation journal; a journal off is nothing to do."""
     if not path:
@@ -95,10 +99,14 @@ def erase_journal(path: str, *, phone: str) -> None:
         lines = target.read_text(encoding="utf-8").splitlines(keepends=True)
     except OSError:
         return
+    # Compared on digits: inbound lines carry the gateway's « 237… », replies
+    # the session's « +237… ». Matching the latter alone left every message
+    # the user wrote in the journal after « SUPPRIMER » (22 Nov 2026).
+    target_digits = _digits(phone)
     kept = []
     for line in lines:
         try:
-            if json.loads(line).get("phone") == phone:
+            if target_digits and _digits(json.loads(line).get("phone")) == target_digits:
                 continue
         except ValueError:
             pass

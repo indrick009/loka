@@ -35,9 +35,8 @@ _clock = SystemClock()
 
 
 async def settle_once(database: Database, settings: Settings) -> None:
-    if settings.payment.gateway == "mock":
-        # The mock settles at once and has no status to ask.
-        return
+    # The mock is asked too (MockSettlement answers « paid »): skipping it left
+    # every demo lodging unlock pending for ever.
     async with unit_of_work(database) as uow:
         report = await reconcile_pending_payments_use_case(uow, settings).execute(
             ReconcilePendingPaymentsCommand(

@@ -85,6 +85,26 @@ class MockPaymentGateway:
         )
 
 
+class MockSettlement:
+    """What the mock's provider « says » when asked: paid.
+
+    Only the reconciliation sweep asks it, so in a demo a lodging unlock
+    settles through the same path a Fapshi payment takes, a few seconds after
+    the payer said yes. Kept off the gateway itself: the callback handler
+    confirms a pushed callback with any status source it finds, and a mock
+    callback reporting a failure must stay a failure.
+    """
+
+    async def fetch_status(self, *, provider_reference: str) -> VerifiedCallback:
+        return VerifiedCallback(
+            provider_event_id=f"mock-settled-{provider_reference}",
+            provider_reference=provider_reference,
+            accepted=True,
+            status="SUCCEEDED",
+            provider_reported_at=datetime.now(UTC),
+        )
+
+
 def _parse_timestamp(value: Any) -> datetime | None:
     if value is None:
         return None

@@ -27,6 +27,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import select
 
 from loka.bounded_contexts.conversation.application.services import complaints
+from loka.bounded_contexts.conversation.application.services.message_language import language_of
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
     ConversationSession,
 )
@@ -90,6 +91,8 @@ class ComplaintDesk:
                 return False
             text = (message.text or "").strip()
             media = message.media_object_key
+            # This message's language, not the previous turn's.
+            session.language = language_of(text, session.language)
             report = await self._report(uow, pending)
 
             if report is not None and pending.get("state") == _ASKING and (text or media):
