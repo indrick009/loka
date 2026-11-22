@@ -83,18 +83,21 @@ PROFILE_FORM = (
         "the most important answer, the one matches are made on: who the member "
         "is and the love they look for, what they like and expect from the other, "
         "and their red flags (what they will not accept in a partner); a few words "
-        "are not enough, invite them to say more, red flags included",
+        "are not enough, invite them to say more, red flags included; whenever red "
+        "flags are asked about, they are written « 🚩 *red flags* »",
         {
             "fr": "Maintenant le plus important : ta description. Présente-toi et dis "
             "clairement quel type d'amour tu recherches, ce que tu aimes, ce que tu "
-            "attends de l'autre. Dis aussi tes red flags : ce que tu n'acceptes pas "
-            "chez l'autre (le mensonge, la cigarette, l'alcool…). Plus tu es précis, "
-            "meilleur sera le match.",
+            "attends de l'autre.\n\n"
+            "🚩 *Tes red flags* : ce que tu n'acceptes pas chez l'autre (le mensonge, "
+            "la cigarette, l'alcool…). C'est très important pour le match.\n\n"
+            "Plus tu es précis, meilleur sera le match.",
             "en": "Now the most important part: your description. Tell me about yourself "
             "and say clearly what kind of love you are looking for, what you like and "
-            "what you expect from the other person. Tell me your red flags too: what you "
-            "won't accept in a partner (lying, smoking, drinking…). The more precise, "
-            "the better the match.",
+            "what you expect from the other person.\n\n"
+            "🚩 *Your red flags*: what you won't accept in a partner (lying, smoking, "
+            "drinking…). This matters a lot for the match.\n\n"
+            "The more precise, the better the match.",
         },
         notice=DESCRIPTION_PROMISE,
     ),
