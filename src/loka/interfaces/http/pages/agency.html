@@ -60,8 +60,7 @@
     </form>
     <p class="error" id="register-error"></p>
     <div id="new-key" class="hidden">
-      <p class="note">Votre clé d'accès (elle est aussi envoyée sur WhatsApp si ce numéro a déjà écrit à idia) :</p>
-      <span class="key" id="key-value"></span>
+      <p class="note">Inscription faite : votre clé d'accès vient d'être envoyée sur le WhatsApp de ce numéro. Entrez-la ci-dessus pour vous connecter.</p>
     </div>
   </section>
 
@@ -143,12 +142,9 @@
     event.preventDefault();
     const data = Object.fromEntries(new FormData(event.target));
     try {
-      const made = await call("/agencies/register", { method: "POST", body: JSON.stringify(data) });
-      $("key-value").textContent = made.key; $("new-key").classList.remove("hidden");
+      await call("/agencies/register", { method: "POST", body: JSON.stringify(data) });
+      $("new-key").classList.remove("hidden");
       $("register-error").textContent = "";
-      creds = { phone: made.phone, key: made.key };
-      localStorage.setItem("idia-agency", JSON.stringify(creds));
-      setTimeout(load, 1500);
     } catch (error) { $("register-error").textContent = error.message; }
   });
 

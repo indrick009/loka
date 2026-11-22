@@ -79,16 +79,23 @@ async def register(body: Registration, request: Request) -> dict[str, str]:
             uuid.uuid4(), " ".join(body.name.split()), phone, _digest(key),
             DEFAULT_COMMISSION_XAF, now,
         )
-        await store.add_agency(agency)
         desk = ConversationDesk(uow, uow.repository(CONVERSATION_SESSION_REPOSITORY))
-        await desk.notify_phone(
+        # The key goes to the agency's own WhatsApp, never back to the form:
+        # returned here, anyone could register any number and act as that
+        # agency (security review, 22 Nov 2026).
+        sent = await desk.notify_phone(
             phone,
             f"Bienvenue sur idia Booking, {agency.name} ! Votre clé d'accès au tableau de "
             f"bord : {key}. Gardez-la, elle ne sera plus affichée.",
             now=now,
         )
+        if not sent:
+            raise ValidationFailed(
+                "écrivez d'abord « bonjour » à idia sur WhatsApp depuis ce numéro, puis réessayez"
+            )
+        await store.add_agency(agency)
         await uow.commit()
-    return {"agency_id": str(agency.agency_id), "key": key, "phone": phone}
+    return {"agency_id": str(agency.agency_id), "phone": phone}
 
 
 async def _agency(
