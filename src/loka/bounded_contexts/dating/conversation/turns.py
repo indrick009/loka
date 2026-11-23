@@ -103,6 +103,15 @@ class DatingTurns:
             # Yaoundé » as where to look, so the member was never told the
             # description matters most and nobody else reads it.
             known = {name: value for name, value in known.items() if name not in unasked}
+            # What was already given stays, and what is added to it completes
+            # it. Dropped whole, a member's red flags sent after his description
+            # erased the description too, and he was asked for it again
+            # (journal of 22 Nov 2026, 21:25 UTC).
+            for name in unasked:
+                before, added = turn.session.context.get(name), turn.facts.get(name)
+                if isinstance(before, str) and before.strip():
+                    extra = added.strip() if isinstance(added, str) else ""
+                    known[name] = f"{before}\n{extra}" if extra and extra not in before else before
         age = known.get("age")
         if isinstance(age, int) and age < ADULT_AGE:
             # Refused, not hidden: nothing about the person is kept.
