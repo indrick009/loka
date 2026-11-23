@@ -6,10 +6,12 @@ confirms. Only then is it a match, and the contact can be unlocked.
 
 from __future__ import annotations
 
+import re
 import uuid
 
 from loka.bounded_contexts.conversation.application.plugs.forms import ask_field, say, stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
+from loka.bounded_contexts.conversation.application.services.privacy import fold
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
 )
@@ -19,6 +21,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 )
 from loka.bounded_contexts.dating.conversation import texts
 from loka.bounded_contexts.dating.conversation.keys import (
+    BACK_KEY,
     LIKE_KEY,
     MATCH_KEY,
     PLUS_KEY,
@@ -41,6 +44,12 @@ from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING
 # « c'est noté ! » then the question again at the end (journal of 7 Nov 2026).
 ASKED_ONLY = ("description",)
 _YES = ("oui", "yes", "ok", "d'accord", "dac", "volontiers", "bien sûr", "carrément")
+# « ça n'a pas marché », « c'est fini entre nous »: said straight away, no
+# question needed.
+_DID_NOT_WORK = re.compile(
+    r"pas (marche|fonctionne|abouti)|c.?est fini|on a (rompu|arrete)|separe|"
+    r"didn.?t work|not working|broke up"
+)
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
 
@@ -67,6 +76,8 @@ class DatingTurns:
         user, lang = turn.session.user_id, turn.language
         if user is None or await self._store.refused_minor(user):
             return await self._close(turn, desk, texts.minor(lang))
+        if await self._store.in_relation(user):
+            return await self._relation(turn, desk, user)
         member = await self._store.profile_of(user)
         if member is None:
             return await self._register(turn, desk, user)
@@ -87,6 +98,27 @@ class DatingTurns:
         if not turn.fresh and turn.session.context.get("next_question") == LIKE_KEY and proposed:
             return await self._answer(turn, desk, member, uuid.UUID(str(proposed)))
         return await self._propose(turn, desk, member, prefix="")
+
+    async def _relation(self, turn: PlugTurn, desk: PlugDesk, user: uuid.UUID) -> TurnOutcome:
+        """Contacts exchanged: proposed to nobody until the member says it did not work.
+
+        Each one says it for themself: the other stays in the relation until they
+        write too.
+        """
+        lang = turn.language
+        asked = not turn.fresh and turn.session.context.get("next_question") == BACK_KEY
+        answer = _answer(turn) if asked else None
+        if answer is False:
+            return await self._close(turn, desk, texts.stay_in_relation(lang))
+        if answer or _DID_NOT_WORK.search(fold(turn.text or "")):
+            await self._store.back_on_market(user)
+            member = await self._store.profile_of(user)
+            if member is not None:
+                return await self._propose(turn, desk, member, prefix=texts.back_on_market(lang))
+        await desk.settle(turn, step=FlowStep.COLLECT_CHOICE, question_key=BACK_KEY, context={})
+        return say(
+            texts.in_relation(lang), question=BACK_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False
+        )
 
     async def _close(self, turn: PlugTurn, desk: PlugDesk, text: str) -> TurnOutcome:
         await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})

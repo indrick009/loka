@@ -9,6 +9,8 @@ UNLOCK_KEY = DATING.question_key("unlock")
 # Two members asking each other questions through idia; buying more of them.
 TALK_KEY = DATING.question_key("talk")
 PLUS_KEY = DATING.question_key("plus")
+# In a relation: whether it worked out, or back to the proposals.
+BACK_KEY = DATING.question_key("back")
 
 PROPOSED_KEY = "_proposed"
 MATCH_KEY = "_match"

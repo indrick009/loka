@@ -19,6 +19,9 @@ from loka.bounded_contexts.dating.infrastructure.models import (
 
 ACTIVE = "ACTIVE"
 REFUSED_MINOR = "REFUSED_MINOR"
+# Contacts exchanged: out of the proposals, both ways, until the member says
+# it did not work out.
+IN_RELATION = "EN_RELATION"
 
 
 def _profile(row: DatingProfileRow) -> Profile:
@@ -120,6 +123,28 @@ class SqlAlchemyDatingStore:
                     id=uuid.uuid4(), user_id=user_id, status=REFUSED_MINOR, created_at=now
                 )
             )
+            await self._session.flush()
+
+    async def named(self, user_id: uuid.UUID) -> Profile | None:
+        """The profile whatever its status, for a name in a message."""
+        row = await self._row_of(user_id)
+        return _profile(row) if row is not None and row.status in (ACTIVE, IN_RELATION) else None
+
+    async def in_relation(self, user_id: uuid.UUID) -> bool:
+        row = await self._row_of(user_id)
+        return row is not None and row.status == IN_RELATION
+
+    async def start_relation(self, *user_ids: uuid.UUID) -> None:
+        for user_id in user_ids:
+            row = await self._row_of(user_id)
+            if row is not None and row.status == ACTIVE:
+                row.status = IN_RELATION
+        await self._session.flush()
+
+    async def back_on_market(self, user_id: uuid.UUID) -> None:
+        row = await self._row_of(user_id)
+        if row is not None and row.status == IN_RELATION:
+            row.status = ACTIVE
             await self._session.flush()
 
     async def members(self) -> list[Profile]:

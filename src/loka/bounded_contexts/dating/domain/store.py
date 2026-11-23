@@ -21,6 +21,17 @@ class DatingStore(Protocol):
 
     async def refuse_minor(self, user_id: uuid.UUID, *, now: datetime) -> None: ...
 
+    async def named(self, user_id: uuid.UUID) -> Profile | None:
+        """The profile, active or in a relation."""
+
+    async def in_relation(self, user_id: uuid.UUID) -> bool:
+        """Contacts exchanged with a match: proposed to nobody, shown nobody."""
+
+    async def start_relation(self, *user_ids: uuid.UUID) -> None: ...
+
+    async def back_on_market(self, user_id: uuid.UUID) -> None:
+        """It did not work out: proposed again, the former match excepted."""
+
     async def members(self) -> list[Profile]: ...
 
     async def answered(self, profile_id: uuid.UUID) -> set[str]:

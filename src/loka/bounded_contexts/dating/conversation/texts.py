@@ -112,3 +112,31 @@ def unlock_later() -> str:
 
 def pay_or_not() -> str:
     return "Réponds PAYER pour obtenir son numéro (1 000 FCFA), ou NON."
+
+
+def in_relation(language: str) -> str:
+    if _fr(language):
+        return (
+            "Tu es en relation avec ton dernier match, alors je ne te propose plus "
+            "personne pour l'instant 💛 Si ça n'a pas marché entre vous, réponds OUI "
+            "et je te remets dans les propositions."
+        )
+    return (
+        "You are seeing your last match, so I am not proposing anyone for now 💛 "
+        "If it did not work out, reply YES and I will propose profiles again."
+    )
+
+
+def back_on_market(language: str) -> str:
+    if _fr(language):
+        return (
+            "Dommage, mais ce n'était peut-être pas la bonne personne. "
+            "Je relance les propositions."
+        )
+    return "Too bad, maybe it was not the right person. Back to the proposals."
+
+
+def stay_in_relation(language: str) -> str:
+    if _fr(language):
+        return "Super, je vous souhaite le meilleur ! Écris-moi si ça change."
+    return "Great, all the best to you both! Write to me if that changes."

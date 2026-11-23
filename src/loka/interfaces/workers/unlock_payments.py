@@ -36,6 +36,12 @@ HANDOVER = (
     "Aucun argent n'est dû entre vous : signalez à idia toute demande d'argent."
 )
 
+# Both are out of the proposals now; this is how one comes back.
+AFTER_MATCH = (
+    "Je ne te propose plus personne pendant ce temps. Si ça ne marche pas entre "
+    "vous, écris-moi « rencontre : ça n'a pas marché » et je te remets dans les propositions."
+)
+
 
 async def _phone(sessions: ConversationSessionRepository, user_id: uuid.UUID) -> str | None:
     session = await sessions.latest_by_user(user_id)
@@ -81,19 +87,21 @@ async def settle_once(database: Database, settings: Settings) -> None:
             payer_phone = await _phone(sessions, unlock.payer_user_id)
             target_phone = await _phone(sessions, unlock.target_user_id)
             if unlock.purpose == DATING:
-                payer = await dating.profile_of(unlock.payer_user_id)
-                target = await dating.profile_of(unlock.target_user_id)
+                payer = await dating.named(unlock.payer_user_id)
+                target = await dating.named(unlock.target_user_id)
+                # Out of the proposals, both of them, until one says it did not work.
+                await dating.start_relation(unlock.payer_user_id, unlock.target_user_id)
                 await desk.notify(
                     unlock.payer_user_id,
                     f"Paiement reçu. Voici le numéro WhatsApp de "
                     f"{target.first_name if target else 'ton match'} : {target_phone}. "
-                    "Écris-lui avec respect, et bonne rencontre !",
+                    f"Écris-lui avec respect, et bonne rencontre ! {AFTER_MATCH}",
                     now=now,
                 )
                 await desk.notify(
                     unlock.target_user_id,
                     f"{payer.first_name if payer else 'Ton match'} a débloqué ton contact "
-                    f"et va t'écrire. Son numéro : {payer_phone}.",
+                    f"et va t'écrire. Son numéro : {payer_phone}. {AFTER_MATCH}",
                     now=now,
                 )
             else:
