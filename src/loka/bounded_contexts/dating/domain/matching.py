@@ -1,8 +1,10 @@
-"""Descriptions first, location as a filter.
+"""Location and sex as filters; then age and descriptions.
 
-The score is the share of meaningful words two descriptions have in common:
-crude, but inspectable — it is stored with each proposal, so a bad match can be
-explained.
+In Cameroon a woman most often looks for a man older than her: a couple where
+he is 0 to 10 years older comes first, a larger or reversed gap after
+(decision of 24 Nov 2026). The descriptions add the share of meaningful words
+they have in common: crude, but inspectable. The model then reads the best few
+both ways (see ``judge``); this order is what is used when it cannot.
 """
 
 from __future__ import annotations
@@ -41,12 +43,31 @@ def affinity(a: Profile, b: Profile) -> float:
     return len(left & right) / len(left | right)
 
 
+# The age weight next to word affinity, which rarely goes above 0.3.
+AGE_WEIGHT = 0.5
+
+
+def age_fit(a: Profile, b: Profile) -> float:
+    """How usual the age gap is here: the man older by 0 to 10 years is best."""
+    man, woman = (a, b) if a.sex == "HOMME" else (b, a)
+    gap = man.age - woman.age
+    if 0 <= gap <= 10:
+        return 1.0
+    if 10 < gap <= 15:
+        return 0.7
+    if -3 <= gap < 0:
+        return 0.5
+    if gap > 15:
+        return 0.3
+    return 0.2
+
+
 def best_candidates(
     member: Profile, others: Iterable[Profile], *, excluded: set[str]
 ) -> list[tuple[Profile, float]]:
     """Profiles this member could meet, best described match first."""
     ranked = [
-        (other, affinity(member, other))
+        (other, affinity(member, other) + AGE_WEIGHT * age_fit(member, other))
         for other in others
         if str(other.profile_id) not in excluded and member.could_meet(other)
     ]

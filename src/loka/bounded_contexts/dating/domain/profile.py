@@ -64,9 +64,11 @@ class Profile:
 
     @property
     def sought_sex(self) -> str:
-        """Who they want to meet: what the description said, else the other sex."""
-        if self.seeking:
-            return self.seeking
+        """Always the other sex: idia Rencontres proposes no same-sex match.
+
+        ``seeking`` is no longer read (decision of 24 Nov 2026); older rows may
+        still carry it.
+        """
         return "FEMME" if self.sex == "HOMME" else "HOMME"
 
     def accepts_place_of(self, other: Profile) -> bool:

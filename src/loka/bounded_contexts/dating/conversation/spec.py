@@ -116,9 +116,8 @@ RULES = (
     "profession, city (and country only when said, or plain from a city "
     "abroad: Lyon is France), description (their own words, unchanged, red "
     "flags included) and "
-    "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). Set "
-    "'seeking' (HOMME or FEMME) only when the description says whom they want "
-    "to meet. Set 'inappropriate' to true when the description is sexual, "
+    "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). "
+    "Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
     "to another member. To a profile idia proposed, 'oui' is AFFIRMATIVE "
     "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
@@ -135,7 +134,6 @@ ENTITIES: dict[str, Any] = {
     "country": {"type": "string"},
     "description": {"type": "string"},
     "looking": {"type": "array", "items": {"type": "string", "enum": list(LOOKING)}},
-    "seeking": {"type": "string", "enum": list(SEXES)},
     "inappropriate": {"type": "boolean"},
 }
 
@@ -163,8 +161,6 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
         facts["age"] = age
     if entities.get("sex") in SEXES:
         facts["sex"] = entities["sex"]
-    if entities.get("seeking") in SEXES:
-        facts["seeking"] = entities["seeking"]
     looking = entities.get("looking")
     if isinstance(looking, list):
         picked = [item for item in looking if item in LOOKING]

@@ -32,6 +32,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
 )
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk
+from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import best_candidates
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
@@ -67,9 +68,16 @@ def _answer(turn: PlugTurn) -> bool | None:
 
 
 class DatingTurns:
-    def __init__(self, store: DatingStore, *, unlock: UnlockContact | None = None) -> None:
+    def __init__(
+        self,
+        store: DatingStore,
+        *,
+        unlock: UnlockContact | None = None,
+        judge: MatchJudge | None = None,
+    ) -> None:
         self._store = store
         self._unlock = unlock
+        self._judge = judge
         self._talk = DatingTalk(store, unlock=unlock)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
@@ -191,12 +199,12 @@ class DatingTurns:
         ranked = best_candidates(member, await self._store.members(), excluded=excluded)
         if not ranked:
             return await self._close(turn, desk, f"{prefix}\n{texts.nobody_yet(lang)}".strip())
-        other, score = ranked[0]
+        other, score, why = await self._best(member, ranked)
         await desk.settle(
             turn,
             step=FlowStep.COLLECT_CHOICE,
             question_key=LIKE_KEY,
-            context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3)},
+            context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3), "_why": why},
         )
         text = f"{prefix}\n{texts.proposal(other, lang)}".strip()
         return say(
@@ -206,6 +214,19 @@ class DatingTurns:
             voiced=False,
             media=other.photo_key or None,
         )
+
+    async def _best(
+        self, member: Profile, ranked: list[tuple[Profile, float]]
+    ) -> tuple[Profile, float, str]:
+        """The model's pick among the best few, read both ways; else the first."""
+        shortlist = [profile for profile, _ in ranked[:SHORTLIST]]
+        if self._judge is None or len(shortlist) < 2:
+            return ranked[0][0], ranked[0][1], ""
+        verdicts = await self._judge.rank(member, shortlist)
+        if not verdicts:
+            return ranked[0][0], ranked[0][1], ""
+        best = next(p for p in shortlist if p.profile_id == verdicts[0].profile_id)
+        return best, verdicts[0].score, verdicts[0].reason
 
     async def _answer(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, proposed: uuid.UUID
