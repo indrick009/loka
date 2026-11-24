@@ -31,6 +31,7 @@ from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds impo
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     analyse_conversation_message_use_case,
 )
+from loka.interfaces.worker.closing_desk import ClosingDesk
 from loka.interfaces.worker.complaint_desk import ComplaintDesk
 from loka.interfaces.worker.privacy_desk import PrivacyDesk
 from loka.interfaces.worker.referral_desk import ReferralDesk
@@ -135,6 +136,7 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._complaints = ComplaintDesk(database, redis, settings)
         self._team = TeamDesk(database, redis, settings)
         self._referral = ReferralDesk(database, settings)
+        self._closing = ClosingDesk(database)
 
     async def handle(self, payload: dict[str, Any]) -> None:
         message_id, session_id = parse_analysis_payload(payload)
@@ -184,6 +186,9 @@ class ConversationAnalysisConsumer(ConsumerBase):
                 ) from exc
             # The welcome, the privacy summary and the erasure come before any model.
             if await self._privacy.handle(message_id, session_id):
+                return
+            # « ok », « bien compris » closing an exchange: nothing to answer.
+            if await self._closing.handle(message_id, session_id):
                 return
             # A complaint, from anyone, goes to a person before any model.
             if await self._complaints.handle(message_id, session_id):
