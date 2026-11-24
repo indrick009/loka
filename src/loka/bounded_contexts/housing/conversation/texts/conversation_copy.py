@@ -70,14 +70,14 @@ _MISSING_LABELS: dict[str, dict[str, str]] = {
 _LISTING_UNSAVED_TEXT: dict[str, str] = {
     "fr": (
         "Je n'ai pas pu enregistrer l'annonce pour le moment. "
-        "Réessayez dans un instant."
+        "Réessaie dans un instant."
     ),
     "en": "I could not save the listing for now. Please try again in a moment.",
 }
 
 _MISSING_LISTING_INTRO: dict[str, str] = {
     "fr": (
-        "C'est enregistré, votre annonce est créée. "
+        "C'est enregistré, ton annonce est créée. "
         "Pour pouvoir la publier, il manque encore : "
     ),
     "en": (
@@ -113,7 +113,7 @@ SEARCH_RESULT_LIMIT = MAX_RESULT_CHOICES
 _SEARCH_UNAVAILABLE_TEXT: dict[str, str] = {
     "fr": (
         "Je n'ai pas pu lancer la recherche pour le moment. "
-        "Réessayez dans un instant, ou reformulez votre demande."
+        "Réessaie dans un instant, ou reformule ta demande."
     ),
     "en": (
         "I could not run the search for now. "
@@ -127,8 +127,8 @@ _SEARCH_UNAVAILABLE_TEXT: dict[str, str] = {
 # budget is the problem lowers it and still finds nothing.
 _NO_RESULTS_TEXT: dict[str, str] = {
     "fr": (
-        "Je n'ai pas encore de logement qui corresponde à votre recherche. "
-        "Pour trouver plus vite, vous pouvez l'élargir : changez le quartier, "
+        "Je n'ai pas encore de logement qui corresponde à ta recherche. "
+        "Pour trouver plus vite, tu peux l'élargir : change le quartier, "
         "la ville, le type de logement ou le budget, et je relance tout de suite."
     ),
     "en": (
@@ -153,16 +153,16 @@ _NO_RESULTS_TEXT: dict[str, str] = {
 # below, follow it seconds later. It used to be the promise itself, followed at
 # once by « bonne nouvelle : j'ai trouvé 2 logements » (journal of 5 Nov 2026).
 _DEMAND_RECORDED_TEXT: dict[str, str] = {
-    "fr": "C'est noté, je regarde les logements qui correspondent à votre recherche.",
+    "fr": "C'est noté, je regarde les logements qui correspondent à ta recherche.",
     "en": "Noted, I am looking at the properties that match your search.",
 }
 
 # Sent by the matching once it found nothing for a search just recorded.
 _NOTHING_YET_TEXT: dict[str, str] = {
     "fr": (
-        "Pour le moment, aucun logement ne correspond à votre recherche. Votre "
+        "Pour le moment, aucun logement ne correspond à ta recherche. Ta "
         "demande est enregistrée : si un logement correspond, je reviens vers "
-        "vous avec les informations."
+        "toi avec les informations."
     ),
     "en": (
         "For now, no property matches your search. Your request is recorded: if "
@@ -179,9 +179,9 @@ _NOTHING_YET_TEXT: dict[str, str] = {
 # he does have.
 _DEMAND_WAITING_TEXT: dict[str, str] = {
     "fr": (
-        "Votre recherche est bien enregistrée : {summary}. Je n'ai pas encore de "
-        "logement à vous proposer. Si un logement correspond, je reviens vers "
-        "vous ici. Vous pouvez aussi changer un critère : quartier, budget ou "
+        "Ta recherche est bien enregistrée : {summary}. Je n'ai pas encore de "
+        "logement à te proposer. Si un logement correspond, je reviens vers "
+        "toi ici. Tu peux aussi changer un critère : quartier, budget ou "
         "type de logement."
     ),
     "en": (
@@ -200,7 +200,7 @@ _MAX_ADVANCE: dict[str, str] = {
 
 
 _SEARCH_OUTRO: dict[str, str] = {
-    "fr": "Répondez avec le numéro du logement qui vous intéresse.",
+    "fr": "Réponds avec le numéro du logement qui t'intéresse.",
     "en": "Reply with the number of the property you are interested in.",
 }
 
@@ -387,7 +387,7 @@ _AVAILABILITY_ANSWER_TEXT: dict[str, dict[str, str]] = {
         ),
         "available": (
             "Merci, c'est confirmé. Je transmets au locataire pour qu'il "
-            "puisse vous contacter."
+            "puisse te contacter."
         ),
     },
     "en": {
@@ -430,8 +430,8 @@ def availability_answer_text(
 _AVAILABILITY_PENDING_TEXT: dict[str, str] = {
     "fr": (
         "Je demande au bailleur si le logement est encore disponible.\n"
-        "Je reviens vers vous dès qu'il répond. Si rien ne vient, dites-le moi "
-        "et je vous propose d'autres logements."
+        "Je reviens vers toi dès qu'il répond. Si rien ne vient, dis-le moi "
+        "et je te propose d'autres logements."
     ),
     "en": (
         "I am asking the landlord whether the property is still available.\n"
@@ -443,7 +443,7 @@ _AVAILABILITY_PENDING_TEXT: dict[str, str] = {
 _CHOICE_OUT_OF_RANGE_TEXT: dict[str, str] = {
     "fr": (
         "Ce numéro ne correspond à aucun logement de la liste.\n"
-        "Indiquez le numéro affiché à côté du logement qui vous intéresse."
+        "Indique le numéro affiché à côté du logement qui t'intéresse."
     ),
     "en": (
         "That number does not match any property in the list.\n"

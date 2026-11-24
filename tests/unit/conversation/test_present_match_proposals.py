@@ -227,7 +227,7 @@ class TestTheMessage:
         text = match_proposals_text([JOUVENCE], "fr")
 
         assert text.startswith("Bonne nouvelle : j'ai trouvé un logement")
-        assert "Répondez avec le numéro" in text
+        assert "Réponds avec le numéro" in text
 
     def test_english_thread_gets_english(self) -> None:
         text = match_proposals_text([JOUVENCE, BIYEM_ASSI], "en")
@@ -251,15 +251,15 @@ class TestAGapIsSaid:
         text = match_proposals_text([ekounou], "fr", tenant_district="Odza")
 
         assert text.startswith("Je n'ai rien trouvé qui corresponde exactement")
-        assert "(5 000 FCFA au-dessus de votre budget, à 4,8 km d'Odza)" in text
-        assert "Pouvez-vous l'envisager ?" in text
+        assert "(5 000 FCFA au-dessus de ton budget, à 4,8 km d'Odza)" in text
+        assert "Tu peux l'envisager ?" in text
 
     def test_the_same_district_is_said_as_such(self) -> None:
         odza = {**JOUVENCE, "neighbourhood": "Odza", "gap": {"over_budget_xaf": 3_000}}
 
         text = match_proposals_text([odza], "fr", tenant_district="Odza")
 
-        assert "(3 000 FCFA au-dessus de votre budget, dans le même quartier)" in text
+        assert "(3 000 FCFA au-dessus de ton budget, dans le même quartier)" in text
 
     def test_a_pin_only_lodging_is_named_after_its_district(self) -> None:
         pinned = {**JOUVENCE, "neighbourhood": None, "latitude": 3.7905, "longitude": 11.5370}

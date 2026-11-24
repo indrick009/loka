@@ -28,3 +28,32 @@ def is_closing(text: str | None) -> bool:
         # Emoji only (👍, 🙏, 👌): fold keeps no letters.
         return True
     return len(words) <= _LONGEST and all(word in _WORDS for word in words)
+
+
+# « annule tout ça », « laisse tomber », « oublie » in the middle of a form: the
+# member wants out (journal of 24 Nov 2026, 14:01: « noo annulé tout ça va »
+# was answered with the next profile question).
+_CANCEL = frozenset(
+    (  # noqa: SIM905 - a word list reads best as text
+        "annule annuler annulez annulle cancel abandonne stop"
+    ).split()
+)
+_LET_GO = (
+    "laisse tomber", "laisse ca", "laissons tomber", "on arrete", "j arrete", "oublie ca",
+    "oublie tout",
+)
+
+
+def is_cancel(text: str | None) -> bool:
+    """A short message asking to drop what is under way."""
+    words = fold(text or "").replace("'", " ").split()
+    if not words or len(words) > 6:
+        return False
+    plain = " ".join(words)
+    return any(word in _CANCEL for word in words) or any(part in plain for part in _LET_GO)
+
+
+def cancelled(language: str | None) -> str:
+    if (language or "fr").startswith("en"):
+        return "All right, I dropped it. Tell me if I can help with anything else 🙂"
+    return "D'accord, j'ai tout annulé. Dis-moi si je peux t'aider pour autre chose 🙂"

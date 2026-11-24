@@ -2310,10 +2310,10 @@ class TestConversationSearch:
         staged = uow.events.staged[0]
         assert staged.reply_kind == "ACK"
         assert staged.text == (
-            "Votre recherche est bien enregistrée : Studio - Bonamoussadi ou Makepe, "
+            "Ta recherche est bien enregistrée : Studio - Bonamoussadi ou Makepe, "
             "Douala - 60 000 FCFA/mois maximum. Je n'ai pas encore de logement à "
-            "vous proposer. Si un logement correspond, je reviens vers vous ici. "
-            "Vous pouvez aussi changer un critère : quartier, budget ou type de "
+            "te proposer. Si un logement correspond, je reviens vers toi ici. "
+            "Tu peux aussi changer un critère : quartier, budget ou type de "
             "logement."
         )
         # Stock copy: the outbound layer may say it in his voice.
@@ -2383,7 +2383,7 @@ class TestConversationSearch:
 
         assert report.accepted is False
         assert uow.events.staged[0].text.startswith(
-            "Votre recherche est bien enregistrée : Studio - Bastos, Yaoundé - "
+            "Ta recherche est bien enregistrée : Studio - Bastos, Yaoundé - "
             "80 000 FCFA/mois maximum."
         )
 

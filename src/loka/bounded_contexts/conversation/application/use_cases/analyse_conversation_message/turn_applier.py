@@ -286,7 +286,10 @@ class TurnApplier:
             if fresh
             else {name: value for name, value in session.context.items() if name != "next_question"}
         )
-        where = session.context.get(SHARED_PLACE)
+        # The place given in this conversation, else the last one remembered
+        # from an earlier task: asked again, a member shared his position
+        # twice in twenty minutes (journal of 24 Nov 2026, 13:44 and 14:03).
+        where = session.context.get(SHARED_PLACE) or session.memory.get("place")
         if fresh and isinstance(where, dict) and any(f.name == "place" for f in spec.form(flow)):
             base = {"place": where}
         facts = verdict.facts.as_context() if verdict.accepted else {}

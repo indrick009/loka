@@ -1,19 +1,31 @@
-"""Before a message is read: a bare « ok » that closes the exchange gets no answer.
+"""Before a message is read: a bare « ok » that closes the exchange gets no answer,
+and « annule » in the middle of a form drops it.
 
-Only when nothing awaits an answer: no open question, and the task at rest.
-An « ok » to « réponds OUI ou NON » is an answer and goes on to be read.
+« ok » is left unanswered only when nothing awaits an answer: no open
+question, and the task at rest. An « ok » to « réponds OUI ou NON » is an
+answer and goes on to be read. « annule » drops a form under way, never a
+dating talk (where STOP has its own meaning).
 A desk that fails lets the message through: never a silence because of it.
 """
 
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
-from loka.bounded_contexts.conversation.application.services.closing import is_closing
+from loka.bounded_contexts.conversation.application.plugs.registry import HOLDING_QUESTIONS
+from loka.bounded_contexts.conversation.application.services.closing import (
+    cancelled,
+    is_cancel,
+    is_closing,
+)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn_applier import (  # noqa: E501
     RESTING_STEPS,
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
+from loka.bounded_contexts.conversation.domain.events.message_events import (
+    WhatsAppMessageSendRequested,
+)
 from loka.bounded_contexts.conversation.infrastructure.persistence.conversation_session_repository import (  # noqa: E501
     SqlAlchemyConversationSessionRepository,
 )
@@ -44,10 +56,40 @@ class ClosingDesk:
         async with unit_of_work(self._database) as uow:
             inbound = SqlAlchemyInboundMessageRepository(uow.session)
             message = await inbound.get_by_id(message_id)
-            session = await SqlAlchemyConversationSessionRepository(uow.session).get_by_id(
-                session_id
-            )
-            if message is None or session is None or not is_closing(message.text):
+            sessions = SqlAlchemyConversationSessionRepository(uow.session)
+            session = await sessions.get_by_id(session_id)
+            if message is None or session is None:
+                return False
+            now = datetime.now(UTC)
+            open_question = session.context.get("next_question")
+            if (
+                is_cancel(message.text)
+                and session.is_mid_form(now)
+                and open_question not in HOLDING_QUESTIONS
+            ):
+                observed = session.revision
+                session.restart(now=now)
+                uow.events.stage(
+                    [
+                        WhatsAppMessageSendRequested(
+                            aggregate_type="ConversationSession",
+                            aggregate_id=session.id,
+                            aggregate_version=session.revision,
+                            occurred_at=now,
+                            session_id=session.id,
+                            recipient_phone=session.phone.e164,
+                            text=cancelled(session.language),
+                            language=session.language,
+                        )
+                    ],
+                    correlation_id=f"cancel-{session.id}",
+                )
+                await sessions.save(session, expected_revision=observed)
+                await inbound.mark_processed(message_id)
+                await uow.commit()
+                journal("cancelled", session.phone.e164, text=message.text)
+                return True
+            if not is_closing(message.text):
                 return False
             if session.context.get("next_question"):
                 return False

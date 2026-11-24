@@ -25,31 +25,31 @@ SHOWN_LISTINGS_KEY = "_shown_listings"
 
 _WORDS: dict[str, dict[str, str]] = {
     "fr": {
-        "one": "Bonne nouvelle : j'ai trouvé un logement qui correspond à votre recherche.",
+        "one": "Bonne nouvelle : j'ai trouvé un logement qui correspond à ta recherche.",
         "many": (
             "Bonne nouvelle : j'ai trouvé {count} logements qui correspondent à "
-            "votre recherche."
+            "ta recherche."
         ),
         "lodging": "Logement",
         "rent": "{amount} FCFA/mois",
         "photo": "(photo {index}/{total})",
         "outro": (
-            "Répondez avec le numéro du logement qui vous intéresse : je demande "
+            "Réponds avec le numéro du logement qui t'intéresse : je demande "
             "au propriétaire s'il est toujours disponible."
         ),
         "gap_one": (
-            "Je n'ai rien trouvé qui corresponde exactement à votre recherche, mais "
+            "Je n'ai rien trouvé qui corresponde exactement à ta recherche, mais "
             "ce logement s'en approche :"
         ),
         "gap_many": (
-            "Je n'ai rien trouvé qui corresponde exactement à votre recherche, mais "
+            "Je n'ai rien trouvé qui corresponde exactement à ta recherche, mais "
             "ces {count} logements s'en approchent :"
         ),
         "gap_outro": (
-            "Pouvez-vous l'envisager ? Répondez avec le numéro du logement : je "
+            "Tu peux l'envisager ? Réponds avec le numéro du logement : je "
             "demande au propriétaire s'il est toujours disponible."
         ),
-        "over_budget": "{amount} FCFA au-dessus de votre budget",
+        "over_budget": "{amount} FCFA au-dessus de ton budget",
         "over_advance": "{months} mois d'avance de plus que prévu",
         "same_district": "dans le même quartier",
         "district_away": "à {km} km {origin}",
