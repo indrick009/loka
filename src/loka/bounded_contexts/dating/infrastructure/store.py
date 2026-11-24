@@ -147,6 +147,28 @@ class SqlAlchemyDatingStore:
             row.status = ACTIVE
             await self._session.flush()
 
+    async def said_yes_to(self, profile_id: uuid.UUID) -> list[Profile]:
+        rows = (
+            await self._session.execute(
+                select(DatingProfileRow)
+                .join(DatingAnswerRow, DatingAnswerRow.to_profile == DatingProfileRow.id)
+                .where(
+                    DatingAnswerRow.from_profile == profile_id,
+                    DatingAnswerRow.liked.is_(True),
+                    DatingProfileRow.status == ACTIVE,
+                )
+                .order_by(DatingAnswerRow.created_at.desc())
+                .limit(5)
+            )
+        ).scalars()
+        return [_profile(row) for row in rows]
+
+    async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.photo_key = photo_key
+            await self._session.flush()
+
     async def members(self) -> list[Profile]:
         rows = (
             await self._session.execute(

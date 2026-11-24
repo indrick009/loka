@@ -90,6 +90,12 @@ class DatingTurns:
         if member is None:
             return await self._register(turn, desk, user)
         question = turn.session.context.get("next_question")
+        photo = turn.facts.get("photo")
+        if isinstance(photo, str) and photo and question in (None, BACK_KEY):
+            # A photo once the profile exists replaces the profile's: Jerry was
+            # told he could, then nothing happened (journal of 24 Nov, 11:32).
+            await self._store.update_photo(user, photo)
+            return await self._close(turn, desk, texts.photo_updated(turn.language))
         talk_id = turn.session.context.get(TALK_ID)
         if not turn.fresh and question in (TALK_KEY, PLUS_KEY) and talk_id:
             return await self._talk.apply(
@@ -128,8 +134,16 @@ class DatingTurns:
             texts.in_relation(lang), question=BACK_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False
         )
 
-    async def _close(self, turn: PlugTurn, desk: PlugDesk, text: str) -> TurnOutcome:
-        await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})
+    async def _close(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        text: str,
+        context: dict[str, object] | None = None,
+    ) -> TurnOutcome:
+        await desk.settle(
+            turn, step=FlowStep.PUBLISHED, question_key=None, context=context or {}
+        )
         # Exact copy: rewritten, « c'est noté » became « je n'ai pas encore de
         # photo pour lui » after a member asked to see one.
         return say(text, step=FlowStep.PUBLISHED, voiced=False)
@@ -198,7 +212,16 @@ class DatingTurns:
         excluded = await self._store.answered(member.profile_id)
         ranked = best_candidates(member, await self._store.members(), excluded=excluded)
         if not ranked:
-            return await self._close(turn, desk, f"{prefix}\n{texts.nobody_yet(lang)}".strip())
+            state = await self._standing(member, lang)
+            raw = turn.session.context.get("_quiet")
+            quiet = raw if isinstance(raw, int) and not turn.fresh else 0
+            text = f"{prefix}\n{texts.nobody_now(state, quiet, lang)}".strip()
+            return await self._close(
+                turn,
+                desk,
+                text,
+                context={"rencontres": state or "aucune demande en cours", "_quiet": quiet + 1},
+            )
         other, score, why = await self._best(member, ranked)
         await desk.settle(
             turn,
@@ -214,6 +237,18 @@ class DatingTurns:
             voiced=False,
             media=other.photo_key or None,
         )
+
+    async def _standing(self, member: Profile, language: str) -> str:
+        """The member's yeses: those awaiting an answer, those not followed up."""
+        waiting: list[str] = []
+        silent: list[str] = []
+        for other in await self._store.said_yes_to(member.profile_id):
+            answer = await self._store.likes(other.profile_id, member.profile_id)
+            if answer is None:
+                waiting.append(other.first_name)
+            elif answer is False:
+                silent.append(other.first_name)
+        return texts.standing(waiting, silent, language)
 
     async def _best(
         self, member: Profile, ranked: list[tuple[Profile, float]]
@@ -279,7 +314,10 @@ class DatingTurns:
         # next profile in the same breath read as a loop (journal of 16 Nov
         # 2026, 09:23: « Oui » to Estelle answered with Aïcha). Another profile
         # comes when the member asks for one.
-        return await self._close(turn, desk, texts.liked(lang))
+        state = await self._standing(member, lang)
+        return await self._close(
+            turn, desk, texts.liked(lang), context={"rencontres": state} if state else None
+        )
 
     async def _pay(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, matched: uuid.UUID

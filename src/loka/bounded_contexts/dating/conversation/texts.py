@@ -48,19 +48,67 @@ def proposal(other: Profile, language: str) -> str:
     )
 
 
-def nobody_yet(language: str) -> str:
-    if _fr(language):
-        return (
-            "Je n'ai pas encore de profil qui te correspond. Dès qu'une personne "
-            "compatible s'inscrit, je te la présente."
-        )
-    return "No matching profile yet. As soon as someone compatible joins, I will introduce them."
-
-
 def yes_or_no(language: str) -> str:
     if _fr(language):
         return "Réponds simplement OUI si cette personne t'intéresse, ou NON."
     return "Just reply YES if you are interested, or NO."
+
+
+def standing(waiting: list[str], silent: list[str], language: str) -> str:
+    """Where the member's yeses stand: never « refused », « did not follow up »."""
+    fr = _fr(language)
+    lines = []
+    if waiting:
+        names = ", ".join(waiting)
+        lines.append(
+            f"Tu as dit oui à {names} : j'attends sa réponse, je te préviens si c'est réciproque."
+            if fr
+            else f"You said yes to {names}: I am waiting for an answer and will tell you."
+        )
+    if silent:
+        names = ", ".join(silent)
+        lines.append(
+            f"{names} n'a pas donné suite." if fr else f"{names} did not follow up."
+        )
+    return "\n".join(lines)
+
+
+# After the first, quieter answers: the same sentence a third time puts the
+# conversation on hold (``services/stuck``), as it did twice on 24 Nov 2026.
+_QUIET_FR = (
+    "Pas encore de nouveau profil compatible. Je te fais signe dès qu'il y en a un 💛",
+    "Rien de neuf pour l'instant de mon côté. En attendant, je peux aussi t'aider pour "
+    "un logement, un repas ou un billet de car 🙂",
+    "D'accord 👍",
+)
+_QUIET_EN = (
+    "No new compatible profile yet. I will tell you as soon as there is one 💛",
+    "Nothing new on my side for now. Meanwhile I can help with a room, a meal or a bus ticket 🙂",
+    "All right 👍",
+)
+
+
+def nobody_now(state: str, quiet: int, language: str) -> str:
+    """Nobody left to propose: the state first, then something different each time."""
+    if quiet % 4 == 0:
+        last = (
+            "Tu as vu tous les profils compatibles pour l'instant ; je te présente la "
+            "prochaine personne dès qu'elle s'inscrit 💛"
+            if _fr(language)
+            else "You have seen every compatible profile for now; I will introduce the "
+            "next one as soon as they join 💛"
+        )
+        return f"{state}\n{last}".strip()
+    variants = _QUIET_FR if _fr(language) else _QUIET_EN
+    return variants[(quiet % 4) - 1]
+
+
+def photo_updated(language: str) -> str:
+    return (
+        "📸 Ta photo de profil est mise à jour."
+        if _fr(language)
+        else "📸 Your profile photo is updated."
+    )
 
 
 def liked(language: str) -> str:

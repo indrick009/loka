@@ -32,6 +32,11 @@ class DatingStore(Protocol):
     async def back_on_market(self, user_id: uuid.UUID) -> None:
         """It did not work out: proposed again, the former match excepted."""
 
+    async def said_yes_to(self, profile_id: uuid.UUID) -> list[Profile]:
+        """Active profiles this member said yes to, latest first."""
+
+    async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None: ...
+
     async def members(self) -> list[Profile]: ...
 
     async def answered(self, profile_id: uuid.UUID) -> set[str]:
