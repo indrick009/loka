@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import phonenumbers
+from phonenumbers import geocoder
+
 from loka.bounded_contexts.conversation.application.plugs.forms import common_facts, text_of
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec, FormField
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
@@ -53,20 +56,14 @@ PROFILE_FORM = (
             "en": "What do you do for a living?",
         },
     ),
-    FormField(
-        "country",
-        "the country the member lives in",
-        {
-            "fr": "Dans quel pays vis-tu ?",
-            "en": "Which country do you live in?",
-        },
-    ),
+    # No country question: the phone number gives it, and a city abroad
+    # (« Lyon ») corrects it. See ``country_of``.
     FormField(
         "city",
-        "the city the member lives in",
+        "the city the member lives in; when it is outside Cameroon, its country too",
         {
-            "fr": "Et dans quelle ville ?",
-            "en": "And which city?",
+            "fr": "Dans quelle ville vis-tu ?",
+            "en": "Which city do you live in?",
         },
     ),
     FormField(
@@ -116,7 +113,8 @@ PROFILE_FORM = (
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
     "DATING_PROFILE. Fill first_name, age (integer), sex (HOMME or FEMME), "
-    "profession, country, city, description (their own words, unchanged, red "
+    "profession, city (and country only when said, or plain from a city "
+    "abroad: Lyon is France), description (their own words, unchanged, red "
     "flags included) and "
     "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). Set "
     "'seeking' (HOMME or FEMME) only when the description says whom they want "
@@ -211,3 +209,12 @@ DATING = DomainSpec(
         ),
     },
 )
+
+
+def country_of(e164: str) -> str:
+    """The country of a phone number, in French: where a member lives unless told otherwise."""
+    try:
+        number = phonenumbers.parse(e164, None)
+    except phonenumbers.NumberParseException:
+        return "Cameroun"
+    return geocoder.country_name_for_number(number, "fr") or "Cameroun"

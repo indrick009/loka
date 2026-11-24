@@ -30,7 +30,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
     TALK_KEY,
     UNLOCK_KEY,
 )
-from loka.bounded_contexts.dating.conversation.spec import DATING
+from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk
 from loka.bounded_contexts.dating.domain.matching import best_candidates
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
@@ -144,6 +144,9 @@ class DatingTurns:
                 if isinstance(before, str) and before.strip():
                     extra = added.strip() if isinstance(added, str) else ""
                     known[name] = f"{before}\n{extra}" if extra and extra not in before else before
+        if known.get("city") and not known.get("country"):
+            # Never asked: a Cameroonian city already set it, else the number does.
+            known["country"] = country_of(turn.session.phone.e164)
         age = known.get("age")
         if isinstance(age, int) and age < ADULT_AGE:
             # Refused, not hidden: nothing about the person is kept.
