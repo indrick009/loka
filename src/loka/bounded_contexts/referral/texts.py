@@ -39,6 +39,15 @@ def to_forward(link: str) -> str:
     )
 
 
+def after_purchase(link: str) -> str:
+    return (
+        "🎁 Merci pour ton achat ! Partage idia avec tes proches : chaque fois qu'une "
+        f"personne arrivée par ton lien paie sur idia, tu gagnes {RATE_PERCENT} % de son "
+        f"achat, à vie.\n\nTon lien : {link}\n\n"
+        "Écris « mon lien » pour recevoir un message prêt à transférer."
+    )
+
+
 def newcomer() -> str:
     return (
         "🎉 Une nouvelle personne a rejoint idia grâce à ton lien. Tu gagneras "

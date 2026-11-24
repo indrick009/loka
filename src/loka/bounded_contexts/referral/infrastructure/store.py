@@ -19,6 +19,7 @@ from loka.bounded_contexts.referral.domain.referral import commission, new_code
 from loka.bounded_contexts.referral.infrastructure.models import (
     ReferralCodeRow,
     ReferralCommissionRow,
+    ReferralNudgeRow,
     ReferralRow,
 )
 
@@ -129,3 +130,19 @@ class SqlAlchemyReferralStore:
             credits.append(Credit(referrer_user_id=referrer, commission_xaf=earned))
         await self._session.flush()
         return credits
+
+    async def buyers_to_invite(self, *, now: datetime) -> list[uuid.UUID]:
+        """Who bought since the last sweep, once per purchase; each marked done."""
+        rows = (
+            await self._session.execute(
+                text(
+                    f"select x.source, x.buyer from ({_PURCHASES}) x "
+                    f"left join referral_nudges n on n.source = x.source "
+                    f"where n.source is null"
+                )
+            )
+        ).all()
+        for source, _ in rows:
+            self._session.add(ReferralNudgeRow(source=source, created_at=now))
+        await self._session.flush()
+        return list(dict.fromkeys(buyer for _, buyer in rows))

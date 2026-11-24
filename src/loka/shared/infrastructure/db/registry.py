@@ -62,6 +62,7 @@ from loka.bounded_contexts.payment.infrastructure.unlock_store import ContactUnl
 from loka.bounded_contexts.referral.infrastructure.models import (
     ReferralCodeRow,
     ReferralCommissionRow,
+    ReferralNudgeRow,
     ReferralRow,
 )
 from loka.bounded_contexts.reviews_complaints.infrastructure.persistence.models import (
@@ -114,6 +115,7 @@ __all__ = [
     "ProviderStandingRow",
     "ReferralCodeRow",
     "ReferralCommissionRow",
+    "ReferralNudgeRow",
     "ReferralRow",
     "RefreshTokenRow",
     "ReportRow",

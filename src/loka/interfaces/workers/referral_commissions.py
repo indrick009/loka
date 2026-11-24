@@ -1,4 +1,5 @@
-"""10 % of a referee's settled purchase, credited to whoever brought them.
+"""10 % of a referee's settled purchase, credited to whoever brought them;
+and every buyer, once per purchase, invited to share their own link.
 
 A sweep, like the payment ones: it reads what was settled and never touches
 how anyone pays. Each purchase is credited once (its source is the key).
@@ -14,7 +15,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.conversation_
     SqlAlchemyConversationSessionRepository,
 )
 from loka.bounded_contexts.referral import texts
-from loka.bounded_contexts.referral.domain.referral import CONTACT_THRESHOLD_XAF
+from loka.bounded_contexts.referral.domain.referral import CONTACT_THRESHOLD_XAF, link
 from loka.bounded_contexts.referral.infrastructure.store import SqlAlchemyReferralStore
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
@@ -43,6 +44,11 @@ async def credit_once(database: Database, settings: Settings) -> None:
                 for admin in admins:
                     await desk.notify_phone(admin, texts.threshold_reached(who, earned), now=now)
             _logger.info("referral_credited", amount=credit.commission_xaf)
+        # After a purchase, the buyer is invited to share their link. A sweep
+        # later than the one that delivered what was bought, so it comes last.
+        for buyer in await store.buyers_to_invite(now=now):
+            url = link(await store.code_of(buyer, now=now), settings.whatsapp.public_phone)
+            await desk.notify(buyer, texts.after_purchase(url), now=now, delay_seconds=5)
         await uow.commit()
 
 

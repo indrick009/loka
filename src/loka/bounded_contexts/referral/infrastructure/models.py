@@ -33,6 +33,15 @@ class ReferralRow(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ReferralNudgeRow(Base):
+    """A purchase after which the buyer was invited to share their link: once each."""
+
+    __tablename__ = "referral_nudges"
+
+    source: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class ReferralCommissionRow(Base):
     """10 % of one purchase; ``source`` names the purchase, so it is credited once."""
 
