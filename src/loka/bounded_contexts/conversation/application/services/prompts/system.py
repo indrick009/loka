@@ -11,6 +11,7 @@ from loka.bounded_contexts.conversation.application.services.prompts.persona imp
     PERSONA,
     PRICE_REFERENCE_RULE,
 )
+from loka.shared.domain.knowledge.how_idia_works import GUIDE_TEXT
 
 SYSTEM_PROMPT = (
     f"{PERSONA} "
@@ -86,6 +87,8 @@ SYSTEM_PROMPT = (
     "it is unknown or in several towns), and never name a town in 'reply' that "
     "is neither in the message nor in the context."
     + "".join(spec.rules for spec in SPECS)
+    + "\n"
+    + GUIDE_TEXT
 )
 
 

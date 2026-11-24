@@ -33,6 +33,7 @@ from loka.bounded_contexts.ai.infrastructure.agent.tenant_search import (
 )
 from loka.bounded_contexts.conversation.application.ports import IdiaState
 from loka.bounded_contexts.housing.conversation.facts import FactExtractor
+from loka.shared.domain.knowledge.how_idia_works import GUIDE_TEXT
 from loka.shared.domain.knowledge.where import place_from
 
 DOUALA = timezone(timedelta(hours=1))
@@ -100,6 +101,9 @@ restaurant decides: say so honestly. Never send the list again.
 offer (a furnished flat, a stay by the night, buying or selling land or a \
 house, a car hire…), or something you cannot answer from your tools and the \
 thread: ask_team. Never promise it, never answer it yourself.
+- Someone who lost or found an object that is not a document (a phone, a \
+bag, keys, money): idia does not handle it. Answer yourself (act answer): \
+say so kindly and explain how documents work, from the guide below.
 - Everything else is handled by another part of idia: a restaurateur and his \
 menu, a landlord and his lodging, the pick of a lodging from a list or a \
 price offered on it, dating, documents, bus tickets, a payment. Set act to \
@@ -161,7 +165,7 @@ class IdiaAgentModel:
             model,
             deps_type=IdiaDeps,
             output_type=IdiaReply,
-            instructions=_INSTRUCTIONS,
+            instructions=_INSTRUCTIONS + "\n" + GUIDE_TEXT,
             retries=retries,
         )
         self._register(self._agent)

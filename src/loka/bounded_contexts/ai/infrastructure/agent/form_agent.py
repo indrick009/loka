@@ -24,6 +24,7 @@ from pydantic_ai.usage import UsageLimits
 
 from loka.bounded_contexts.conversation.application.plugs.spec import DomainSpec
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
+from loka.shared.domain.knowledge.how_idia_works import GUIDE_TEXT
 
 DOUALA = timezone(timedelta(hours=1))
 # A turn that needs more model requests than this is looping: it fails, and
@@ -177,6 +178,7 @@ class FormAgent:
                     f"Today: {datetime.now(DOUALA).date().isoformat()}.",
                     f"Session language: {language}.",
                     "Domain rules:" + deps.spec.rules,
+                    GUIDE_TEXT,
                     "The form, in order:",
                     *fields,
                     f"Field names record_facts accepts: {', '.join(names)}. A place is "
