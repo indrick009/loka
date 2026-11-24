@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -168,6 +168,16 @@ class SqlAlchemyDatingStore:
         if row is not None:
             row.photo_key = photo_key
             await self._session.flush()
+
+    async def refusals(self) -> dict[uuid.UUID, tuple[int, int]]:
+        rows = await self._session.execute(
+            select(
+                DatingAnswerRow.to_profile,
+                func.count().filter(DatingAnswerRow.liked.is_(False)),
+                func.count(),
+            ).group_by(DatingAnswerRow.to_profile)
+        )
+        return {profile: (int(no), int(total)) for profile, no, total in rows.all()}
 
     async def members(self) -> list[Profile]:
         rows = (

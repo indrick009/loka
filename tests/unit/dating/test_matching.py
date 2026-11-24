@@ -57,3 +57,20 @@ def test_the_judge_order_is_kept_and_a_forgotten_candidate_comes_last() -> None:
 
 def test_an_unusable_judge_answer_is_no_answer() -> None:
     assert _verdicts({"ranking": [{"id": 9, "score": 50}]}, [_member("A", 30, "HOMME")]) is None
+
+
+def test_a_profile_often_turned_down_comes_later() -> None:
+    her = _member("Joyce", 22, "FEMME")
+    liked, refused = _member("Ulric", 30, "HOMME"), _member("Paul", 30, "HOMME")
+    ranked = best_candidates(
+        her, [refused, liked], excluded=set(), refusals={refused.profile_id: (6, 6)}
+    )
+    assert [p.first_name for p, _ in ranked] == ["Ulric", "Paul"]
+
+
+def test_one_no_on_a_new_profile_weighs_little() -> None:
+    from loka.bounded_contexts.dating.domain.matching import appeal
+
+    assert appeal(0, 0) == 1.0
+    assert appeal(1, 1) > 0.85
+    assert appeal(20, 20) < 0.6

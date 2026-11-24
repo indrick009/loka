@@ -37,6 +37,9 @@ class DatingStore(Protocol):
 
     async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None: ...
 
+    async def refusals(self) -> dict[uuid.UUID, tuple[int, int]]:
+        """Per profile: the « non » it got, and all the answers it got."""
+
     async def members(self) -> list[Profile]: ...
 
     async def answered(self, profile_id: uuid.UUID) -> set[str]:

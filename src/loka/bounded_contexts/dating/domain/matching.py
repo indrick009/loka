@@ -10,7 +10,8 @@ both ways (see ``judge``); this order is what is used when it cannot.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+import uuid
+from collections.abc import Iterable, Mapping
 
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.shared.domain.knowledge.market import normalize
@@ -45,6 +46,16 @@ def affinity(a: Profile, b: Profile) -> float:
 
 # The age weight next to word affinity, which rarely goes above 0.3.
 AGE_WEIGHT = 0.5
+# A profile often turned down comes later (decision of 24 Nov 2026). The rate
+# is smoothed: two « non » to a profile seen twice is not yet a verdict.
+REJECTION_WEIGHT = 0.5
+_PRIOR_VIEWS = 3
+
+
+def appeal(refused: int, seen: int) -> float:
+    """1 for a profile nobody turned down, down to 0.5 for one everybody did."""
+    rate = refused / (seen + _PRIOR_VIEWS) if seen > 0 else 0.0
+    return 1 - REJECTION_WEIGHT * min(rate, 1.0)
 
 
 def age_fit(a: Profile, b: Profile) -> float:
@@ -63,11 +74,24 @@ def age_fit(a: Profile, b: Profile) -> float:
 
 
 def best_candidates(
-    member: Profile, others: Iterable[Profile], *, excluded: set[str]
+    member: Profile,
+    others: Iterable[Profile],
+    *,
+    excluded: set[str],
+    refusals: Mapping[uuid.UUID, tuple[int, int]] | None = None,
 ) -> list[tuple[Profile, float]]:
-    """Profiles this member could meet, best described match first."""
+    """Profiles this member could meet, best match first.
+
+    ``refusals`` gives, per profile, how many « non » it got out of how many
+    answers: a profile often turned down comes later.
+    """
+    seen = refusals or {}
     ranked = [
-        (other, affinity(member, other) + AGE_WEIGHT * age_fit(member, other))
+        (
+            other,
+            (affinity(member, other) + AGE_WEIGHT * age_fit(member, other))
+            * appeal(*seen.get(other.profile_id, (0, 0))),
+        )
         for other in others
         if str(other.profile_id) not in excluded and member.could_meet(other)
     ]

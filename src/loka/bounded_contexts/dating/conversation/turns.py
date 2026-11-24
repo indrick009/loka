@@ -33,7 +33,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
-from loka.bounded_contexts.dating.domain.matching import best_candidates
+from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
@@ -210,7 +210,10 @@ class DatingTurns:
                 propose=lambda again: self._propose(turn, desk, member, prefix=again),
             )
         excluded = await self._store.answered(member.profile_id)
-        ranked = best_candidates(member, await self._store.members(), excluded=excluded)
+        refusals = await self._store.refusals()
+        ranked = best_candidates(
+            member, await self._store.members(), excluded=excluded, refusals=refusals
+        )
         if not ranked:
             state = await self._standing(member, lang)
             raw = turn.session.context.get("_quiet")
@@ -222,7 +225,7 @@ class DatingTurns:
                 text,
                 context={"rencontres": state or "aucune demande en cours", "_quiet": quiet + 1},
             )
-        other, score, why = await self._best(member, ranked)
+        other, score, why = await self._best(member, ranked, refusals)
         await desk.settle(
             turn,
             step=FlowStep.COLLECT_CHOICE,
@@ -251,17 +254,33 @@ class DatingTurns:
         return texts.standing(waiting, silent, language)
 
     async def _best(
-        self, member: Profile, ranked: list[tuple[Profile, float]]
+        self,
+        member: Profile,
+        ranked: list[tuple[Profile, float]],
+        refusals: dict[uuid.UUID, tuple[int, int]],
     ) -> tuple[Profile, float, str]:
-        """The model's pick among the best few, read both ways; else the first."""
+        """The model's pick among the best few, read both ways; else the first.
+
+        The model's score is weighed by how often each profile was turned
+        down, as the first ranking is.
+        """
         shortlist = [profile for profile, _ in ranked[:SHORTLIST]]
         if self._judge is None or len(shortlist) < 2:
             return ranked[0][0], ranked[0][1], ""
         verdicts = await self._judge.rank(member, shortlist)
         if not verdicts:
             return ranked[0][0], ranked[0][1], ""
-        best = next(p for p in shortlist if p.profile_id == verdicts[0].profile_id)
-        return best, verdicts[0].score, verdicts[0].reason
+        weighed = sorted(
+            (
+                (v.score * appeal(*refusals.get(v.profile_id, (0, 0))), v)
+                for v in verdicts
+            ),
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        score, verdict = weighed[0]
+        best = next(p for p in shortlist if p.profile_id == verdict.profile_id)
+        return best, score, verdict.reason
 
     async def _answer(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, proposed: uuid.UUID
