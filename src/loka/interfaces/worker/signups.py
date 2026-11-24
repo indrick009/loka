@@ -90,6 +90,11 @@ _FIGURES = (
     ),
     ("Mises en relation payées", "select count(*) from contact_unlocks where status = 'PAID'"),
     ("Billets de car payés", "select count(*) from booking_reservations where status = 'PAID'"),
+    ("Filleuls (parrainage)", "select count(*) from referrals"),
+    (
+        "Gains de parrainage cumulés (F)",
+        "select coalesce(sum(commission_xaf), 0) from referral_commissions",
+    ),
 )
 
 

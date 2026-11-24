@@ -44,7 +44,8 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_messa
 from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
     InboundMessageRow,
 )
-from loka.interfaces.worker import signups
+from loka.bounded_contexts.referral.domain.referral import only_invitation
+from loka.interfaces.worker import referral_desk, signups
 from loka.shared.application.unit_of_work import UnitOfWork
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
@@ -133,7 +134,10 @@ class PrivacyDesk:
             await signups.announce(
                 uow, session, alert_phones=self._settings.whatsapp.alert_phones, now=now
             )
-            alone = privacy.is_bare_greeting(text)
+            # Arrived through a referral link: who brought them, and the
+            # prefilled message alone needs nothing more than the welcome.
+            invited = await referral_desk.welcome_referee(uow, session, text, now=now)
+            alone = privacy.is_bare_greeting(text) or (invited and only_invitation(text))
             if alone:
                 await inbound.mark_processed(message_id)
             await uow.commit()

@@ -11,7 +11,12 @@ import contextlib
 import signal
 
 from loka.bounded_contexts.conversation.infrastructure.composition import validate_ai_settings
-from loka.interfaces.workers import booking_payments, housing_payments, unlock_payments
+from loka.interfaces.workers import (
+    booking_payments,
+    housing_payments,
+    referral_commissions,
+    unlock_payments,
+)
 from loka.interfaces.workers.demand_follow_up import sweep_forever
 from loka.interfaces.workers.registry import handler_registry
 from loka.shared.infrastructure.broker.topology import Broker
@@ -75,10 +80,22 @@ async def run() -> None:
         housing_payments.sweep_forever(database, settings), name="housing-payments"
     )
 
+    # 10 % of a referee's settled purchase, credited to whoever brought them.
+    referral_task = asyncio.create_task(
+        referral_commissions.sweep_forever(database, settings), name="referral-commissions"
+    )
+
     try:
         await stop.wait()
     finally:
-        for task in (dispatch_task, follow_up_task, booking_task, unlock_task, housing_task):
+        for task in (
+            dispatch_task,
+            follow_up_task,
+            booking_task,
+            unlock_task,
+            housing_task,
+            referral_task,
+        ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

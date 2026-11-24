@@ -33,6 +33,7 @@ from loka.bounded_contexts.conversation.infrastructure.composition import (
 )
 from loka.interfaces.worker.complaint_desk import ComplaintDesk
 from loka.interfaces.worker.privacy_desk import PrivacyDesk
+from loka.interfaces.worker.referral_desk import ReferralDesk
 from loka.interfaces.worker.team_desk import TeamDesk
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
@@ -133,6 +134,7 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._privacy = PrivacyDesk(database, redis, settings)
         self._complaints = ComplaintDesk(database, redis, settings)
         self._team = TeamDesk(database, redis, settings)
+        self._referral = ReferralDesk(database, settings)
 
     async def handle(self, payload: dict[str, Any]) -> None:
         message_id, session_id = parse_analysis_payload(payload)
@@ -185,6 +187,10 @@ class ConversationAnalysisConsumer(ConsumerBase):
                 return
             # A complaint, from anyone, goes to a person before any model.
             if await self._complaints.handle(message_id, session_id):
+                return
+            # « mon lien de parrainage », before it reads as something idia
+            # does not offer.
+            if await self._referral.handle(message_id, session_id):
                 return
             # The admin's instructions, and what idia does not offer yet.
             if await self._team.escalate(message_id, session_id):

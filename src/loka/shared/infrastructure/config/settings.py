@@ -152,6 +152,8 @@ class WhatsAppSettings(BaseModel):
     # comma-separated, in E.164; none means the journal and the logs only.
     stuck_guard_enabled: bool = True
     alert_phones: str = ""
+    # idia's own number, the one a referral link opens a chat with.
+    public_phone: str = "237671572424"
 
 
 class PrivacySettings(BaseModel):
