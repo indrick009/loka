@@ -333,6 +333,44 @@ async def test_an_idle_session_is_restarted_instead_of_reused_forever() -> None:
     assert reloaded.context == {}
 
 
+async def _half_filled_dating_profile(h: _Harness) -> ConversationSession:
+    await h.use_case.execute(_command(), now=NOW)
+    session = h.sessions.store[PHONE]
+    session.start_flow(FlowName.DATING_PROFILE, now=NOW, first_step=FlowStep.COLLECT_FIELD)
+    session.merge_context({"first_name": "Joyce", "age": 22, "city": "Yaoundé"}, now=NOW)
+    session.record_pending_question("ask.dating.description")
+    await h.sessions.save(session, expected_revision=session.revision)
+    return session
+
+
+async def test_a_form_awaiting_an_answer_is_resumed_after_a_long_pause() -> None:
+    """Journal of 23 Nov 2026: 35 minutes on a description, and the profile restarted."""
+    h = _harness(user_id=uuid.uuid4())
+    await _half_filled_dating_profile(h)
+
+    await h.use_case.execute(
+        _command(external_message_id="DESCRIPTION_35_MIN"), now=NOW + timedelta(minutes=35)
+    )
+
+    reloaded = h.sessions.store[PHONE]
+    assert reloaded.flow is FlowName.DATING_PROFILE
+    assert reloaded.context["next_question"] == "ask.dating.description"
+    assert reloaded.context["first_name"] == "Joyce"
+
+
+async def test_a_form_left_for_more_than_a_week_starts_afresh() -> None:
+    h = _harness(user_id=uuid.uuid4())
+    await _half_filled_dating_profile(h)
+
+    await h.use_case.execute(
+        _command(external_message_id="BACK_AFTER_8_DAYS"), now=NOW + timedelta(days=8)
+    )
+
+    reloaded = h.sessions.store[PHONE]
+    assert reloaded.flow is FlowName.SUPPORT
+    assert "next_question" not in reloaded.context
+
+
 async def test_a_session_that_moved_meanwhile_is_not_overwritten() -> None:
     """The revision observed on load is what guards the write."""
     h = _harness(user_id=uuid.uuid4())

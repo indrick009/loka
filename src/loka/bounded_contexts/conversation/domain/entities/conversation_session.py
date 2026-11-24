@@ -18,6 +18,12 @@ from loka.shared.domain.clock import ensure_utc
 from loka.shared.domain.errors import InvalidStateTransition
 
 SESSION_IDLE_TIMEOUT = timedelta(minutes=30)
+# A form left half-filled is picked up where it stopped, not started over: a
+# member took 35 minutes to write her dating description and was asked her
+# first name again, everything she had given lost (journal of 23 Nov 2026,
+# 13:45 UTC). After a week the conversation starts afresh as before.
+FORM_RESUME_WINDOW = timedelta(days=7)
+_FORM_STEPS = frozenset({"CREATE_PROPERTY", "CLARIFY_ROLE", "CONFIRM_PROPERTY"})
 # What the user said in earlier tasks, kept in the context when a new task
 # starts: the food search's place for the lodging asked next, the order passed
 # an hour ago (journal of 7 Nov 2026: « toujours dans la même adresse » after a
@@ -221,6 +227,15 @@ class ConversationSession(AggregateRoot):
 
     def is_idle(self, now: datetime) -> bool:
         return ensure_utc(now) - self.last_step_at > SESSION_IDLE_TIMEOUT
+
+    def is_mid_form(self, now: datetime) -> bool:
+        """A question of a task is still awaiting its answer, and not for too long."""
+        return (
+            self.flow is not FlowName.SUPPORT
+            and bool(self.context.get("next_question"))
+            and (self.step.value.startswith("COLLECT_") or self.step.value in _FORM_STEPS)
+            and ensure_utc(now) - self.last_step_at <= FORM_RESUME_WINDOW
+        )
 
     def abort(self, *, reason: str, now: datetime) -> None:
         if self.status is SessionStatus.ABANDONED:

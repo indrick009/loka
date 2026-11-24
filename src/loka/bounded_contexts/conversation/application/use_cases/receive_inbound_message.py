@@ -229,9 +229,11 @@ class ReceiveInboundMessageUseCase:
             # authority, the session follows it.
             session.user_id = user_id
             changed = True
-        if session.is_idle(now):
+        if session.is_idle(now) and not session.is_mid_form(now):
             # A new conversation after the idle window: same durable session,
-            # cleared state, so history is not silently concatenated.
+            # cleared state, so history is not silently concatenated. A form
+            # still awaiting an answer is kept: the answer may simply have
+            # taken a while to write.
             session.restart(now=now)
             changed = True
         if changed:
