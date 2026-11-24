@@ -26,3 +26,14 @@ def test_the_state_says_who_is_awaited_and_never_refused() -> None:
     assert "Joyce" in state and "j'attends sa réponse" in state
     assert "Aimée n'a pas donné suite" in state
     assert "refus" not in state
+
+
+def test_a_new_profile_is_never_told_it_has_seen_everyone() -> None:
+    reply = texts.nobody_now("", 0, "fr", seen_any=False)
+    assert "tu as vu tous" not in reply.casefold()
+    assert "pas encore de profil compatible" in reply
+
+
+def test_a_search_that_rules_everyone_out_offers_to_widen() -> None:
+    reply = texts.nobody_now("", 0, "fr", seen_any=False, narrow=True)
+    assert "peu importe" in reply

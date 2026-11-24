@@ -88,16 +88,41 @@ _QUIET_EN = (
 )
 
 
-def nobody_now(state: str, quiet: int, language: str) -> str:
-    """Nobody left to propose: the state first, then something different each time."""
+def nobody_now(
+    state: str, quiet: int, language: str, *, seen_any: bool = True, narrow: bool = False
+) -> str:
+    """Nobody left to propose: the state first, then something different each time.
+
+    ``seen_any``: whether the member was ever proposed someone; a new profile
+    was told « tu as vu tous les profils » (journal of 24 Nov 2026, 16:48).
+    ``narrow``: people exist, only where the member looks rules them out.
+    """
     if quiet % 4 == 0:
-        last = (
-            "Tu as vu tous les profils compatibles pour l'instant ; je te présente la "
-            "prochaine personne dès qu'elle s'inscrit 💛"
-            if _fr(language)
-            else "You have seen every compatible profile for now; I will introduce the "
-            "next one as soon as they join 💛"
-        )
+        fr = _fr(language)
+        if narrow:
+            last = (
+                "Personne ne correspond encore à l'endroit où tu cherches, mais d'autres "
+                "profils existent ailleurs. Si tu veux les voir, dis-moi « peu importe » 💛"
+                if fr
+                else "Nobody matches where you look yet, but others exist elsewhere. "
+                "Say « anywhere » to see them 💛"
+            )
+        elif seen_any:
+            last = (
+                "Tu as vu tous les profils compatibles pour l'instant ; je te présente la "
+                "prochaine personne dès qu'elle s'inscrit 💛"
+                if fr
+                else "You have seen every compatible profile for now; I will introduce the "
+                "next one as soon as they join 💛"
+            )
+        else:
+            last = (
+                "Je n'ai pas encore de profil compatible avec le tien ; je te présente la "
+                "première personne qui te correspond dès qu'elle s'inscrit 💛"
+                if fr
+                else "No compatible profile yet; I will introduce the first one who fits "
+                "as soon as they join 💛"
+            )
         return f"{state}\n{last}".strip()
     variants = _QUIET_FR if _fr(language) else _QUIET_EN
     return variants[(quiet % 4) - 1]

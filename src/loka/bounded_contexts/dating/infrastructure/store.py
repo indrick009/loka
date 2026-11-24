@@ -179,6 +179,12 @@ class SqlAlchemyDatingStore:
         )
         return {profile: (int(no), int(total)) for profile, no, total in rows.all()}
 
+    async def update_looking(self, user_id: uuid.UUID, looking: tuple[str, ...]) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.looking = list(looking)
+            await self._session.flush()
+
     async def members(self) -> list[Profile]:
         rows = (
             await self._session.execute(

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import replace
 
 from loka.bounded_contexts.conversation.application.plugs.forms import ask_field, say, stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
@@ -34,7 +35,7 @@ from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
-from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, Profile
+from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
@@ -96,6 +97,14 @@ class DatingTurns:
             # told he could, then nothing happened (journal of 24 Nov, 11:32).
             await self._store.update_photo(user, photo)
             return await self._close(turn, desk, texts.photo_updated(turn.language))
+        looking = turn.facts.get("looking")
+        if isinstance(looking, list) and looking and question in (None, BACK_KEY):
+            # « peu importe » once the profile exists widens where to look.
+            wanted = tuple(str(item) for item in looking if item in LOOKING)
+            if wanted and wanted != member.looking:
+                await self._store.update_looking(user, wanted)
+                member = replace(member, looking=wanted)
+                return await self._propose(turn, desk, member, prefix="")
         talk_id = turn.session.context.get(TALK_ID)
         if not turn.fresh and question in (TALK_KEY, PLUS_KEY) and talk_id:
             return await self._talk.apply(
@@ -218,7 +227,14 @@ class DatingTurns:
             state = await self._standing(member, lang)
             raw = turn.session.context.get("_quiet")
             quiet = raw if isinstance(raw, int) and not turn.fresh else 0
-            text = f"{prefix}\n{texts.nobody_now(state, quiet, lang)}".strip()
+            anywhere = replace(member, looking=("PEU_IMPORTE",))
+            narrow = "PEU_IMPORTE" not in member.looking and bool(
+                best_candidates(anywhere, await self._store.members(), excluded=excluded)
+            )
+            nobody = texts.nobody_now(
+                state, quiet, lang, seen_any=bool(excluded), narrow=narrow
+            )
+            text = f"{prefix}\n{nobody}".strip()
             return await self._close(
                 turn,
                 desk,

@@ -100,7 +100,9 @@ PROFILE_FORM = (
     ),
     FormField(
         "looking",
-        "where they look for love: quartier, ville, pays, etranger or peu importe",
+        "where they look for love: quartier, ville, pays, etranger or peu importe; a "
+        "preference (« de préférence », « plutôt », « idéalement », « X mais… ») is "
+        "not an exclusion: add peu importe",
         {
             "fr": "Où cherches-tu l'amour ? Dans ton quartier, dans ta ville, dans ton "
             "pays, à l'extérieur du pays (tu peux en choisir plusieurs), ou peu importe ?",
@@ -116,7 +118,9 @@ RULES = (
     "profession, city (and country only when said, or plain from a city "
     "abroad: Lyon is France), description (their own words, unchanged, red "
     "flags included) and "
-    "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE). "
+    "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE; a mere "
+    "preference such as « de préférence à l'étranger mais… » adds PEU_IMPORTE, "
+    "and it may be changed later, once the profile exists). "
     "Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
     "to another member. Once the profile exists (step PUBLISHED), never ask a "
