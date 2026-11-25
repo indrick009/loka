@@ -40,6 +40,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_messa
 )
 from loka.interfaces.worker.closing_desk import ClosingDesk
 from loka.interfaces.worker.complaint_desk import ComplaintDesk
+from loka.interfaces.worker.maintenance_desk import MaintenanceDesk
 from loka.interfaces.worker.privacy_desk import PrivacyDesk
 from loka.interfaces.worker.referral_desk import ReferralDesk
 from loka.interfaces.worker.stuck_guard import UNSUPPORTED
@@ -145,6 +146,7 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._team = TeamDesk(database, redis, settings)
         self._referral = ReferralDesk(database, settings)
         self._closing = ClosingDesk(database)
+        self._maintenance = MaintenanceDesk(database, redis, settings)
 
     async def _moves_on(self, hold: Any, message_id: uuid.UUID) -> bool:
         """Whether a thread held for an unoffered request now asks for something else."""
@@ -165,6 +167,9 @@ class ConversationAnalysisConsumer(ConsumerBase):
         message_id, session_id = parse_analysis_payload(payload)
         # « I-7F3A2C … » from the admin, even while the admin's own thread is held.
         if await self._team.note(message_id, session_id):
+            return
+        # Maintenance switched on by hand: nobody is answered (see the desk).
+        if await self._maintenance.handle(message_id, session_id):
             return
         hold = await self._holds.get(session_id)
         if hold is not None and await self._moves_on(hold, message_id):

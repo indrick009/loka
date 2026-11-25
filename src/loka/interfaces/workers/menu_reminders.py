@@ -25,6 +25,7 @@ from loka.bounded_contexts.food.conversation import texts
 from loka.bounded_contexts.food.conversation.spec import FOOD
 from loka.bounded_contexts.food.domain.menu import DOUALA, menu_day
 from loka.bounded_contexts.food.infrastructure.store import SqlAlchemyFoodStore
+from loka.interfaces.worker.maintenance_desk import under_maintenance
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
@@ -40,6 +41,8 @@ _KEY = "food:menu-reminder:{restaurant}:{day}"
 async def remind_once(database: Database, redis: Redis, *, now: datetime) -> int:
     local = now.astimezone(DOUALA)
     if not FIRST_HOUR <= local.hour < LAST_HOUR:
+        return 0
+    if await under_maintenance(redis):
         return 0
     day = menu_day(now)
     sent = 0
