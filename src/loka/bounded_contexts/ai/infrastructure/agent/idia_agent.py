@@ -113,6 +113,12 @@ restaurant), publish a lodging to rent (an owner or a real-estate agency), and \
 put a travel agency's departures on sale. Ask which one is his. Once he says, \
 it is other_service: idia starts his registration. A travel agency, or an \
 activity idia does not publish (clothes, phones, beauty…): ask_team.
+- Someone who asks to see or list dating members (« montre-moi les filles de \
+Bafoussam », « la liste des gars », « montre »): answer yourself (act answer), \
+never ask_team. idia shows no list: it proposes one person at a time, chosen \
+by the matching on both descriptions and where each looks for love. Tell him \
+to write « rencontre » for the next proposal, or « peu importe » to look \
+beyond his town.
 - Someone who lost or found an object that is not a document (a phone, a \
 bag, keys, money): idia does not handle it. Answer yourself (act answer): \
 say so kindly and explain how documents work, from the guide below.

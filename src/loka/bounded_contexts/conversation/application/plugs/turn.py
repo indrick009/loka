@@ -19,6 +19,11 @@ if TYPE_CHECKING:
     )
 
 
+# idia's message the user answered with WhatsApp's « reply », for this turn
+# only ("" when none). Underscored: never shown to a model as a fact.
+QUOTED_KEY = "_quoted"
+
+
 @dataclass(frozen=True, slots=True)
 class PlugTurn:
     """What the engine understood. ``known`` is the task's facts with this
@@ -39,6 +44,11 @@ class PlugTurn:
     @property
     def language(self) -> str:
         return self.session.language
+
+    @property
+    def quoted(self) -> str:
+        """idia's message this one replies to, or ""."""
+        return str(self.session.context.get(QUOTED_KEY) or "")
 
 
 @dataclass(frozen=True, slots=True)

@@ -130,7 +130,10 @@ async function handleIncoming(msg) {
     return;
   }
   log.info({ external_message_id: id, from: msg.from, kind: inbound.kindOf(msg), sender_phone: phone }, 'delivery accepted');
-  await platform.forward(inbound.delivery({ msg, phone, session: SESSION_NAME, text, location, media }));
+  const quoted = await inbound.quotedOf(msg);
+  await platform.forward(
+    inbound.delivery({ msg, phone, session: SESSION_NAME, text, location, media, quoted }),
+  );
 }
 
 async function storeMedia(msg, id) {

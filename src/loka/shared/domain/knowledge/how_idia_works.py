@@ -34,7 +34,8 @@ GUIDE = {
     "Rencontre": (
         "A profile: first name, age, sex, profession, city, a real photo (no filter or AI "
         "photo), a description with red flags, where to look for love. The description is "
-        "read by idia only, never shown. idia proposes one person at a time, of the other "
+        "read by idia only, never shown. idia never shows a list of members (« montre-moi "
+        "les filles de Bafoussam »): it proposes one person at a time, of the other "
         "sex; when both say yes, they ask each other questions through idia (10 messages "
         "and 5 photos each, 10 more for 1 000 FCFA with PLUS), numbers hidden. When both "
         "confirm, it is a match: for now only the man unlocks it, for 1 000 FCFA, and "

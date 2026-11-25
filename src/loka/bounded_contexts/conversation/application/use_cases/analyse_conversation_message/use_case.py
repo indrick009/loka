@@ -29,7 +29,7 @@ from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
 from loka.bounded_contexts.conversation.application.plugs import fallback
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.application.plugs.registry import PLUG_FLOWS
-from loka.bounded_contexts.conversation.application.plugs.turn import DomainTurns
+from loka.bounded_contexts.conversation.application.plugs.turn import QUOTED_KEY, DomainTurns
 from loka.bounded_contexts.conversation.application.ports import (
     AiUsageLedger,
     AvailabilityAnswers,
@@ -287,6 +287,16 @@ class AnalyseConversationMessageUseCase:
     ) -> AnalysisReport:
         """Read one loaded message and answer it."""
         text = message.text or ""
+        # A WhatsApp « reply » to one of idia's messages: every lane reads it in
+        # the thread, and a domain finds it as ``QUOTED_KEY`` (« je veux
+        # celui-ci » on an older proposal, journal of 25 Nov 2026, 21:15).
+        session.context.pop(QUOTED_KEY, None)
+        if message.quoted:
+            session.context[QUOTED_KEY] = message.quoted
+            thread = [
+                *thread,
+                Exchange("idia", f"(le message suivant répond à : « {message.quoted} »)"),
+            ]
         pending = session.context.get("next_question")
         pending_key = pending if isinstance(pending, str) else None
         message_id = command.message_id

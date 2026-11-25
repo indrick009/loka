@@ -29,6 +29,9 @@ class StoredInboundMessage:
     media_object_key: str | None = None
     # Why the media sent could not be stored, when the user should be told.
     media_refused: str | None = None
+    # idia's message this one answers, when the user used WhatsApp's « reply »:
+    # what « je veux celui-ci » points at.
+    quoted: str | None = None
 
 
 class InboundMessageRepository(Protocol):

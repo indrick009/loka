@@ -70,6 +70,15 @@ _NEXT = re.compile(
 
 
 _PROFILE = re.compile(r"\bprofil\w*\b")
+# « Je veux celui-ci », « c'est elle que je veux »: a yes to a profile shown.
+# Read on the proposal the message replies to (WhatsApp « reply »), else on
+# the last one passed on (decision of 26 Nov 2026; Milly, 25 Nov, 21:15).
+_WANT = re.compile(
+    r"\bcelui\b|\bcelle\b|\bcelle ?(ci|la)\b|\bje (le|la) (veux|prends|choisis)\b|"
+    r"\b(il|elle) m.?interesse|\bc.?est (lui|elle)\b"
+)
+# The name in a proposal: « Voici quelqu'un qui pourrait te plaire : Jordan, 24 ans ».
+_PROPOSED_NAME = re.compile(r"te plaire\s*:\s*([^,\n]+),")
 # « Supprime mon profil »: idia's model answered « je supprime ton profil »,
 # then « oui, c'est supprimé », and nothing was done: the profile was still
 # proposed (journal of 25 Nov 2026, 18:05, Al-harazi).
@@ -80,6 +89,8 @@ _LEAVE = re.compile(rf"\b{_ERASE}\b.*\bprofil|\bprofil\w*\b.*\b{_ERASE}\b")
 def _answer(turn: PlugTurn) -> bool | None:
     if _NEXT.search(fold(turn.text or "")):
         return False
+    if _WANT.search(fold(turn.text or "")):
+        return True
     if turn.intent == "AFFIRMATIVE":
         return True
     if turn.intent == "NEGATIVE":
@@ -135,6 +146,16 @@ class DatingTurns:
                 return await self._close(turn, desk, refused)
             await self._store.update_photo(user, photo)
             return await self._close(turn, desk, texts.photo_updated(turn.language))
+        quoted = await self._quoted(member, turn)
+        if quoted is not None and question in (None, BACK_KEY, LIKE_KEY):
+            # A reply to a proposal answers that profile, whichever came since.
+            answer = _answer(turn)
+            if answer is not None:
+                return await self._decide(turn, desk, member, quoted, liked=answer, score=0.0)
+        if question in (None, BACK_KEY) and _WANT.search(fold(turn.text or "")):
+            passed = await self._store.passed_on(member.profile_id)
+            if passed:
+                return await self._decide(turn, desk, member, passed[0], liked=True, score=0.0)
         if question in (None, BACK_KEY):
             again = await self._named_again(member, turn.text or "")
             if again is not None:
@@ -368,6 +389,21 @@ class DatingTurns:
             return ""
         verdict = await self._photos.check(photo, sex=sex if isinstance(sex, str) else None)
         return "" if verdict.ok else texts.photo_refused(verdict.reason, language)
+
+    async def _quoted(self, member: Profile, turn: PlugTurn) -> Profile | None:
+        """The profile proposed in the message this one replies to, if any."""
+        found = _PROPOSED_NAME.search(turn.quoted)
+        if found is None:
+            return None
+        name = fold(found.group(1).strip())
+        return next(
+            (
+                other
+                for other in await self._store.members()
+                if fold(other.first_name) == name and member.could_meet(other)
+            ),
+            None,
+        )
 
     async def _named_again(self, member: Profile, text: str) -> Profile | None:
         """A profile this member passed on, named in the message."""

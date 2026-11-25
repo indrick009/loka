@@ -91,7 +91,23 @@ function mimetypeOf(media, kind) {
   return declared.split(';')[0].trim().toLowerCase() || DEFAULT_MIMETYPE[kind];
 }
 
-function delivery({ msg, phone, session, text, location, media }) {
+/**
+ * The message this one answers, when the user used WhatsApp's « reply »: what
+ * « je veux celui-ci » points at. Only the words and whether idia wrote them.
+ */
+async function quotedOf(msg) {
+  if (!msg.hasQuotedMsg) return null;
+  try {
+    const quoted = await msg.getQuotedMessage();
+    const body = quoted && typeof quoted.body === 'string' ? quoted.body.trim() : '';
+    if (!body) return null;
+    return { text: body.slice(0, 500), from_me: Boolean(quoted.fromMe) };
+  } catch (_error) {
+    return null;
+  }
+}
+
+function delivery({ msg, phone, session, text, location, media, quoted }) {
   const kind = kindOf(msg);
   return {
     provider: 'wwebjs',
@@ -108,6 +124,7 @@ function delivery({ msg, phone, session, text, location, media }) {
       pushName: (msg._data && msg._data.notifyName) || null,
       session_name: session,
       ...(media.refusal ? { media_refused: media.refusal } : {}),
+      ...(quoted ? { quoted } : {}),
     },
   };
 }
@@ -119,6 +136,7 @@ module.exports = {
   kindOf,
   locationOf,
   mimetypeOf,
+  quotedOf,
   senderPhone,
   skipReason,
   textOf,

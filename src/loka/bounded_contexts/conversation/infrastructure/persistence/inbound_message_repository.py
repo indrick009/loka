@@ -86,6 +86,7 @@ class SqlAlchemyInboundMessageRepository:
             location=_point_of(row[6], row[7], row[8]),
             media_object_key=row[9],
             media_refused=_media_refused(row[10]),
+            quoted=_quoted(row[10]),
         )
 
     async def add_if_absent(self, message: InboundMessage) -> StoredInboundMessage | None:
@@ -168,6 +169,15 @@ def _point_of(
     if latitude is None or longitude is None:
         return None
     return SharedLocation(latitude=latitude, longitude=longitude, label=label)
+
+
+def _quoted(metadata: object) -> str | None:
+    """idia's own message the user replied to; a quote of his own says nothing new."""
+    raw = metadata.get("quoted") if isinstance(metadata, dict) else None
+    if not isinstance(raw, dict) or not raw.get("from_me"):
+        return None
+    text = raw.get("text")
+    return " ".join(text.split())[:500] if isinstance(text, str) and text.strip() else None
 
 
 def _media_refused(metadata: object) -> str | None:
