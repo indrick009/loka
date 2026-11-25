@@ -85,8 +85,8 @@ class TestTheFactsSurvive:
 
 
 class TestThePrompts:
-    def test_the_persona_mirrors_the_register(self) -> None:
-        assert "mola" in PERSONA
+    def test_the_persona_always_says_tu(self) -> None:
+        assert "always say 'tu', never 'vous'" in PERSONA
         assert "Pidgin" in PERSONA
 
     def test_the_voice_prompt_carries_the_message_the_copy_and_the_thread(self) -> None:

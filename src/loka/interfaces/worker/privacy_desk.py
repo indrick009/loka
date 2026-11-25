@@ -127,8 +127,15 @@ class PrivacyDesk:
             )
             if earlier:
                 return False
+            # A bare « Hello » is how many French speakers greet: French first.
+            english_hint = language.startswith("en") and privacy.is_bare_greeting(text)
+            if english_hint:
+                session.language = language = "fr"
             welcome = privacy.welcome(
-                language, policy_url=settings.policy_url, terms_url=settings.terms_url
+                language,
+                policy_url=settings.policy_url,
+                terms_url=settings.terms_url,
+                english_hint=english_hint,
             )
             self._say(uow, session, welcome, now)
             await signups.announce(

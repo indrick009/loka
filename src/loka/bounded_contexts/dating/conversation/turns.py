@@ -226,7 +226,10 @@ class DatingTurns:
         if not ranked:
             state = await self._standing(member, lang)
             raw = turn.session.context.get("_quiet")
-            quiet = raw if isinstance(raw, int) and not turn.fresh else 0
+            # Read even on a fresh turn: « montre-moi d'autres profils » opens the
+            # flow anew each time, and a counter reset there sent the same
+            # sentence three times (journal of 24 Nov 2026, 13:14 to 13:17).
+            quiet = raw if isinstance(raw, int) else 0
             anywhere = replace(member, looking=("PEU_IMPORTE",))
             narrow = "PEU_IMPORTE" not in member.looking and bool(
                 best_candidates(anywhere, await self._store.members(), excluded=excluded)

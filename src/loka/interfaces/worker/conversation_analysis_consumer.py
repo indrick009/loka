@@ -21,6 +21,10 @@ from typing import Any, Protocol
 
 from redis.asyncio import Redis
 
+from loka.bounded_contexts.conversation.application.services.closing import is_closing
+from loka.bounded_contexts.conversation.application.services.unsupported import (
+    unsupported_topic,
+)
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalysisCommand,
     AnalysisReport,
@@ -31,10 +35,14 @@ from loka.bounded_contexts.conversation.infrastructure.adapters.redis_holds impo
 from loka.bounded_contexts.conversation.infrastructure.composition import (
     analyse_conversation_message_use_case,
 )
+from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_message_repository import (  # noqa: E501
+    SqlAlchemyInboundMessageRepository,
+)
 from loka.interfaces.worker.closing_desk import ClosingDesk
 from loka.interfaces.worker.complaint_desk import ComplaintDesk
 from loka.interfaces.worker.privacy_desk import PrivacyDesk
 from loka.interfaces.worker.referral_desk import ReferralDesk
+from loka.interfaces.worker.stuck_guard import UNSUPPORTED
 from loka.interfaces.worker.team_desk import TeamDesk
 from loka.shared.infrastructure.broker.consumer import (
     ConsumerBase,
@@ -138,12 +146,35 @@ class ConversationAnalysisConsumer(ConsumerBase):
         self._referral = ReferralDesk(database, settings)
         self._closing = ClosingDesk(database)
 
+    async def _moves_on(self, hold: Any, message_id: uuid.UUID) -> bool:
+        """Whether a thread held for an unoffered request now asks for something else."""
+        if hold.signal != UNSUPPORTED:
+            return False
+        try:
+            async with unit_of_work(self._database) as uow:
+                message = await SqlAlchemyInboundMessageRepository(uow.session).get_by_id(
+                    message_id
+                )
+        except Exception as exc:  # a desk that fails keeps the hold
+            _logger.warning("hold_move_on_unreadable", error=type(exc).__name__)
+            return False
+        text = (message.text if message else None) or ""
+        return bool(text.strip()) and not is_closing(text) and unsupported_topic(text) is None
+
     async def handle(self, payload: dict[str, Any]) -> None:
         message_id, session_id = parse_analysis_payload(payload)
         # « I-7F3A2C … » from the admin, even while the admin's own thread is held.
         if await self._team.note(message_id, session_id):
             return
         hold = await self._holds.get(session_id)
+        if hold is not None and await self._moves_on(hold, message_id):
+            # Held for something idia does not offer (homework help), then
+            # asked for something it does (« je cherche l'amour »): that is
+            # answered now, the team still has the first request (journal of
+            # 24 Nov 2026, 18:59 to 19:03, three messages unanswered).
+            await self._holds.release(session_id)
+            journal("released", hold.phone, signal=hold.signal, said="moved on")
+            hold = None
         if hold is not None:
             # Stored already; answered when a person releases the thread (see
             # ``interfaces/worker/stuck_guard``).

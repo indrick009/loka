@@ -83,8 +83,15 @@ def _links(language: str | None, *, policy_url: str, terms_url: str) -> str:
     )
 
 
-def welcome(language: str | None, *, policy_url: str, terms_url: str = "") -> str:
-    """The first message a new user receives, with the consent line."""
+def welcome(
+    language: str | None, *, policy_url: str, terms_url: str = "", english_hint: bool = False
+) -> str:
+    """The first message a new user receives, with the consent line.
+
+    ``english_hint``: the French welcome to a bare « Hello », which many French
+    speakers here say (journal of 24 Nov 2026, 21:44: « Hello » got the English
+    welcome, then « En français »), with a line offering English.
+    """
     consent = _links(language, policy_url=policy_url, terms_url=terms_url)
     # Italics around a link break it on some phones: plain when there is one.
     consent = consent if policy_url or terms_url else f"_{consent}_"
@@ -98,8 +105,9 @@ def welcome(language: str | None, *, policy_url: str, terms_url: str = "") -> st
     return (
         "Bonjour 👋 Moi c'est *idia*, ton assistant sur WhatsApp.\n"
         "🏠 Logement · 🍲 Repas · 🚌 Car · 💛 Rencontre · 🪪 Objet perdu\n"
-        "Dis-moi simplement ce que tu cherches.\n\n"
-        f"{consent}"
+        "Dis-moi simplement ce que tu cherches.\n"
+        + ("You can also talk to me in English 🇬🇧\n" if english_hint else "")
+        + f"\n{consent}"
     )
 
 
