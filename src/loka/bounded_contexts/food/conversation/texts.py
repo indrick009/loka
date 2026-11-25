@@ -202,6 +202,21 @@ def unpriced_left_out(names: Sequence[str], language: str) -> str:
     return f"No price read for: {listed}. Send them with a price to add them."
 
 
+def morning_reminder(name: str, yesterday: Sequence[MenuDish]) -> str:
+    """Each morning, to a restaurant whose menu of the day is not out yet."""
+    text = f"Bonjour 👋 C'est l'heure de publier le menu du jour de {name} 🍲"
+    if yesterday:
+        lines = "\n".join(f"• {dish.name} — {xaf(dish.price_xaf)}" for dish in yesterday)
+        text += (
+            f"\n\nTon dernier menu :\n{lines}\n\n"
+            "Même chose aujourd'hui ? Réponds « même chose » et je le republie. Sinon, "
+            "envoie tes plats avec leur prix, ou une photo de ton menu."
+        )
+    else:
+        text += "\nEnvoie tes plats avec leur prix, ou une photo de ton menu."
+    return text + "\nLes clients autour de toi le voient jusqu'à minuit."
+
+
 def same_menu_hint(language: str) -> str:
     if _fr(language):
         return "Tu peux aussi écrire « même menu qu'hier »."

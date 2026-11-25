@@ -14,6 +14,7 @@ from loka.bounded_contexts.conversation.infrastructure.composition import valida
 from loka.interfaces.workers import (
     booking_payments,
     housing_payments,
+    menu_reminders,
     referral_commissions,
     unlock_payments,
 )
@@ -85,6 +86,11 @@ async def run() -> None:
         referral_commissions.sweep_forever(database, settings), name="referral-commissions"
     )
 
+    # Each morning, a restaurant whose menu is not out is asked for it.
+    menu_task = asyncio.create_task(
+        menu_reminders.sweep_forever(database, settings), name="menu-reminders"
+    )
+
     try:
         await stop.wait()
     finally:
@@ -95,6 +101,7 @@ async def run() -> None:
             unlock_task,
             housing_task,
             referral_task,
+            menu_task,
         ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

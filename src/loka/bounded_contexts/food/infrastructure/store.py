@@ -104,6 +104,10 @@ class SqlAlchemyFoodStore:
             row.closed_at = menu.closed_at
         await self._session.flush()
 
+    async def restaurants(self) -> list[Restaurant]:
+        rows = (await self._session.execute(select(FoodRestaurantRow))).scalars()
+        return [_restaurant(row) for row in rows]
+
     async def open_menus(self, day: date) -> list[tuple[Restaurant, DailyMenu]]:
         rows = (
             await self._session.execute(

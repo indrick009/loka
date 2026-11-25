@@ -24,6 +24,8 @@ class FoodStore(Protocol):
 
     async def open_menus(self, day: date) -> list[tuple[Restaurant, DailyMenu]]: ...
 
+    async def restaurants(self) -> list[Restaurant]: ...
+
     async def record_request(
         self,
         *,
