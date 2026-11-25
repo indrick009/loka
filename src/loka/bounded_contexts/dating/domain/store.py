@@ -35,6 +35,9 @@ class DatingStore(Protocol):
     async def said_yes_to(self, profile_id: uuid.UUID) -> list[Profile]:
         """Active profiles this member said yes to, latest first."""
 
+    async def withdraw(self, user_id: uuid.UUID) -> None:
+        """The member asked it: the profile is erased, a new one can be made."""
+
     async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None: ...
 
     async def passed_on(self, profile_id: uuid.UUID) -> list[Profile]:

@@ -148,6 +148,7 @@ _PHOTO_REFUSED_FR = {
     "GROUP": "Il y a plusieurs personnes sur cette photo",
     "CHILD": "Cette photo montre un enfant",
     "NOT_PHOTO": "Ce n'est pas une photo de toi",
+    "OTHER_SEX": "Cette photo ne montre pas toi, mais une personne de l'autre sexe",
 }
 
 
@@ -184,6 +185,21 @@ def photo_needed(language: str) -> str:
     return (
         "Your dating profile is not active yet: it needs a real photo of you, face "
         "clearly visible. Send one and I will start proposing people."
+    )
+
+
+def withdrawn(language: str) -> str:
+    """The profile erased, as asked: said only once it is done."""
+    if _fr(language):
+        return (
+            "C'est fait ✅ Ton profil Rencontre est supprimé : plus personne ne le verra, "
+            "et je ne te proposerai plus de profils. Pour revenir un jour, écris "
+            "« rencontre » et on en crée un nouveau."
+        )
+    return (
+        "Done ✅ Your dating profile is deleted: nobody will see it any more, and I "
+        "will propose no more profiles. To come back, write « dating » and we create "
+        "a new one."
     )
 
 

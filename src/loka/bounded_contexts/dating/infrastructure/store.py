@@ -141,6 +141,12 @@ class SqlAlchemyDatingStore:
                 row.status = IN_RELATION
         await self._session.flush()
 
+    async def withdraw(self, user_id: uuid.UUID) -> None:
+        row = await self._row_of(user_id)
+        if row is not None and row.status in (ACTIVE, IN_RELATION):
+            await self._session.delete(row)
+            await self._session.flush()
+
     async def back_on_market(self, user_id: uuid.UUID) -> None:
         row = await self._row_of(user_id)
         if row is not None and row.status == IN_RELATION:

@@ -39,6 +39,7 @@ from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
+from loka.bounded_contexts.dating.domain.talk import CLOSED
 from loka.bounded_contexts.dating.domain.talk_reader import TalkReader
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
@@ -69,6 +70,11 @@ _NEXT = re.compile(
 
 
 _PROFILE = re.compile(r"\bprofil\w*\b")
+# « Supprime mon profil »: idia's model answered « je supprime ton profil »,
+# then « oui, c'est supprimé », and nothing was done: the profile was still
+# proposed (journal of 25 Nov 2026, 18:05, Al-harazi).
+_ERASE = r"(supprim|effac|retir|desactiv|enlev|delete|remove)\w*"
+_LEAVE = re.compile(rf"\b{_ERASE}\b.*\bprofil|\bprofil\w*\b.*\b{_ERASE}\b")
 
 
 def _answer(turn: PlugTurn) -> bool | None:
@@ -107,6 +113,10 @@ class DatingTurns:
         user, lang = turn.session.user_id, turn.language
         if user is None or await self._store.refused_minor(user):
             return await self._close(turn, desk, texts.minor(lang))
+        if _LEAVE.search(fold(turn.text or "")) and not fold(turn.text or "").startswith(
+            "comment"
+        ):
+            return await self._withdraw(turn, desk, user)
         if await self._store.in_relation(user):
             return await self._relation(turn, desk, user)
         member = await self._store.profile_of(user)
@@ -120,7 +130,7 @@ class DatingTurns:
         if isinstance(photo, str) and photo and question in (None, BACK_KEY):
             # A photo once the profile exists replaces the profile's: Jerry was
             # told he could, then nothing happened (journal of 24 Nov, 11:32).
-            refused = await self._refusal(photo, turn.language)
+            refused = await self._refusal(photo, turn.language, member.sex)
             if refused:
                 return await self._close(turn, desk, refused)
             await self._store.update_photo(user, photo)
@@ -146,7 +156,7 @@ class DatingTurns:
             # « Je veux changer ma photo » mid-talk: the photo captioned
             # « profil » is hers, not one for the other (journal of 25 Nov
             # 2026, 12:48). The talk goes on.
-            refused = await self._refusal(photo, turn.language)
+            refused = await self._refusal(photo, turn.language, member.sex)
             if not refused:
                 await self._store.update_photo(user, photo)
             return say(
@@ -171,6 +181,16 @@ class DatingTurns:
             return await self._answer(turn, desk, member, uuid.UUID(str(proposed)))
         return await self._propose(turn, desk, member, prefix="")
 
+    async def _withdraw(self, turn: PlugTurn, desk: PlugDesk, user: uuid.UUID) -> TurnOutcome:
+        member = await self._store.named(user)
+        if member is not None:
+            talk = await self._store.open_talk_of(member.profile_id)
+            if talk is not None:
+                talk.status = CLOSED
+                await self._store.save_talk(talk)
+            await self._store.withdraw(user)
+        return await self._close(turn, desk, texts.withdrawn(turn.language))
+
     async def _photo_first(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, photo: object
     ) -> TurnOutcome:
@@ -181,7 +201,7 @@ class DatingTurns:
                 turn, step=FlowStep.COLLECT_FIELD, question_key=PHOTO_KEY, context={}
             )
             return say(texts.photo_needed(lang), question=PHOTO_KEY, voiced=False)
-        refused = await self._refusal(photo, lang)
+        refused = await self._refusal(photo, lang, member.sex)
         if refused:
             await desk.settle(
                 turn, step=FlowStep.COLLECT_FIELD, question_key=PHOTO_KEY, context={}
@@ -253,7 +273,11 @@ class DatingTurns:
             await self._store.refuse_minor(user, now=turn.now)
             return await self._close(turn, desk, texts.minor(lang))
         new_photo = turn.facts.get("photo")
-        refused = await self._refusal(new_photo, lang) if isinstance(new_photo, str) else ""
+        refused = (
+            await self._refusal(new_photo, lang, known.get("sex"))
+            if isinstance(new_photo, str)
+            else ""
+        )
         if refused:
             known = {name: value for name, value in known.items() if name != "photo"}
         missing = DATING.missing(turn.flow, known)
@@ -338,11 +362,11 @@ class DatingTurns:
             media=other.photo_key or None,
         )
 
-    async def _refusal(self, photo: str | None, language: str) -> str:
+    async def _refusal(self, photo: str | None, language: str, sex: object = None) -> str:
         """Why this photo cannot be the profile's, or ``""`` when it can."""
         if not photo or self._photos is None:
             return ""
-        verdict = await self._photos.check(photo)
+        verdict = await self._photos.check(photo, sex=sex if isinstance(sex, str) else None)
         return "" if verdict.ok else texts.photo_refused(verdict.reason, language)
 
     async def _named_again(self, member: Profile, text: str) -> Profile | None:

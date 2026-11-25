@@ -26,7 +26,8 @@ _PROMPT = (
     "une vraie photo de la personne elle-même : un seul adulte, visage bien visible, photo "
     "prise par elle ou un proche (selfie, photo de téléphone). Réponds en JSON : "
     '{"ok": true|false, "reason": "AI"|"STOCK"|"CELEBRITY"|"NO_FACE"|"GROUP"|"CHILD"|'
-    '"NOT_PHOTO"|null}. AI = visage généré par IA (portrait carré parfaitement centré, peau '
+    '"NOT_PHOTO"|"OTHER_SEX"|null}. AI = visage généré par IA (portrait carré '
+    "parfaitement centré, peau "
     "trop lisse, arrière-plan flou ou déformé, artefacts, taches, oreilles ou cheveux "
     "incohérents, style thispersondoesnotexist) ou photo fortement retouchée par un filtre. "
     "STOCK = photo de banque d'images, de publicité ou de mannequin professionnel. "
@@ -36,6 +37,14 @@ _PROMPT = (
     "silhouette lointaine, image quelconque), ok = false avec NO_FACE, même dans le "
     "doute. Dans le doute seulement sur une photo de téléphone ordinaire montrant "
     "bien un visage, ok = true."
+)
+_SEX = {
+    "HOMME": "La personne dit être un homme",
+    "FEMME": "La personne dit être une femme",
+}
+_SEX_RULE = (
+    "{said} : si la photo montre clairement une personne de l'autre sexe, ok = false "
+    "avec OTHER_SEX."
 )
 
 
@@ -47,7 +56,7 @@ class OpenRouterPhotoJudge:
         self._settings = settings
         self._storage = storage
 
-    async def check(self, object_key: str) -> PhotoVerdict:
+    async def check(self, object_key: str, *, sex: str | None = None) -> PhotoVerdict:
         try:
             data, content_type = await self._storage.get(object_key)
         except MediaStoreError as exc:
@@ -57,7 +66,7 @@ class OpenRouterPhotoJudge:
             return PhotoVerdict(ok=True)
         image = f"data:{content_type};base64,{base64.b64encode(data).decode()}"
         for model in dict.fromkeys((self._settings.default_model, self._settings.fallback_model)):
-            payload = await self._ask(model, image)
+            payload = await self._ask(model, image, sex)
             if payload is not None and isinstance(payload.get("ok"), bool):
                 reason = payload.get("reason")
                 verdict = PhotoVerdict(
@@ -68,7 +77,8 @@ class OpenRouterPhotoJudge:
         _logger.warning("dating_photo_check_unavailable")
         return PhotoVerdict(ok=True)
 
-    async def _ask(self, model: str, image: str) -> dict[str, Any] | None:
+    async def _ask(self, model: str, image: str, sex: str | None) -> dict[str, Any] | None:
+        prompt = f"{_PROMPT} {_SEX_RULE.format(said=_SEX[sex])}" if sex in _SEX else _PROMPT
         body = {
             "model": model,
             "temperature": 0,
@@ -78,7 +88,7 @@ class OpenRouterPhotoJudge:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": _PROMPT},
+                        {"type": "text", "text": prompt},
                         {"type": "image_url", "image_url": {"url": image}},
                     ],
                 }

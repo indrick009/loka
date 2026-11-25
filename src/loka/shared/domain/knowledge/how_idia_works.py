@@ -40,7 +40,9 @@ GUIDE = {
         "confirm, it is a match: for now only the man unlocks it, for 1 000 FCFA, and "
         "both get each other's number; the woman never pays for it. Then both leave the "
         "proposals until one says it did not work out. A new photo sent replaces the "
-        "profile photo."
+        "profile photo; it must show the member, of the sex declared. To delete the "
+        "profile, the member writes « supprimer mon profil »: idia never says it is "
+        "deleted otherwise."
     ),
     "Repas": (
         "Someone hungry says what they want and where: idia lists the dishes cooking today "

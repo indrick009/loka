@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from typing import Protocol
 
 # Why a photo is refused, as the model names it.
-REASONS = ("AI", "STOCK", "CELEBRITY", "NO_FACE", "GROUP", "CHILD", "NOT_PHOTO")
+# OTHER_SEX: a man registered with a woman's picture « comme modèle » was
+# proposed to women (journal of 25 Nov 2026, 17:52, Al-harazi).
+REASONS = ("AI", "STOCK", "CELEBRITY", "NO_FACE", "GROUP", "CHILD", "NOT_PHOTO", "OTHER_SEX")
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,5 +22,7 @@ class PhotoVerdict:
 
 
 class PhotoCheck(Protocol):
-    async def check(self, object_key: str) -> PhotoVerdict:
-        """A model that cannot answer lets the photo through: nobody is blocked by it."""
+    async def check(self, object_key: str, *, sex: str | None = None) -> PhotoVerdict:
+        """``sex`` is the one declared, HOMME or FEMME, when known.
+
+        A model that cannot answer lets the photo through: nobody is blocked by it."""
