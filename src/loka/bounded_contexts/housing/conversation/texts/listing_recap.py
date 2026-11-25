@@ -134,35 +134,36 @@ def photo_received_text(
 
 _MEDIA_TEXT: dict[str, dict[str, str]] = {
     "fr": {
-        "video": "Vidéo bien reçue, elle est ajoutée à votre annonce.",
+        "video": "Vidéo bien reçue, elle est ajoutée à ton annonce.",
         "video_needs_photo": (
             "Vidéo bien reçue. Pour publier l'annonce, il faut aussi au moins une photo."
         ),
         "document": "Document bien reçu.",
         "kept": (
-            "Bien reçu ({count}), je le garde pour votre annonce : il y sera ajouté "
+            "Bien reçu ({count}), je le garde pour ton annonce : il y sera ajouté "
             "dès qu'elle sera enregistrée."
         ),
         "kept_first": (
-            "Bien reçu ({count}), je le garde. C'est pour mettre un logement en "
-            "location ? Dites-moi de quel logement il s'agit."
+            # Not housing by default: Nsai's two photos were dishes, and were
+            # taken for a lodging to rent (journal of 25 Nov 2026, 09:44).
+            "Bien reçu ({count}) 👍 Peux-tu m'en dire un peu plus : c'est pour quoi ?"
         ),
         "AUDIO": (
-            "Je ne peux pas encore écouter les notes vocales. Pouvez-vous me "
+            "Je ne peux pas encore écouter les notes vocales. Peux-tu me "
             "l'écrire en quelques mots ?"
         ),
         "too_large": (
             "Cette vidéo est trop lourde pour moi : au-delà de 16 Mo, je ne peux "
-            "pas la recevoir. Envoyez une vidéo plus courte (moins d'une minute) "
+            "pas la recevoir. Envoie une vidéo plus courte (moins d'une minute) "
             "ou des photos."
         ),
         "other": (
-            "Je ne peux pas utiliser ce type de fichier. Envoyez plutôt une photo "
+            "Je ne peux pas utiliser ce type de fichier. Envoie plutôt une photo "
             "ou un texte."
         ),
         "kept_published": (
-            "Annonce enregistrée avec vos {count} : elle est maintenant publiée, les "
-            "locataires qui cherchent un logement comme le vôtre peuvent la trouver."
+            "Annonce enregistrée avec tes {count} : elle est maintenant publiée, les "
+            "locataires qui cherchent un logement comme le tien peuvent la trouver."
         ),
         "one": "1 fichier",
         "many": "{count} fichiers",
@@ -180,8 +181,7 @@ _MEDIA_TEXT: dict[str, dict[str, str]] = {
             "as soon as the listing is saved."
         ),
         "kept_first": (
-            "Received ({count}), I am keeping it. Is it to rent out a place? Tell "
-            "me which place it is."
+            "Received ({count}) 👍 Could you tell me a bit more: what is it for?"
         ),
         "AUDIO": "I cannot listen to voice notes yet. Could you write it in a few words?",
         "too_large": (
