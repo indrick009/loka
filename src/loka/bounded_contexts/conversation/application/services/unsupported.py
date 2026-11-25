@@ -35,6 +35,16 @@ _TOPICS: tuple[tuple[str, re.Pattern[str]], ...] = (
         ),
     ),
     ("location de véhicule", re.compile(r"\blocation (?:de |d')?(voiture|vehicule|car)\b")),
+    # « Je voudrais parler à un responsable » got « je suis une assistante IA »
+    # (journal of 25 Nov 2026, 15:52): a person answers.
+    (
+        "parler à un responsable",
+        re.compile(
+            r"\b(parler|discuter|joindre|contacter|echanger)\b.{0,30}\b(responsable|humain|"
+            r"agent|conseiller|equipe|manager|patron|administrat\w*|vraie personne|"
+            r"personne reelle)\b|\b(speak|talk) to (a |the )?(human|person|manager|agent)\b"
+        ),
+    ),
 )
 
 

@@ -278,6 +278,10 @@ class TurnApplier:
         asking: str | None,
     ) -> TurnOutcome:
         """Hand the turn to the domain that owns its flow."""
+        if reply_text and _cut_short(reply_text):
+            # « Ah, d'accord ! Alors, pour » went out as it was (journal of
+            # 25 Nov 2026, 15:52): a reply cut off is not said.
+            reply_text = None
         spec = spec_for(flow)
         assert spec is not None and self._desk is not None
         fresh = opens_new_flow(session, verdict.intent) or session.flow is not flow
@@ -309,13 +313,14 @@ class TurnApplier:
         )
         outcome = await self._plugs[spec.name].apply(turn, self._desk)
         if (
-            verdict.intent == "SUPPORT"
-            and reply_text
+            reply_text
             and not facts
             and outcome.question == asked
             and asked not in HOLDING_QUESTIONS
         ):
-            # Small talk mid-form: the model's own answer, which was told the
+            # A question mid-form (« comment ça se passe, le coût ? » got the
+            # dishes question alone, journal of 25 Nov 2026, 15:54), or small
+            # talk: the model's own answer, which was told the
             # open question and comes back to it, beats the bare question. Only
             # then: observed live, « oui envoie moi sa photo » recorded a yes in
             # Dating, and the model's guess replaced idia's answer to it.
@@ -392,3 +397,9 @@ class TurnApplier:
             question_key=outcome.question,
             cost_usd=cost.cost_usd,
         )
+
+
+def _cut_short(text: str) -> bool:
+    """A reply that stops mid-sentence: no closing mark, on a short tail."""
+    tail = text.rstrip()
+    return bool(tail) and (tail[-1].isalnum() or tail[-1] in ",:;-") and len(tail.split()) < 8
