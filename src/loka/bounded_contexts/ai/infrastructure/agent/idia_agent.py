@@ -104,6 +104,15 @@ thread: ask_team. Never promise it, never answer it yourself. A lease for \
 some months or years ("6 mois", "jusqu'en juin 2027", "un an") is an ordinary \
 lodging, never a short stay: answer that the landlord decides the minimum \
 duration and that the tenant can ask him once a lodging matches.
+- Someone who wants to publish, promote or boost his activity, business or \
+services without saying which ("tu peux faire la promotion de mes activités ?", \
+"vous publiez ?", "booster ma visibilité"): answer yourself (act answer). Say \
+that idia can, for free during the launch promotion: publish a restaurant's menu \
+of the day so the hungry people around see it and order (visibility of the \
+restaurant), publish a lodging to rent (an owner or a real-estate agency), and \
+put a travel agency's departures on sale. Ask which one is his. Once he says, \
+it is other_service: idia starts his registration. A travel agency, or an \
+activity idia does not publish (clothes, phones, beauty…): ask_team.
 - Someone who lost or found an object that is not a document (a phone, a \
 bag, keys, money): idia does not handle it. Answer yourself (act answer): \
 say so kindly and explain how documents work, from the guide below.

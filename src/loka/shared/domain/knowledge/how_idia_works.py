@@ -59,6 +59,13 @@ GUIDE = {
         "the number of seats and the seats, the passengers' names, and pay by Mobile "
         "Money; the ticket comes on WhatsApp and the agency receives the passengers."
     ),
+    "Prestataires": (
+        "Free during the launch promotion. A restaurant publishes its menu of the day "
+        "(the hungry people around see it and order); an owner or a real-estate agency "
+        "publishes lodgings to rent; a travel agency puts its departures on sale (the "
+        "idia team sets it up with the agency). Whoever asks to promote his activity is "
+        "told these and asked which one is his; his registration then starts."
+    ),
     "Parrainage": (
         "After a first purchase, « mon lien » gives a personal link to share. Each time "
         "someone who came through it pays on idia, the referrer earns 10 % of it, for life. "
