@@ -25,7 +25,9 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 from loka.bounded_contexts.dating.conversation import talk_texts, texts
 from loka.bounded_contexts.dating.conversation.keys import (
     MATCH_KEY,
+    PENDING_RELAY,
     PLUS_KEY,
+    RELAY_KEY,
     TALK_ID,
     TALK_KEY,
     UNLOCK_KEY,
@@ -47,6 +49,8 @@ _STOP = re.compile(
     r"abandonne|ne (le|la) veux pas|ne veux plus)\b"
 )
 _PLUS = re.compile(r"^\W*(plus|more)\W*$")
+_SEND = re.compile(r"^\W*(oui|ouais|yes|ok|okay|envoie|transmets|vas y|d accord)\b")
+_KEEP = re.compile(r"^\W*(non|no|laisse|annule|pas la peine)\b")
 # A relayed message is a question, not a letter.
 LONGEST = 600
 
@@ -75,7 +79,13 @@ class DatingTalk:
 
     @staticmethod
     async def _reply(
-        turn: PlugTurn, desk: PlugDesk, talk: Talk, text: str, key: str = TALK_KEY
+        turn: PlugTurn,
+        desk: PlugDesk,
+        talk: Talk,
+        text: str,
+        key: str = TALK_KEY,
+        *,
+        extra: dict[str, str] | None = None,
     ) -> TurnOutcome:
         """Answer inside the talk, the thread left on ``key``: the offer of
         more questions waits for its answer, anything else for the next message."""
@@ -83,7 +93,7 @@ class DatingTalk:
             turn,
             step=FlowStep.COLLECT_CHOICE,
             question_key=key,
-            context={TALK_ID: str(talk.talk_id)},
+            context={TALK_ID: str(talk.talk_id), **(extra or {})},
         )
         return say(text, question=key, step=FlowStep.COLLECT_CHOICE, voiced=False)
 
@@ -159,12 +169,35 @@ class DatingTalk:
             return await self._confirm(turn, desk, member, other, talk)
         if turn.session.context.get("next_question") == PLUS_KEY:
             return await self._buy(turn, desk, member, other, talk)
+        pending = turn.session.context.get(PENDING_RELAY)
+        if turn.session.context.get("next_question") == RELAY_KEY and isinstance(pending, str):
+            if _SEND.match(folded):
+                return await self._relay(turn, desk, member, other, talk, pending)
+            if _KEEP.match(folded):
+                return await self._reply(turn, desk, talk, talk_texts.kept_back(other))
+            # Anything else is a new message, read as such below.
         if _PLUS.match(folded):
             if self._unlock is None:
                 return await self._reply(turn, desk, talk, talk_texts.plus_unavailable(other))
             return await self._reply(turn, desk, talk, talk_texts.plus_offer(other), PLUS_KEY)
         if not text:
             return await self._reply(turn, desk, talk, talk_texts.only_text_and_photos())
+        # Not everything written in a talk is for the other member: « on peut
+        # envoyer des vidéos ? » and « qu'est-ce qu'elle attend d'un homme ? »
+        # were both relayed to her (journal of 24 Nov 2026, 17:25).
+        addressee = turn.facts.get("addressee")
+        if addressee == "IDIA" and turn.model_reply:
+            answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
+            return await self._reply(turn, desk, talk, answer)
+        if addressee in ("IDIA", "UNCLEAR"):
+            return await self._reply(
+                turn,
+                desk,
+                talk,
+                talk_texts.relay_or_not(other, text[:LONGEST]),
+                RELAY_KEY,
+                extra={PENDING_RELAY: text[:LONGEST]},
+            )
         return await self._relay(turn, desk, member, other, talk, text)
 
     async def _relay(

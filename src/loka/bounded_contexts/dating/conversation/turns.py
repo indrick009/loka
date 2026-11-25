@@ -27,6 +27,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
     MATCH_KEY,
     PLUS_KEY,
     PROPOSED_KEY,
+    RELAY_KEY,
     TALK_ID,
     TALK_KEY,
     UNLOCK_KEY,
@@ -106,7 +107,7 @@ class DatingTurns:
                 member = replace(member, looking=wanted)
                 return await self._propose(turn, desk, member, prefix="")
         talk_id = turn.session.context.get(TALK_ID)
-        if not turn.fresh and question in (TALK_KEY, PLUS_KEY) and talk_id:
+        if not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id:
             return await self._talk.apply(
                 turn,
                 desk,

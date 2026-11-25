@@ -61,6 +61,21 @@ def inappropriate() -> str:
     return "Ce message ne peut pas être transmis. Reste respectueux(se), s'il te plaît."
 
 
+def relay_or_not(other: Profile, text: str) -> str:
+    return (
+        f"Tu veux que je transmette ce message à {other.first_name} ?\n« {text} »\n"
+        "Réponds OUI pour l'envoyer, ou NON."
+    )
+
+
+def not_relayed(other: Profile) -> str:
+    return f"(Rien n'a été transmis à {other.first_name}.)"
+
+
+def kept_back(other: Profile) -> str:
+    return f"D'accord, je ne l'envoie pas. Écris ta question pour {other.first_name} quand tu veux."
+
+
 def only_text_and_photos() -> str:
     return "Je ne transmets que les messages écrits et les photos."
 

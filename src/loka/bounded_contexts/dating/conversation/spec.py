@@ -129,9 +129,14 @@ RULES = (
     "answer from it only, never invent an answer, and never say someone refused "
     "(say they did not follow up). To a profile idia proposed, 'oui' is AFFIRMATIVE "
     "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
-    "message is written to another member and idia relays it: extract nothing, "
-    "and set 'inappropriate' to true only when it is sexual, insulting or asks "
-    "for money."
+    "message may be written to the other member, whom idia relays it to: "
+    "extract nothing but 'addressee' — MATCH when it is plainly written to the "
+    "other member (« tu aimes quoi ? »), IDIA when it is plainly for idia about "
+    "how the talk or the app works (« on peut envoyer des vidéos ? »), with "
+    "'reply' answering it, UNCLEAR otherwise, above all a question about the "
+    "other member in the third person (« qu'est-ce qu'elle attend d'un "
+    "homme ? »). Set 'inappropriate' to true only when it is sexual, insulting "
+    "or asks for money."
 )
 
 ENTITIES: dict[str, Any] = {
@@ -143,6 +148,7 @@ ENTITIES: dict[str, Any] = {
     "description": {"type": "string"},
     "looking": {"type": "array", "items": {"type": "string", "enum": list(LOOKING)}},
     "inappropriate": {"type": "boolean"},
+    "addressee": {"type": "string", "enum": ["MATCH", "IDIA", "UNCLEAR"]},
 }
 
 
@@ -182,6 +188,8 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
             facts["description"] = description
         else:
             rejected["description"] = "too short"
+    if entities.get("addressee") in ("MATCH", "IDIA", "UNCLEAR"):
+        facts["addressee"] = entities["addressee"]
     if entities.get("inappropriate") is True:
         # Read by a talk: a message to a match is refused, not relayed.
         rejected["message"] = "inappropriate"
@@ -203,7 +211,7 @@ DATING = DomainSpec(
     rules=RULES,
     entities=ENTITIES,
     validate=validate,
-    holding=frozenset({"ask.dating.talk", "ask.dating.plus"}),
+    holding=frozenset({"ask.dating.talk", "ask.dating.plus", "ask.dating.relay"}),
     cues={
         "DATING_PROFILE": (
             r"\b(quelqu un de serieux|rencontres?|ame s(oe)?ur|l amour|celibataire|"
