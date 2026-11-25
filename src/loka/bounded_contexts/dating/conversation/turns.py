@@ -65,6 +65,9 @@ _NEXT = re.compile(
 )
 
 
+_PROFILE = re.compile(r"\bprofil\w*\b")
+
+
 def _answer(turn: PlugTurn) -> bool | None:
     if _NEXT.search(fold(turn.text or "")):
         return False
@@ -130,7 +133,21 @@ class DatingTurns:
                 member = replace(member, looking=wanted)
                 return await self._propose(turn, desk, member, prefix="")
         talk_id = turn.session.context.get(TALK_ID)
-        if not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id:
+        in_talk = not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id
+        if in_talk and isinstance(photo, str) and photo and _PROFILE.search(fold(turn.text or "")):
+            # « Je veux changer ma photo » mid-talk: the photo captioned
+            # « profil » is hers, not one for the other (journal of 25 Nov
+            # 2026, 12:48). The talk goes on.
+            refused = await self._refusal(photo, turn.language)
+            if not refused:
+                await self._store.update_photo(user, photo)
+            return say(
+                refused or texts.photo_updated(turn.language),
+                question=str(question),
+                step=FlowStep.COLLECT_CHOICE,
+                voiced=False,
+            )
+        if in_talk:
             return await self._talk.apply(
                 turn,
                 desk,
