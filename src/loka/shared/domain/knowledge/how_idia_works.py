@@ -49,7 +49,10 @@ GUIDE = {
         "text or a photo of the menu. Publishing is FREE for restaurants for now (launch "
         "promotion): never ask a restaurant for money. Visibility and orders come from "
         "the menu itself: every hungry client nearby sees it until midnight, so publish "
-        "it every day, early, with a photo of each dish."
+        "it every day, early, with a photo of each dish. Most Cameroonian sauces "
+        "(ndolè, eru, okok, gombo, escargots, poisson braisé…) are eaten with an "
+        "accompaniment (plantain, bâton de manioc, miondo, riz, couscous, water fufu…): "
+        "when a restaurateur names one without it, idia asks which."
     ),
     "Car": (
         "A traveller gives the trip and the day: idia lists the departures; they pick one, "

@@ -117,7 +117,8 @@ async def test_a_question_for_idia_is_answered_and_not_relayed() -> None:
 
 async def test_a_message_for_the_match_is_relayed_at_once() -> None:
     talk_, desk, jerry, talk, session = _setup()
-    await _apply(talk_, desk, jerry, talk, _turn(session, "Tu aimes quoi le week-end ?"))
+    turn = _turn(session, "Tu aimes quoi le week-end ?", addressee="MATCH")
+    await _apply(talk_, desk, jerry, talk, turn)
     assert desk.relayed == ["Jerry : « Tu aimes quoi le week-end ? »"]
 
 
@@ -178,3 +179,18 @@ async def test_confirmer_inside_a_short_message_is_the_decision() -> None:
     await _apply(talk_, desk, jerry, talk, _turn(session, "okay good. CONFIRMER"))
     assert not any("okay good" in text for text in desk.relayed)
     assert talk.side(jerry.profile_id).sent == 0
+
+
+async def test_envoie_a_her_name_passes_on_the_kept_message() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    first = _turn(session, "Envoie moi quelques photos de toi", addressee="IDIA", reply="…")
+    await _apply(talk_, desk, jerry, talk, first)
+    await _apply(talk_, desk, jerry, talk, _turn(session, "Envoie à joyce", addressee="UNCLEAR"))
+    assert desk.relayed == ["Jerry : « Envoie moi quelques photos de toi »"]
+
+
+async def test_an_unread_message_is_asked_about_not_relayed() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    outcome = await _apply(talk_, desk, jerry, talk, _turn(session, "Je veux changer ma photo"))
+    assert desk.relayed == []
+    assert outcome.question == RELAY_KEY

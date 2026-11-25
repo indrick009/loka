@@ -67,6 +67,25 @@ def registered(name: str, place: dict[str, Any], language: str) -> str:
     )
 
 
+def ask_sides(lacking: Sequence[tuple[str, Sequence[str]]], language: str) -> str:
+    """The accompaniment of each sauce named without one, with the usual ones."""
+    first = lacking[0][0]
+    if _fr(language):
+        lines = "\n".join(f"• {name} : {', '.join(sides)}… ?" for name, sides in lacking)
+        return (
+            f"🍽️ Avec quoi sers-tu {'ces plats' if len(lacking) > 1 else 'ce plat'} ?\n{lines}\n"
+            f"Réécris-{'les' if len(lacking) > 1 else 'le'} avec l'accompagnement et le prix, par exemple « {first.lower()} "
+            "plantain 2 000 » : je mets le menu à jour. Les clients savent ainsi ce qu'ils "
+            "auront dans l'assiette."
+        )
+    lines = "\n".join(f"• {name}: {', '.join(sides)}…?" for name, sides in lacking)
+    return (
+        f"🍽️ What do you serve these with?\n{lines}\n"
+        f"Write them again with the side and the price, e.g. \"{first.lower()} plantain "
+        "2000\": I will update the menu."
+    )
+
+
 def menu_live(name: str, dishes: Sequence[MenuDish], language: str) -> str:
     """Today's menu is already out: what it holds, and how it brings orders.
 

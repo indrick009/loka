@@ -74,7 +74,8 @@ RULES = (
     "'c'est fini pour aujourd'hui' is CLOSE_MENU. Someone who wants to eat or "
     "asks where to find a dish is FOOD_SEARCH, with 'dish' when he names one. A "
     "line number picked from a list idia sent goes in 'choice'; several lines "
-    "picked ('1 et 2') go in 'choices'."
+    "picked ('1 et 2') go in 'choices'. A dish keeps its accompaniment in its "
+    "name (« ndolè plantain », « poisson braisé bâton »); escargots are a dish."
 )
 
 ENTITIES: dict[str, Any] = {
@@ -151,11 +152,14 @@ FOOD = DomainSpec(
         "CREATE_RESTAURANT": (
             r"\b(mon (restaurant|resto|tourne dos|chantier|maquis|snack|boukarou)|"
             r"je suis (une )?restaurat(eur|rice)|je vends (a manger|des plats)|"
+            r"je vends (du |de la |des |les |le |la )?(escargots?|poissons? braises?|"
+            r"poulets? braises?|soya|ndole|eru|okok|koki|beignets?|plats?)|"
+            r"publier (mon|le) menu|"
             r"inscrire mon (restaurant|resto)|chop house|my (restaurant|eatery))\b"
         ),
         "FOOD_SEARCH": (
             r"\b(manger|faim|ndole|eru|okok|koki|achu|mbongo|poulet dg|"
-            r"poisson braise|soya|beignets?|chop|djaff\w*|tchop|tourne dos|"
+            r"poisson braise|soya|beignets?|escargots?|chop|djaff\w*|tchop|tourne dos|"
             r"restaurant|resto|maquis|plat du jour)\b"
         ),
     },

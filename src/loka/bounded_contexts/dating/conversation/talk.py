@@ -54,6 +54,9 @@ _CONFIRM_WORD = re.compile(r"\bconfirmer?\b")
 _SHORT = 8
 _PLUS = re.compile(r"^\W*(plus|more)\W*$")
 _SEND = re.compile(r"^\W*(oui|ouais|yes|ok|okay|envoie|transmets|vas y|d accord)\b")
+# « Envoie à Joyce », « transmets-lui », « send to him »: an order about the
+# message kept just before, never a message (journal of 25 Nov 2026, 12:52).
+_PASS_ON = re.compile(r"^\W*(envoie\w*|envoi|transmet\w*|send|forward|passe\w*)\b")
 _KEEP = re.compile(r"^\W*(non|no|laisse|annule|pas la peine)\b")
 # A relayed message is a question, not a letter.
 LONGEST = 600
@@ -214,6 +217,8 @@ class DatingTalk:
         pending = turn.session.context.get(PENDING_RELAY)
         if not isinstance(pending, str) or not pending:
             pending = None
+        if pending is not None and _PASS_ON.match(folded) and len(folded.split()) <= 5:
+            addressee = "SEND"
         if addressee == "SEND":
             # « Send to him » after a message idia kept: that message, not these
             # words (journal of 25 Nov 2026, 10:40).
@@ -244,7 +249,9 @@ class DatingTalk:
         if addressee == "IDIA" and turn.model_reply:
             answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
             return await self._reply(turn, desk, talk, answer, extra=kept)
-        if addressee in ("IDIA", "UNCLEAR"):
+        if addressee != "MATCH":
+            # Unread is not « for her »: « je veux changer ma photo » and « je
+            # parle à toi » reached Jerry unread (journal of 25 Nov 2026, 12:48).
             return await self._reply(
                 turn,
                 desk,
