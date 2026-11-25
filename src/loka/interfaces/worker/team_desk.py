@@ -62,6 +62,13 @@ _FIGURES_ASKED = re.compile(
 )
 
 
+# A conversation that goes round and round without getting anywhere burns the
+# model's credit (decision of 25 Nov 2026): past this many messages in an
+# hour, it is handed to a person, once, and waits.
+LONG_CHAT_MESSAGES = 30
+_LONG_CHAT_KEY = "chat:hour:{phone}"
+
+
 def _digits(phone: str) -> str:
     return "".join(c for c in phone if c.isdigit())
 
@@ -69,6 +76,7 @@ def _digits(phone: str) -> str:
 class TeamDesk:
     def __init__(self, database: Database, redis: Redis, settings: Settings) -> None:
         self._database = database
+        self._redis = redis
         self._holds = RedisConversationHolds(redis)
         self._admins = {
             _digits(p) for p in settings.whatsapp.alert_phones.split(",") if p.strip()
@@ -116,6 +124,8 @@ class TeamDesk:
                 answer = await self._note(note.group(1).upper(), note.group(2).strip())
             else:
                 topic = unsupported_topic(text) if text else None
+                if topic is None and not admin:
+                    topic = await self._too_long(phone)
                 if topic is None:
                     return False
                 answer = f"{topic} — « {text} »"
@@ -151,6 +161,18 @@ class TeamDesk:
             ],
             correlation_id=f"team-{session.id}",
         )
+
+    async def _too_long(self, phone: str) -> str | None:
+        """The hour's message count; the topic once it passes the limit."""
+        if _digits(phone) in self._admins:
+            return None
+        key = _LONG_CHAT_KEY.format(phone=_digits(phone))
+        count = int(await self._redis.incr(key))
+        if count == 1:
+            await self._redis.expire(key, 3600)
+        if count != LONG_CHAT_MESSAGES + 1:
+            return None
+        return f"conversation très longue sans aboutir ({LONG_CHAT_MESSAGES} messages en 1 h)"
 
     async def _note(self, incident: str, note: str) -> str:
         hold = await self._holds.by_incident(incident)
