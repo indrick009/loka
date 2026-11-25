@@ -22,13 +22,15 @@ _logger = get_logger(__name__)
 _MAX_BYTES = 6_000_000
 _PROMPT = (
     "Tu regardes une photo envoyée par un restaurant au Cameroun. Réponds en JSON : "
-    '{"kind": "MENU" | "DISH" | "OTHER", "lines": [{"name": str, "price": int | null}], '
+    '{"kind": "MENU" | "DISH" | "MIXED" | "OTHER", "lines": [{"name": str, "price": int | null}], '
     '"dish": str | null}. MENU = un menu écrit (tableau, ardoise, feuille) : recopie '
     "chaque plat dans 'lines' avec son prix en FCFA tel qu'écrit ('2 mil', '2000f', "
     "'2.000' = 2000 ; un nombre seul comme '2' ou '2,5' à côté d'un plat = milliers), "
     "null si aucun prix. DISH = la photo d'un plat servi : 'dish' = son nom local si "
     "tu le reconnais (ndolè, eru, poulet DG, poisson braisé, soya, okok, koki, achu...), "
-    "sinon null. OTHER = autre chose. N'invente aucun plat ni prix."
+    "sinon null. MIXED = plusieurs plats ou produits différents sur la même photo "
+    "(un étalage, une table garnie, plusieurs pots ou assiettes différents), sans menu "
+    "écrit. OTHER = autre chose. N'invente aucun plat ni prix."
 )
 
 
@@ -92,7 +94,7 @@ def _reading(payload: dict[str, Any]) -> MenuReading:
         lines.append((str(item["name"]).strip(), price if valid else None))
     dish = payload.get("dish")
     return MenuReading(
-        kind=kind if kind in ("MENU", "DISH") else "OTHER",
+        kind=kind if kind in ("MENU", "DISH", "MIXED") else "OTHER",
         lines=lines,
         dish=dish.strip() if isinstance(dish, str) and dish.strip() else None,
     )

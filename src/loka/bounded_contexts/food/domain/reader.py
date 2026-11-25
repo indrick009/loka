@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
-PhotoKind = Literal["MENU", "DISH", "OTHER"]
+PhotoKind = Literal["MENU", "DISH", "MIXED", "OTHER"]
 
 
 @dataclass(frozen=True, slots=True)

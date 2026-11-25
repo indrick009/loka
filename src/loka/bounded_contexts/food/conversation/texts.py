@@ -126,12 +126,13 @@ def menu_published(name: str, dishes: Sequence[MenuDish], language: str) -> str:
             "fermeture, « c'est fini pour aujourd'hui »."
         )
         if bare:
+            # Dish by dish, one plate per photo: a photo of several plates,
+            # or several products sent together, landed on the wrong line
+            # (journal of 25 Nov 2026, 16:00 and 16:05).
             text += (
-                "\n\n📸 Si tu veux, envoie une photo ou une courte vidéo de chaque plat, "
-                "prise par toi (pas une image d'internet) : les clients choisissent avec "
-                "les yeux, et les avis seront plus justes. Mets le nom du plat en légende, "
-                "ou envoie-les dans l'ordre du menu. Ce n'est pas obligatoire, et une photo "
-                "envoyée une fois reste pour les jours suivants."
+                "\n\n📸 Maintenant, la photo de chaque plat, un par un : un seul plat par "
+                "photo, pris par toi (pas une image d'internet). Les clients choisissent "
+                f"avec les yeux. Commence par « {bare[0]} »."
             )
         return text
     text = (
@@ -151,7 +152,7 @@ def menu_published(name: str, dishes: Sequence[MenuDish], language: str) -> str:
 def photo_added(dish: str, waiting: Sequence[str], language: str) -> str:
     if _fr(language):
         rest = (
-            f"Encore sans photo : {', '.join(waiting)}. Envoie la suivante quand tu veux."
+            f"Maintenant, la photo de « {waiting[0]} », seul sur la photo."
             if waiting
             else "Tous tes plats ont leur photo, bravo 👌"
         )
@@ -174,6 +175,18 @@ def photo_before_menu(language: str) -> str:
         "I got your photo, but you have no menu today yet, so I cannot tell which dish "
         "it belongs to. Give me your dishes first, then send the photos again."
     )
+
+
+def mixed_photo(waiting: Sequence[str], language: str) -> str:
+    """A photo of several plates together: one plate per photo, asked by name."""
+    if _fr(language):
+        ask = f" Envoie la photo de « {waiting[0]} » seul." if waiting else ""
+        return (
+            "Cette photo montre plusieurs plats ensemble 🙏🏾 Pour que chaque client voie le "
+            f"bon plat, envoie une photo par plat.{ask}"
+        )
+    ask = f" Send the photo of \"{waiting[0]}\" alone." if waiting else ""
+    return f"This photo shows several dishes together: please send one photo per dish.{ask}"
 
 
 def photos_full(language: str) -> str:

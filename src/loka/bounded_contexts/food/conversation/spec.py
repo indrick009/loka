@@ -43,6 +43,8 @@ RESTAURANT_FORM = (
         {
             "fr": "Quels plats as-tu aujourd'hui, avec leur prix ?\n"
             "Par exemple : ndolè 2 000, poulet DG 3 500, soya 1 000.\n"
+            "Ou bien envoie tes plats un par un : la photo du plat, avec son nom et son "
+            "prix en légende (« ndolè 2 000 »).\n"
             "Tu peux aussi m'envoyer une photo de ton menu écrit : je lis les plats et "
             "les prix pour toi.",
             "en": "Which dishes do you have today, with their prices?\n"

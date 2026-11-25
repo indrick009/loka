@@ -72,6 +72,10 @@ class DishPhotos:
         menu = await self._store.menu_of(restaurant.restaurant_id, menu_day(now))
         if menu is None:
             return PhotoOutcome(texts.photo_before_menu(language), ask_dishes=True)
+        if reading is not None and reading.kind == "MIXED":
+            # One plate per photo (decision of 25 Nov 2026).
+            waiting = [item.name for item in menu.dishes if item.available and not item.media]
+            return PhotoOutcome(texts.mixed_photo(waiting, language))
         said = [text for text in (caption, reading.dish if reading else None) if text]
         dish = menu.attach(media_key, said)
         if dish is None:
