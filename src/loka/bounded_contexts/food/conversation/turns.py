@@ -110,6 +110,11 @@ class FoodTurns:
         last = await self._store.last_menu(restaurant.restaurant_id)
         if not dishes and known.get("same_menu") and last is not None:
             dishes = [replace(dish, available=True) for dish in last.dishes]
+        if not dishes and not prefix:
+            today = await self._store.menu_of(restaurant.restaurant_id, menu_day(turn.now))
+            if today is not None and today.is_open and today.open_dishes():
+                live = texts.menu_live(restaurant.name, today.open_dishes(), lang)
+                return await self._done(turn, desk, live, voiced=False)
         if not dishes:
             hint = texts.same_menu_hint(lang) if last is not None else ""
             return await self._ask(turn, desk, "dishes", f"{prefix} {hint}".strip())

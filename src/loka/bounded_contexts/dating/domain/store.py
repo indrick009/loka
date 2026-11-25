@@ -50,6 +50,9 @@ class DatingStore(Protocol):
     async def answered(self, profile_id: uuid.UUID) -> set[str]:
         """Profiles this member already said yes or no to."""
 
+    async def passed_by(self, profile_id: uuid.UUID) -> set[str]:
+        """Profiles that already said no to this member."""
+
     async def answer(
         self,
         *,

@@ -57,8 +57,40 @@ def yes_or_no(language: str) -> str:
 def registered(name: str, place: dict[str, Any], language: str) -> str:
     where = place_label(place)
     if _fr(language):
-        return f"Ton restaurant « {name} » est enregistré ({where})."
-    return f"Your restaurant \"{name}\" is registered ({where})."
+        return (
+            f"Ton restaurant « {name} » est enregistré ({where}). "
+            "La publication est gratuite pendant la promotion de lancement 🎉"
+        )
+    return (
+        f"Your restaurant \"{name}\" is registered ({where}). "
+        "Publishing is free during the launch promotion 🎉"
+    )
+
+
+def menu_live(name: str, dishes: Sequence[MenuDish], language: str) -> str:
+    """Today's menu is already out: what it holds, and how it brings orders.
+
+    Asked for « plus de visibilité et des commandes », a restaurant was asked
+    its dishes again, then told of a poulet and a poisson braisé it never
+    cooked (journal of 25 Nov 2026, 10:13).
+    """
+    lines = "\n".join(f"• {dish.name} — {xaf(dish.price_xaf)}" for dish in dishes)
+    if _fr(language):
+        return (
+            f"Ton menu du jour est en ligne ({name}) :\n{lines}\n\n"
+            "Tous les clients qui cherchent à manger près de toi le voient jusqu'à minuit, "
+            "et leurs commandes t'arrivent ici. Pour en avoir plus : publie ton menu chaque "
+            "jour, tôt le matin, avec une photo de chaque plat. La publication est gratuite "
+            "pendant la promotion de lancement 🎉\n"
+            "Un plat à changer ? Écris-le avec son prix (« eru 1 500 »), ou « le ndolè est "
+            "fini »."
+        )
+    return (
+        f"Your menu of the day is live ({name}):\n{lines}\n\n"
+        "Every client looking for food near you sees it until midnight, and their orders "
+        "reach you here. For more: publish every day, early, with a photo of each dish. "
+        "Publishing is free during the launch promotion 🎉"
+    )
 
 
 def menu_published(name: str, dishes: Sequence[MenuDish], language: str) -> str:

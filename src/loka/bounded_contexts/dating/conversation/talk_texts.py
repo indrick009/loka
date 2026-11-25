@@ -72,6 +72,10 @@ def not_relayed(other: Profile) -> str:
     return f"(Rien n'a été transmis à {other.first_name}.)"
 
 
+def nothing_to_send(other: Profile) -> str:
+    return f"Écris ici le message pour {other.first_name}, je le lui transmets."
+
+
 def kept_back(other: Profile) -> str:
     return f"D'accord, je ne l'envoie pas. Écris ta question pour {other.first_name} quand tu veux."
 

@@ -76,6 +76,10 @@ class PlugDesk(Protocol):
 
     async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool: ...
 
+    async def busy(self, user_id: uuid.UUID, *, now: datetime) -> bool:
+        """The user is answering a question right now: nothing unasked cuts in."""
+        ...
+
 
 class DomainTurns(Protocol):
     """A photo reaches ``apply`` too, as the facts ``media_key`` and ``media_kind``."""

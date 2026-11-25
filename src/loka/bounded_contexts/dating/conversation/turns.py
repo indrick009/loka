@@ -59,7 +59,10 @@ _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
 # « montre un autre », « une autre personne », « suivant »: a pass, not a yes
 # (journal of 25 Nov 2026, 07:28: « Montre un autre » then « Ok » became a yes).
-_NEXT = re.compile(r"\b(un|une) autre\b|\bautre (profil|personne)\b|\bsuivant|\bnext\b")
+# « Propose autre chose » too (10:38 the same day).
+_NEXT = re.compile(
+    r"\b(un|une|d) autres?\b|\bautres? (profils?|personnes?|chose)\b|\bsuivant|\bnext\b"
+)
 
 
 def _answer(turn: PlugTurn) -> bool | None:
@@ -243,7 +246,12 @@ class DatingTurns:
                 prefix=prefix,
                 propose=lambda again: self._propose(turn, desk, member, prefix=again),
             )
-        excluded = await self._store.answered(member.profile_id)
+        # Nor anyone who already said no to them: Dave was shown Ornela, who had
+        # passed on him, and his yes met « n'a pas donné suite » at once
+        # (journal of 25 Nov 2026, 10:26).
+        excluded = await self._store.answered(member.profile_id) | await self._store.passed_by(
+            member.profile_id
+        )
         refusals = await self._store.refusals()
         ranked = best_candidates(
             member, await self._store.members(), excluded=excluded, refusals=refusals
@@ -379,6 +387,7 @@ class DatingTurns:
             if (
                 await self._store.likes(other.profile_id, member.profile_id)
                 and await self._store.open_talk_of(other.profile_id) is None
+                and not await desk.busy(other.user_id, now=turn.now)
             ):
                 # Never into a talk under way: « écris rencontre » sent to Dave
                 # mid-talk had his next two messages relayed to Margaret
@@ -398,9 +407,14 @@ class DatingTurns:
                 prefix="",
                 propose=lambda prefix: self._propose(turn, desk, member, prefix=prefix),
             )
-        if their_answer is None and await self._store.open_talk_of(other.profile_id) is None:
-            # Not while they talk with someone else: the proposal would take
-            # their thread away from that talk. It reaches them afterwards.
+        if (
+            their_answer is None
+            and await self._store.open_talk_of(other.profile_id) is None
+            and not await desk.busy(other.user_id, now=turn.now)
+        ):
+            # Not while they talk with someone else, nor while they answer
+            # anything else: the proposal would take their thread away. It
+            # reaches them when they next ask for profiles.
             await desk.notify(
                 other.user_id,
                 texts.proposal(member, "fr"),

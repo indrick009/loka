@@ -62,6 +62,9 @@ class Desk:
         self.relayed.append(text)
         return True
 
+    async def busy(self, user_id: uuid.UUID, **_: Any) -> bool:
+        return False
+
 
 def _setup() -> tuple[DatingTalk, Desk, Profile, Talk, ConversationSession]:
     jerry, joyce = _member("Jerry", "HOMME"), _member("Joyce", "FEMME")
@@ -126,3 +129,51 @@ async def test_words_for_idia_are_asked_about_even_unclassified() -> None:
         outcome = await _apply(talk_, desk, jerry, talk, _turn(session, text, addressee="MATCH"))
         assert outcome.question == RELAY_KEY
     assert desk.relayed == []
+
+
+async def test_an_end_closes_the_talk_and_tells_the_other() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    talk_._store.open_talk_of = _none  # type: ignore[attr-defined]
+    talk_._store.liked_by_both = _nobody  # type: ignore[attr-defined]
+    proposed: list[str] = []
+
+    async def propose(prefix: str) -> Any:
+        proposed.append(prefix)
+
+    turn = _turn(session, "Dis-lui que je ne veux plus", addressee="END")
+    await talk_.apply(turn, desk, jerry, talk.talk_id, propose=propose)  # type: ignore[arg-type]
+    assert not talk.is_open
+    assert proposed
+    assert not any("ne veux plus" in text for text in desk.relayed)
+
+
+async def _none(*_: Any) -> None:
+    return None
+
+
+async def _nobody(*_: Any) -> list[Any]:
+    return []
+
+
+async def test_send_to_him_relays_the_message_kept_before() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    await _apply(talk_, desk, jerry, talk, _turn(session, "Je veux une photo de toi", addressee="UNCLEAR"))
+    await _apply(talk_, desk, jerry, talk, _turn(session, "Send to him", addressee="SEND"))
+    assert desk.relayed == ["Jerry : « Je veux une photo de toi »"]
+
+
+async def test_only_the_quoted_words_are_relayed() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    turn = _turn(
+        session, "Demande lui « tu habites où à Yaoundé »",
+        addressee="MATCH", relay_text="tu habites où à Yaoundé",
+    )
+    await _apply(talk_, desk, jerry, talk, turn)
+    assert desk.relayed == ["Jerry : « tu habites où à Yaoundé »"]
+
+
+async def test_confirmer_inside_a_short_message_is_the_decision() -> None:
+    talk_, desk, jerry, talk, session = _setup()
+    await _apply(talk_, desk, jerry, talk, _turn(session, "okay good. CONFIRMER"))
+    assert not any("okay good" in text for text in desk.relayed)
+    assert talk.side(jerry.profile_id).sent == 0

@@ -48,6 +48,10 @@ _STOP = re.compile(
     _LEAD + r"(stop|arrete\w*|j arrete|(il|elle) ne me plai?\w* pas|pas interesse\w*|"
     r"abandonne|ne (le|la) veux pas|ne veux plus)\b"
 )
+# « okay good. CONFIRMER » was relayed as a message (journal of 25 Nov 2026,
+# 11:01): the word, anywhere in a few words, is the decision.
+_CONFIRM_WORD = re.compile(r"\bconfirmer?\b")
+_SHORT = 8
 _PLUS = re.compile(r"^\W*(plus|more)\W*$")
 _SEND = re.compile(r"^\W*(oui|ouais|yes|ok|okay|envoie|transmets|vas y|d accord)\b")
 _KEEP = re.compile(r"^\W*(non|no|laisse|annule|pas la peine)\b")
@@ -63,6 +67,21 @@ def _about_idia(folded: str, other: Profile) -> bool:
     name = _folded(other.first_name).strip()
     named = bool(name) and re.search(rf"\b{re.escape(name)}\b", folded) is not None
     return bool(_ABOUT_IDIA.search(folded)) or named
+
+
+def _words_for(other: Profile, text: str, extracted: object) -> str:
+    """What to pass on: the words for the other, without « demande-lui » around them.
+
+    Only ever a piece of what was written: « « Pourquoi il y a un souci ? »
+    transmets le message entre parenthèses » reached Margaret whole (journal of
+    25 Nov 2026, 09:49). A rewording by the model is not the member's words.
+    """
+    if not isinstance(extracted, str):
+        return text
+    piece = " ".join(extracted.split()).strip(" «»\"'")
+    if len(piece) >= 2 and _folded(piece) in _folded(text):
+        return piece
+    return text
 
 
 def _folded(text: str) -> str:
@@ -99,11 +118,13 @@ class DatingTalk:
     ) -> TurnOutcome:
         """Answer inside the talk, the thread left on ``key``: the offer of
         more questions waits for its answer, anything else for the next message."""
+        # What was not relayed is kept for « transmets-lui »; anything else
+        # clears it, so an old message is never sent by a later « oui ».
         await desk.settle(
             turn,
             step=FlowStep.COLLECT_CHOICE,
             question_key=key,
-            context={TALK_ID: str(talk.talk_id), **(extra or {})},
+            context={TALK_ID: str(talk.talk_id), PENDING_RELAY: "", **(extra or {})},
         )
         return say(text, question=key, step=FlowStep.COLLECT_CHOICE, voiced=False)
 
@@ -175,12 +196,31 @@ class DatingTalk:
         folded = _folded(text)
         if _STOP.match(folded):
             return await self._stop(turn, desk, member, other, talk, propose=propose)
-        if _CONFIRM.match(folded):
+        addressee = turn.facts.get("addressee")
+        if addressee == "END":
+            # « Je ne veux pas Dave, je veux une autre rencontre », then « dis-lui
+            # que je ne veux plus »: both kept the talk open, and his messages
+            # kept reaching her (journal of 25 Nov 2026, 08:54 and 09:45).
+            return await self._stop(turn, desk, member, other, talk, propose=propose)
+        short = len(folded.split()) <= _SHORT
+        if (
+            _CONFIRM.match(folded)
+            or addressee == "CONFIRM"
+            or (short and _CONFIRM_WORD.search(folded))
+        ):
             return await self._confirm(turn, desk, member, other, talk)
         if turn.session.context.get("next_question") == PLUS_KEY:
             return await self._buy(turn, desk, member, other, talk)
         pending = turn.session.context.get(PENDING_RELAY)
-        if turn.session.context.get("next_question") == RELAY_KEY and isinstance(pending, str):
+        if not isinstance(pending, str) or not pending:
+            pending = None
+        if addressee == "SEND":
+            # « Send to him » after a message idia kept: that message, not these
+            # words (journal of 25 Nov 2026, 10:40).
+            if pending is None:
+                return await self._reply(turn, desk, talk, talk_texts.nothing_to_send(other))
+            return await self._relay(turn, desk, member, other, talk, pending)
+        if turn.session.context.get("next_question") == RELAY_KEY and pending is not None:
             if _SEND.match(folded):
                 return await self._relay(turn, desk, member, other, talk, pending)
             if _KEEP.match(folded):
@@ -195,24 +235,25 @@ class DatingTalk:
         # Not everything written in a talk is for the other member: « on peut
         # envoyer des vidéos ? » and « qu'est-ce qu'elle attend d'un homme ? »
         # were both relayed to her (journal of 24 Nov 2026, 17:25).
-        addressee = turn.facts.get("addressee")
-        if addressee != "IDIA" and _about_idia(folded, other):
+        words = _words_for(other, text, turn.facts.get("relay_text"))
+        if addressee != "IDIA" and _about_idia(_folded(words), other):
             # « Rencontre », « je ne veux pas que tu transmettes à Margaret »:
             # read as for her, both were relayed (journal of 25 Nov 2026, 08:38).
             addressee = "UNCLEAR"
+        kept = {PENDING_RELAY: words[:LONGEST]}
         if addressee == "IDIA" and turn.model_reply:
             answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
-            return await self._reply(turn, desk, talk, answer)
+            return await self._reply(turn, desk, talk, answer, extra=kept)
         if addressee in ("IDIA", "UNCLEAR"):
             return await self._reply(
                 turn,
                 desk,
                 talk,
-                talk_texts.relay_or_not(other, text[:LONGEST]),
+                talk_texts.relay_or_not(other, words[:LONGEST]),
                 RELAY_KEY,
-                extra={PENDING_RELAY: text[:LONGEST]},
+                extra=kept,
             )
-        return await self._relay(turn, desk, member, other, talk, text)
+        return await self._relay(turn, desk, member, other, talk, words)
 
     async def _relay(
         self,

@@ -214,6 +214,14 @@ class SqlAlchemyDatingStore:
         )
         return {str(value) for value in rows.scalars()}
 
+    async def passed_by(self, profile_id: uuid.UUID) -> set[str]:
+        rows = await self._session.execute(
+            select(DatingAnswerRow.from_profile).where(
+                DatingAnswerRow.to_profile == profile_id, DatingAnswerRow.liked.is_(False)
+            )
+        )
+        return {str(value) for value in rows.scalars()}
+
     async def answer(
         self,
         *,

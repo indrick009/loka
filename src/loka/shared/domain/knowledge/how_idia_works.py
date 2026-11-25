@@ -45,7 +45,10 @@ GUIDE = {
         "Someone hungry says what they want and where: idia lists the dishes cooking today "
         "nearby, from restaurants' menus of the day. They order by the numbers; the "
         "restaurant confirms. A restaurant publishes its menu of the day on WhatsApp, as "
-        "text or a photo of the menu."
+        "text or a photo of the menu. Publishing is FREE for restaurants for now (launch "
+        "promotion): never ask a restaurant for money. Visibility and orders come from "
+        "the menu itself: every hungry client nearby sees it until midnight, so publish "
+        "it every day, early, with a photo of each dish."
     ),
     "Car": (
         "A traveller gives the trip and the day: idia lists the departures; they pick one, "

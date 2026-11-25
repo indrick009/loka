@@ -103,6 +103,21 @@ class ConversationDesk:
         )
         return True
 
+    async def busy(self, user_id: uuid.UUID, *, now: datetime) -> bool:
+        """A question of his is open and he wrote lately: a notice would cut in.
+
+        « Aimée n'a pas donné suite » reached Dave mid-talk and his next words
+        went to Margaret (journal of 25 Nov 2026, 08:37); a proposal steered
+        onto someone answering another one takes their thread away.
+        """
+        session = await self._sessions.latest_by_user(user_id)
+        return (
+            session is not None
+            and session.is_active
+            and not session.is_idle(now)
+            and bool(session.context.get("next_question"))
+        )
+
     async def notify_phone(self, phone: str, text: str, *, now: datetime) -> bool:
         """Write to a number that is not a user, such as an agency's, on the
         thread it last used with idia. ``False`` when it never wrote."""

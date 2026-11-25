@@ -54,21 +54,33 @@ def yes_or_no(language: str) -> str:
     return "Just reply YES if you are interested, or NO."
 
 
+def _names(names: list[str], fr: bool) -> str:
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} {'et' if fr else 'and'} {names[-1]}"
+
+
 def standing(waiting: list[str], silent: list[str], language: str) -> str:
     """Where the member's yeses stand: never « refused », « did not follow up »."""
     fr = _fr(language)
     lines = []
+    # « Tu as dit oui à Sandra, Joyce : j'attends sa réponse » and « Ornela,
+    # Aimée n'a pas donné suite » (journal of 25 Nov 2026, 10:26).
     if waiting:
-        names = ", ".join(waiting)
+        names = _names(waiting, fr)
+        awaited = "leurs réponses" if len(waiting) > 1 else "sa réponse"
         lines.append(
-            f"Tu as dit oui à {names} : j'attends sa réponse, je te préviens si c'est réciproque."
+            f"Tu as dit oui à {names} : j'attends {awaited}, "
+            "je te préviens si c'est réciproque."
             if fr
             else f"You said yes to {names}: I am waiting for an answer and will tell you."
         )
     if silent:
-        names = ", ".join(silent)
+        names, verb = _names(silent, fr), "n'ont" if len(silent) > 1 else "n'a"
         lines.append(
-            f"{names} n'a pas donné suite." if fr else f"{names} did not follow up."
+            f"{names} {verb} pas donné suite."
+            if fr
+            else f"{names} did not follow up."
         )
     return "\n".join(lines)
 

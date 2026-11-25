@@ -112,6 +112,9 @@ PROFILE_FORM = (
     ),
 )
 
+# Who a message written in a talk is for, or what it asks of idia.
+ADDRESSEES = ("MATCH", "IDIA", "UNCLEAR", "END", "CONFIRM", "SEND")
+
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
     "DATING_PROFILE. Fill first_name, age (integer), sex (HOMME or FEMME), "
@@ -130,12 +133,24 @@ RULES = (
     "(say they did not follow up). To a profile idia proposed, 'oui' is AFFIRMATIVE "
     "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
     "message may be written to the other member, whom idia relays it to: "
-    "extract nothing but 'addressee' — MATCH when it is plainly written to the "
-    "other member (« tu aimes quoi ? »), IDIA when it is plainly for idia about "
-    "how the talk or the app works (« on peut envoyer des vidéos ? »), with "
-    "'reply' answering it, UNCLEAR otherwise, above all a question about the "
-    "other member in the third person (« qu'est-ce qu'elle attend d'un "
-    "homme ? »). Set 'inappropriate' to true only when it is sexual, insulting "
+    "extract nothing but 'addressee' and 'relay_text'. 'addressee' is MATCH when it "
+    "is for the other member: there « tu » and « toi » are the other member "
+    "(« je veux une photo de toi »), and so is any question about their life, "
+    "even short (« quel quartier ? », « pourquoi il y a un souci ? »); idia "
+    "knows nothing of them beyond the profile and never answers such a question "
+    "itself. IDIA when it is plainly for idia about how the talk or the app "
+    "works (« on peut envoyer des vidéos ? »), with 'reply' answering it. END "
+    "when the member no longer wants to go on with this person or asks for other "
+    "profiles instead (« je ne veux plus », « dis-lui que je ne veux plus », "
+    "« montre-moi d'autres profils »). CONFIRM when they decide to go ahead with "
+    "this person (« CONFIRMER », « c'est bon pour moi, je la veux »). SEND when "
+    "they ask idia to pass on what they wrote just before (« transmets-lui », "
+    "« send to him »). UNCLEAR otherwise, above all a question about the other "
+    "member in the third person (« qu'est-ce qu'elle attend d'un homme ? »). "
+    "'relay_text', for MATCH: the words to deliver, copied from the message "
+    "without the instruction to idia around them (« demande-lui « tu habites "
+    "où ? » » gives « tu habites où ? »), never rewritten. "
+    "Set 'inappropriate' to true only when it is sexual, insulting "
     "or asks for money."
 )
 
@@ -148,7 +163,8 @@ ENTITIES: dict[str, Any] = {
     "description": {"type": "string"},
     "looking": {"type": "array", "items": {"type": "string", "enum": list(LOOKING)}},
     "inappropriate": {"type": "boolean"},
-    "addressee": {"type": "string", "enum": ["MATCH", "IDIA", "UNCLEAR"]},
+    "addressee": {"type": "string", "enum": list(ADDRESSEES)},
+    "relay_text": {"type": "string"},
 }
 
 
@@ -188,8 +204,11 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
             facts["description"] = description
         else:
             rejected["description"] = "too short"
-    if entities.get("addressee") in ("MATCH", "IDIA", "UNCLEAR"):
+    if entities.get("addressee") in ADDRESSEES:
         facts["addressee"] = entities["addressee"]
+    relay_text = text_of(entities.get("relay_text"), longest=600)
+    if relay_text:
+        facts["relay_text"] = relay_text
     if entities.get("inappropriate") is True:
         # Read by a talk: a message to a match is refused, not relayed.
         rejected["message"] = "inappropriate"
