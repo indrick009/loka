@@ -116,3 +116,13 @@ async def test_a_message_for_the_match_is_relayed_at_once() -> None:
     talk_, desk, jerry, talk, session = _setup()
     await _apply(talk_, desk, jerry, talk, _turn(session, "Tu aimes quoi le week-end ?"))
     assert desk.relayed == ["Jerry : « Tu aimes quoi le week-end ? »"]
+
+
+async def test_words_for_idia_are_asked_about_even_unclassified() -> None:
+    """Journal of 25 Nov 2026, 08:38: « Rencontre » was relayed to Margaret."""
+    talk_, desk, jerry, talk, session = _setup()
+    for text in ("Rencontre", "Je ne veux pas que tu transmettes à Joyce"):
+        session.context = {TALK_ID: str(talk.talk_id), "next_question": TALK_KEY}
+        outcome = await _apply(talk_, desk, jerry, talk, _turn(session, text, addressee="MATCH"))
+        assert outcome.question == RELAY_KEY
+    assert desk.relayed == []

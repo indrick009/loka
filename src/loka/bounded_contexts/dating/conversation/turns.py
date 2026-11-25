@@ -376,7 +376,13 @@ class DatingTurns:
             now=turn.now,
         )
         if not answer:
-            if await self._store.likes(other.profile_id, member.profile_id):
+            if (
+                await self._store.likes(other.profile_id, member.profile_id)
+                and await self._store.open_talk_of(other.profile_id) is None
+            ):
+                # Never into a talk under way: « écris rencontre » sent to Dave
+                # mid-talk had his next two messages relayed to Margaret
+                # (journal of 25 Nov 2026, 08:37). He hears it afterwards.
                 # They said yes and wait: told now, never left with a yes that
                 # gets no answer (decision of 25 Nov 2026), never « refused ».
                 await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)

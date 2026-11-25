@@ -55,6 +55,16 @@ _KEEP = re.compile(r"^\W*(non|no|laisse|annule|pas la peine)\b")
 LONGEST = 600
 
 
+_ABOUT_IDIA = re.compile(r"\b(transmet\w*|idia|rencontres?|profils?|d autres?)\b")
+
+
+def _about_idia(folded: str, other: Profile) -> bool:
+    """Words for idia, or the other member named in the third person."""
+    name = _folded(other.first_name).strip()
+    named = bool(name) and re.search(rf"\b{re.escape(name)}\b", folded) is not None
+    return bool(_ABOUT_IDIA.search(folded)) or named
+
+
 def _folded(text: str) -> str:
     # The typographic apostrophe first: folding to ASCII would drop it and glue
     # « j (curly) arrête » into one word.
@@ -186,6 +196,10 @@ class DatingTalk:
         # envoyer des vidéos ? » and « qu'est-ce qu'elle attend d'un homme ? »
         # were both relayed to her (journal of 24 Nov 2026, 17:25).
         addressee = turn.facts.get("addressee")
+        if addressee != "IDIA" and _about_idia(folded, other):
+            # « Rencontre », « je ne veux pas que tu transmettes à Margaret »:
+            # read as for her, both were relayed (journal of 25 Nov 2026, 08:38).
+            addressee = "UNCLEAR"
         if addressee == "IDIA" and turn.model_reply:
             answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
             return await self._reply(turn, desk, talk, answer)
