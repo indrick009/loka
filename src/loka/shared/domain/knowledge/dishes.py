@@ -165,3 +165,39 @@ def related_keys(key: str) -> frozenset[str]:
 def dish_name(key: str | None) -> str | None:
     dish = _BY_KEY.get(key or "")
     return dish.name if dish else None
+
+
+# What kind of thing a menu line is. « J'ai faim » is answered with meals
+# only, never a juice or a cream (decision of 25 Nov 2026, a dessert seller).
+MEAL, DRINK, DESSERT = "MEAL", "DRINK", "DESSERT"
+_DRINK = re.compile(
+    r"\b(jus|bissap|gingembre|citronnelle|boissons?|sodas?|coca|fanta|top|djino|eau|"
+    r"bieres?|vin|cafe|lait|smoothies?|cocktails?|milkshakes?|kossam)\b"
+)
+_DESSERT = re.compile(
+    r"\b(desserts?|cremes?|glaces?|gateaux?|cakes?|tartes?|patisseries?|yaourts?|"
+    r"yogourts?|salade de fruits|crepes?|chocolat|flans?|mousses?|cookies?|biscuits?|"
+    r"donuts?|muffins?|tiramisu|fondants?|puddings?|sorbets?|cupcakes?|brownies?)\b"
+)
+_GENERIC = {
+    "dessert": DESSERT, "desserts": DESSERT, "boisson": DRINK, "boissons": DRINK,
+    "a boire": DRINK, "quelque chose a boire": DRINK, "drink": DRINK, "drinks": DRINK,
+}
+
+
+def category_of(name: str) -> str:
+    """MEAL, DRINK or DESSERT: a plate idia knows is a meal, whatever it holds."""
+    key = dish_key(name)
+    if key is not None:
+        return MEAL
+    folded = normalize(name)
+    if _DESSERT.search(folded):
+        return DESSERT
+    if _DRINK.search(folded):
+        return DRINK
+    return MEAL
+
+
+def asked_category(request: str) -> str | None:
+    """« Un dessert », « quelque chose à boire »: a kind asked for, not a dish."""
+    return _GENERIC.get(normalize(request).removeprefix("un ").removeprefix("une ").strip())

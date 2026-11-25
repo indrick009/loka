@@ -30,7 +30,14 @@ from loka.bounded_contexts.food.domain.menu import DailyMenu, MenuDish, menu_day
 from loka.bounded_contexts.food.domain.reader import MenuReader
 from loka.bounded_contexts.food.domain.restaurant import DishOffer, Restaurant
 from loka.bounded_contexts.food.domain.store import FoodStore
-from loka.shared.domain.knowledge.dishes import is_side, needs_side, related_keys
+from loka.shared.domain.knowledge.dishes import (
+    MEAL,
+    asked_category,
+    category_of,
+    is_side,
+    needs_side,
+    related_keys,
+)
 from loka.shared.domain.knowledge.nearby import FAR_KM, reach
 from loka.shared.domain.knowledge.where import km_between, place_label
 
@@ -340,6 +347,7 @@ class FoodTurns:
         # key, and « poisson braisé et un jus » found the fish only (live
         # replay of 8 Nov 2026).
         names = [part for part in _NAMED.split(dish or "") if part.strip()]
+        kinds = {kind for kind in (asked_category(name) for name in names) if kind}
         found: list[DishOffer] = []
         for restaurant, menu in await self._store.open_menus(menu_day(turn.now)):
             distance = km_between(place, restaurant.place)
@@ -352,7 +360,16 @@ class FoodTurns:
             ):
                 continue
             for item in menu.open_dishes():
-                if dish and item.key not in keys and not any(item.is_named(n) for n in names):
+                kind = category_of(item.name)
+                if not dish and kind != MEAL:
+                    # « J'ai faim »: meals, never a juice or a cream.
+                    continue
+                if (
+                    dish
+                    and kind not in kinds
+                    and item.key not in keys
+                    and not any(item.is_named(n) for n in names)
+                ):
                     continue
                 found.append(
                     DishOffer(

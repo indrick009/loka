@@ -44,7 +44,8 @@ GUIDE = {
     ),
     "Repas": (
         "Someone hungry says what they want and where: idia lists the dishes cooking today "
-        "nearby, from restaurants' menus of the day. They order by the numbers; the "
+        "nearby, from restaurants' menus of the day: someone hungry is shown meals; "
+        "drinks and desserts only to whoever asks for them. They order by the numbers; the "
         "restaurant confirms. A restaurant publishes its menu of the day on WhatsApp, as "
         "text or a photo of the menu. Publishing is FREE for restaurants for now (launch "
         "promotion): never ask a restaurant for money. Visibility and orders come from "
@@ -60,7 +61,8 @@ GUIDE = {
         "Money; the ticket comes on WhatsApp and the agency receives the passengers."
     ),
     "Prestataires": (
-        "Free during the launch promotion. A restaurant publishes its menu of the day "
+        "Free during the launch promotion. A restaurant, a pastry or dessert seller, or "
+        "a drinks seller publishes its menu of the day "
         "(the hungry people around see it and order); an owner or a real-estate agency "
         "publishes lodgings to rent; a travel agency puts its departures on sale (the "
         "idia team sets it up with the agency). Whoever asks to promote his activity is "
