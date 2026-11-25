@@ -160,7 +160,8 @@ class FoodTurns:
             had = [old for old in previous if old.same_line(new.name)]
             media = new.media or next((old.media for old in had if old.media), ())
             about = new.description or next((o.description for o in had if o.description), "")
-            merged.append(replace(new, media=media, description=about))
+            page = new.menu_photo or next((o.menu_photo for o in had if o.menu_photo), "")
+            merged.append(replace(new, media=media, description=about, menu_photo=page))
         if today is not None and today.is_open:
             today.dishes = merged
             menu = today
@@ -401,21 +402,24 @@ class FoodTurns:
         Each is held back behind the list: sent at once, the pictures reached
         the client before the list that numbers them (replay of 3 Nov 2026).
         """
-        shown = 0
+        # A menu page holding several of the dishes offered goes once, its
+        # caption naming them all.
+        pictures: dict[str, list[str]] = {}
         for index, offer in enumerate(found, start=1):
             if offer.media:
-                shown += 1
-                caption = (
-                    f"{index}. {offer.dish_name} — {xaf(offer.price_xaf)} — "
-                    f"{offer.restaurant.name}"
+                pictures.setdefault(offer.media[0], []).append(
+                    f"{index}. {offer.dish_name} — {xaf(offer.price_xaf)}"
                 )
-                await desk.notify(
-                    client,
-                    caption,
-                    now=turn.now,
-                    media_object_key=offer.media[0],
-                    delay_seconds=PHOTO_SPACING_SECONDS * shown,
-                )
+        by_picture = {offer.media[0]: offer for offer in found if offer.media}
+        for shown, (picture, lines) in enumerate(pictures.items(), start=1):
+            caption = "\n".join(lines) + f"\n{by_picture[picture].restaurant.name}"
+            await desk.notify(
+                client,
+                caption,
+                now=turn.now,
+                media_object_key=picture,
+                delay_seconds=PHOTO_SPACING_SECONDS * shown,
+            )
 
     async def _search(
         self,
@@ -463,7 +467,7 @@ class FoodTurns:
                         item.name,
                         item.price_xaf,
                         distance,
-                        item.media,
+                        item.photos,
                         item.description,
                     )
                 )

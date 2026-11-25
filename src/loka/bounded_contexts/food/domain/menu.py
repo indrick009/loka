@@ -46,6 +46,16 @@ class MenuDish:
     # with a price, a description and at least one photo (decision of 25 Nov
     # 2026); what is missing is asked, once per dish.
     description: str = ""
+    # The page of the menu this line was read from. Two kinds of photo only
+    # (decision of 26 Nov 2026): a plate, or a whole menu page. The page stands
+    # for the photo and the description of every dish read on it, and a
+    # client looking for one of them is sent the page; nothing is cut out.
+    menu_photo: str = ""
+
+    @property
+    def photos(self) -> tuple[str, ...]:
+        """What a client is shown: the plate's own photos, else its menu page."""
+        return self.media or ((self.menu_photo,) if self.menu_photo else ())
 
     @classmethod
     def of(cls, name: Any, price: Any) -> MenuDish:
@@ -66,6 +76,7 @@ class MenuDish:
             "available": self.available,
             "media": list(self.media),
             "description": self.description,
+            "menu_photo": self.menu_photo,
         }
 
     @classmethod
@@ -77,10 +88,16 @@ class MenuDish:
             available=bool(raw.get("available", True)),
             media=tuple(str(key) for key in raw.get("media") or ()),
             description=str(raw.get("description") or ""),
+            menu_photo=str(raw.get("menu_photo") or ""),
         )
 
     def missing(self) -> tuple[str, ...]:
-        """What the dish still lacks to be complete: a photo, a description."""
+        """What the dish still lacks to be complete: a photo, a description.
+
+        A dish read on a menu page lacks neither: the page shows and says it.
+        """
+        if self.menu_photo:
+            return ()
         return tuple(
             need
             for need, lacking in (("photo", not self.media), ("description", not self.description))

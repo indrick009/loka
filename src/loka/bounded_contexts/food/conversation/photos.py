@@ -1,4 +1,4 @@
-"""A photo or a video a restaurateur sends: a written menu, or one of his plates.
+"""A photo or a video a restaurateur sends: a menu page, or one of his plates.
 
 Never required. A written menu is read into dishes and prices, so a
 restaurateur who would rather not type sends it once. A plate goes on the dish
@@ -63,6 +63,10 @@ class DishPhotos:
         )
         if reading is not None and reading.kind == "MENU" and reading.lines:
             dishes, unpriced = _dishes(reading.lines)
+            # The page goes with every dish read on it: sent to whoever looks
+            # for one of them, never asked again plate by plate (Friends
+            # Chickens' eight pages got thirty photo questions, 25 Nov 2026).
+            dishes = [replace(dish, menu_photo=media_key) for dish in dishes]
             if dishes:
                 return PhotoOutcome(publish=dishes, unpriced=unpriced)
             return PhotoOutcome(texts.menu_without_prices(unpriced, language), ask_dishes=True)

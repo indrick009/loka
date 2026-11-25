@@ -25,8 +25,10 @@ _MAX_BYTES = 6_000_000
 _PROMPT = (
     "Tu regardes une photo envoyée par un restaurant au Cameroun. Réponds en JSON : "
     '{"kind": "MENU" | "DISH" | "MIXED" | "OTHER", "lines": [{"name": str, "price": int | null}], '
-    '"dish": str | null}. MENU = un menu écrit (tableau, ardoise, feuille) : recopie '
-    "chaque plat dans 'lines' avec son prix en FCFA tel qu'écrit ('2 mil', '2000f', "
+    '"dish": str | null}. MENU = un menu écrit (tableau, ardoise, feuille, '
+    "page de menu ou affiche où chaque plat a son nom et son prix, même avec ses "
+    "photos) : recopie chaque plat dans 'lines' avec son prix en FCFA tel qu'écrit "
+    "('2 mil', '2000f', "
     "'2.000' = 2000 ; un nombre seul comme '2' ou '2,5' à côté d'un plat = milliers), "
     "null si aucun prix. DISH = la photo d'un plat servi : 'dish' = son nom local si "
     "tu le reconnais (ndolè, eru, poulet DG, poisson braisé, soya, okok, koki, achu...), "
