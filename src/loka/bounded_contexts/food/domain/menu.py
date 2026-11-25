@@ -73,6 +73,13 @@ class MenuDish:
             media=tuple(str(key) for key in raw.get("media") or ()),
         )
 
+    def same_line(self, other: str) -> bool:
+        """The same menu line, renamed or completed: « ndolè » then « ndolè
+        plantain ». Never two products of one kind: « escargots séchés » did
+        replace « escargots rôtis » and took its photo (25 Nov 2026, 16:05)."""
+        own, said = normalize(self.name), normalize(other)
+        return bool(said) and (own == said or own in said or said in own)
+
     def is_named(self, said: str) -> bool:
         key = dish_key(said)
         if key is not None and key == self.key:

@@ -143,9 +143,9 @@ class FoodTurns:
         before = today or await self._store.last_menu(rid)
         previous = before.dishes if before is not None else []
         kept = today.dishes if today is not None and today.is_open else []
-        merged = [old for old in kept if not any(old.is_named(new.name) for new in dishes)]
+        merged = [old for old in kept if not any(old.same_line(new.name) for new in dishes)]
         for new in dishes:
-            had = next((old for old in previous if old.is_named(new.name)), None)
+            had = next((old for old in previous if old.same_line(new.name)), None)
             merged.append(replace(new, media=new.media or (had.media if had else ())))
         if today is not None and today.is_open:
             today.dishes = merged

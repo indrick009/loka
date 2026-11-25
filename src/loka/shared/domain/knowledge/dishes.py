@@ -101,12 +101,19 @@ SIDE_WORDS = (
 _SIDES = re.compile(rf"\b({'|'.join(SIDE_WORDS)})\b")
 
 
+# Sold raw or by weight, not served on a plate: « escargots frais à 7 500 le
+# kilo » was asked its accompaniment (25 Nov 2026, 16:06).
+_RAW = re.compile(r"\b(frais|fraiche|fraiches|seches?|sechees?|fumes?|fumees?|crus?|crues?|"
+                  r"vivants?|kilo|kilos|kg|tas|seau|sac|carton|douzaine)\b")
+
+
 def needs_side(name: str) -> Dish | None:
     """The dish a menu line names when it lacks the accompaniment it is eaten with."""
     dish = _BY_KEY.get(dish_key(name) or "")
     if dish is None or not dish.sides:
         return None
-    return None if _SIDES.search(normalize(name)) else dish
+    folded = normalize(name)
+    return None if _SIDES.search(folded) or _RAW.search(folded) else dish
 
 
 def is_side(name: str) -> bool:
