@@ -369,6 +369,10 @@ class FoodTurns:
             if shown.get(rid, 0) < PER_RESTAURANT:
                 shown[rid] = shown.get(rid, 0) + 1
                 varied.append(offer)
+        # Room left is filled from the same places: with one restaurant open,
+        # its Sauce gombo Royale was left out for its couscous and tapioca
+        # (journal of 25 Nov 2026, 12:04).
+        varied += [offer for offer in found if offer not in varied]
         return varied[:MAX_OFFERS]
 
     async def _request(

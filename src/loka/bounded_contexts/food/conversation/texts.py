@@ -270,16 +270,18 @@ def nothing_found(dish: str | None, place: dict[str, Any], language: str) -> str
 
 
 def still_nothing(dish: str | None, place: dict[str, Any], language: str) -> str:
-    city = place.get("city") or place_label(place)
+    # Near the place, not the town: « toujours rien à Douala » was said for
+    # Bonabéri while a restaurant had published in Douala (25 Nov 2026, 12:04).
+    city = place_label(place)
     if _fr(language):
         what = f"de {dish} " if dish else ""
         return (
-            f"Toujours rien {what}à {city} pour le moment : les restaurants publient leur "
+            f"Toujours rien {what}près de {city} pour le moment : les restaurants publient leur "
             "menu au fil de la journée. Réessaie un peu plus tard, ou dis-moi un plat précis "
             "(ndolè, poulet DG, poisson braisé…)."
         )
     return (
-        f"Still nothing in {city} for now: restaurants publish during the day. Try again "
+        f"Still nothing near {city} for now: restaurants publish during the day. Try again "
         "a bit later, or name a dish."
     )
 
