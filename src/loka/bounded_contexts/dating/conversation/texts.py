@@ -128,6 +128,31 @@ def nobody_now(
     return variants[(quiet % 4) - 1]
 
 
+_PHOTO_REFUSED_FR = {
+    "AI": "Cette photo semble générée ou retouchée par une IA",
+    "STOCK": "Cette photo ressemble à une photo de pub ou d'internet",
+    "CELEBRITY": "Cette photo montre une personne connue",
+    "NO_FACE": "Je ne vois pas bien ton visage sur cette photo",
+    "GROUP": "Il y a plusieurs personnes sur cette photo",
+    "CHILD": "Cette photo montre un enfant",
+    "NOT_PHOTO": "Ce n'est pas une photo de toi",
+}
+
+
+def photo_refused(reason: str | None, language: str) -> str:
+    """The photo rule, applied: a real photo of the member, or none."""
+    if not _fr(language):
+        return (
+            "I can't use this photo: idia Dating needs a real photo of you, face visible, "
+            "with no AI or filter. Please send another one 📸"
+        )
+    why = _PHOTO_REFUSED_FR.get(reason or "", "Je ne peux pas utiliser cette photo")
+    return (
+        f"{why} : je ne peux pas l'utiliser 🙏🏾 idia Rencontres demande une vraie photo de "
+        "toi, visage bien visible, sans filtre ni IA. Envoie-m'en une autre 📸"
+    )
+
+
 def photo_updated(language: str) -> str:
     return (
         "📸 Ta photo de profil est mise à jour."

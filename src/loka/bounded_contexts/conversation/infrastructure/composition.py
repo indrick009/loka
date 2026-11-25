@@ -46,6 +46,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
 )
 from loka.bounded_contexts.dating.conversation.turns import DatingTurns
 from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMatchJudge
+from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
 from loka.bounded_contexts.food.conversation.turns import FoodTurns
 from loka.bounded_contexts.food.infrastructure.menu_reader import OpenRouterMenuReader
@@ -244,6 +245,13 @@ def match_judge(settings: Settings) -> OpenRouterMatchJudge | None:
     return OpenRouterMatchJudge(settings.ai)
 
 
+def photo_judge(settings: Settings) -> OpenRouterPhotoJudge | None:
+    """Looks at each dating photo; none without a model."""
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterPhotoJudge(settings.ai, S3MediaStorage(settings.object_storage))
+
+
 def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
     """Food, Dating, Found and Booking, each over its own store."""
 
@@ -259,7 +267,10 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             SqlAlchemyFoodStore(uow.session), name_of=first_name, reader=menu_reader(settings)
         ),
         "dating": DatingTurns(
-            SqlAlchemyDatingStore(uow.session), unlock=unlock, judge=match_judge(settings)
+            SqlAlchemyDatingStore(uow.session),
+            unlock=unlock,
+            judge=match_judge(settings),
+            photos=photo_judge(settings),
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

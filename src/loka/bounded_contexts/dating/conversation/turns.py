@@ -36,6 +36,7 @@ from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
+from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
@@ -76,10 +77,12 @@ class DatingTurns:
         *,
         unlock: UnlockContact | None = None,
         judge: MatchJudge | None = None,
+        photos: PhotoCheck | None = None,
     ) -> None:
         self._store = store
         self._unlock = unlock
         self._judge = judge
+        self._photos = photos
         self._talk = DatingTalk(store, unlock=unlock)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
@@ -96,6 +99,9 @@ class DatingTurns:
         if isinstance(photo, str) and photo and question in (None, BACK_KEY):
             # A photo once the profile exists replaces the profile's: Jerry was
             # told he could, then nothing happened (journal of 24 Nov, 11:32).
+            refused = await self._refusal(photo, turn.language)
+            if refused:
+                return await self._close(turn, desk, refused)
             await self._store.update_photo(user, photo)
             return await self._close(turn, desk, texts.photo_updated(turn.language))
         looking = turn.facts.get("looking")
@@ -184,10 +190,14 @@ class DatingTurns:
             # Refused, not hidden: nothing about the person is kept.
             await self._store.refuse_minor(user, now=turn.now)
             return await self._close(turn, desk, texts.minor(lang))
+        new_photo = turn.facts.get("photo")
+        refused = await self._refusal(new_photo, lang) if isinstance(new_photo, str) else ""
+        if refused:
+            known = {name: value for name, value in known.items() if name != "photo"}
         missing = DATING.missing(turn.flow, known)
         if missing:
             field = missing[0]
-            prefix = (
+            prefix = refused or (
                 texts.inappropriate(lang)
                 if turn.rejected.get("description") == "inappropriate"
                 else ""
@@ -260,6 +270,13 @@ class DatingTurns:
             voiced=False,
             media=other.photo_key or None,
         )
+
+    async def _refusal(self, photo: str | None, language: str) -> str:
+        """Why this photo cannot be the profile's, or ``""`` when it can."""
+        if not photo or self._photos is None:
+            return ""
+        verdict = await self._photos.check(photo)
+        return "" if verdict.ok else texts.photo_refused(verdict.reason, language)
 
     async def _standing(self, member: Profile, language: str) -> str:
         """The member's yeses: those awaiting an answer, those not followed up."""
