@@ -114,9 +114,10 @@ class DatingTurns:
         if question in (None, BACK_KEY):
             again = await self._named_again(member, turn.text or "")
             if again is not None:
-                # « Je vais essayer Dave »: a « non » may be taken back (journal
-                # of 25 Nov 2026, 07:56, answered « rien de neuf » twice).
-                return await self._offer(turn, desk, again, prefix="")
+                # « Je vais essayer Dave »: a « non » taken back is a yes, said
+                # plainly; asking OUI or NON again read as not listening
+                # (journal of 25 Nov 2026, 07:56).
+                return await self._decide(turn, desk, member, again, liked=True, score=0.0)
         looking = turn.facts.get("looking")
         if isinstance(looking, list) and looking and question in (None, BACK_KEY):
             # « peu importe » once the profile exists widens where to look.
@@ -299,25 +300,6 @@ class DatingTurns:
                 return other
         return None
 
-    async def _offer(
-        self, turn: PlugTurn, desk: PlugDesk, other: Profile, *, prefix: str, score: float = 0.0
-    ) -> TurnOutcome:
-        """Show one profile and wait for OUI or NON."""
-        await desk.settle(
-            turn,
-            step=FlowStep.COLLECT_CHOICE,
-            question_key=LIKE_KEY,
-            context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3)},
-        )
-        text = f"{prefix}\n{texts.proposal(other, turn.language)}".strip()
-        return say(
-            text,
-            question=LIKE_KEY,
-            step=FlowStep.COLLECT_CHOICE,
-            voiced=False,
-            media=other.photo_key or None,
-        )
-
     async def _standing(self, member: Profile, language: str) -> str:
         """The member's yeses: those awaiting an answer, those not followed up."""
         waiting: list[str] = []
@@ -371,6 +353,21 @@ class DatingTurns:
             return say(texts.yes_or_no(lang), question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE)
         raw_score = turn.session.context.get("_score")
         score = float(raw_score) if isinstance(raw_score, int | float) else 0.0
+        return await self._decide(turn, desk, member, other, liked=answer, score=score)
+
+    async def _decide(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        member: Profile,
+        other: Profile,
+        *,
+        liked: bool,
+        score: float,
+    ) -> TurnOutcome:
+        """Record a yes or a no to ``other``, then what follows from it."""
+        lang = turn.language
+        answer = liked
         await self._store.answer(
             from_profile=member.profile_id,
             to_profile=other.profile_id,
