@@ -36,10 +36,13 @@ from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.relay import gives_contact
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import Talk
+from loka.bounded_contexts.dating.domain.talk_reader import TalkLine, TalkReader, TalkReading
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING_PLUS
 
 Propose = Callable[[str], Awaitable[TurnOutcome]]
+# The last lines of a member's thread, oldest first.
+ThreadOf = Callable[[uuid.UUID], Awaitable[list[TalkLine]]]
 
 # The two words idia itself asks for, when they are the whole message. Every
 # other message is read by the model, which sees the thread, the other's name
@@ -87,9 +90,18 @@ def _steer(talk: Talk, other: Profile) -> Steer:
 
 
 class DatingTalk:
-    def __init__(self, store: DatingStore, *, unlock: UnlockContact | None = None) -> None:
+    def __init__(
+        self,
+        store: DatingStore,
+        *,
+        unlock: UnlockContact | None = None,
+        reader: TalkReader | None = None,
+        thread_of: ThreadOf | None = None,
+    ) -> None:
         self._store = store
         self._unlock = unlock
+        self._reader = reader
+        self._thread_of = thread_of
 
     @staticmethod
     async def _reply(
@@ -201,9 +213,16 @@ class DatingTalk:
             )
         if not text:
             return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
-        decision = _KEYWORDS.get(folded.strip(" .!")) or turn.facts.get("addressee")
         pending = turn.session.context.get(PENDING_RELAY)
         kept = pending if isinstance(pending, str) and pending else None
+        reading = None if folded.strip(" .!") in _KEYWORDS else await self._read(
+            turn, member, other, kept, text
+        )
+        decision = _KEYWORDS.get(folded.strip(" .!")) or (
+            reading.decision if reading else turn.facts.get("addressee")
+        )
+        relay_text = reading.relay_text if reading else turn.facts.get("relay_text")
+        answer_for_idia = (reading.reply if reading else None) or turn.model_reply
         if decision == "END":
             return await self._stop(turn, desk, member, other, talk, propose=propose)
         if decision == "CONFIRM":
@@ -214,10 +233,10 @@ class DatingTalk:
             return await self._relay(turn, desk, member, other, talk, kept)
         if decision == "KEEP" and kept is not None:
             return await self._reply(turn, desk, talk, other, talk_texts.kept_back(other))
-        words = _words_for(other, text, turn.facts.get("relay_text"))
+        words = _words_for(other, text, relay_text)
         keep = {PENDING_RELAY: words[:LONGEST], KEPT_KEY: words[:LONGEST]}
-        if decision == "IDIA" and turn.model_reply:
-            answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
+        if decision == "IDIA" and answer_for_idia:
+            answer = f"{answer_for_idia}\n{talk_texts.not_relayed(other)}"
             return await self._reply(turn, desk, talk, other, answer, extra=keep)
         if decision != "MATCH":
             # Only when the model itself cannot tell, or did not say.
@@ -231,6 +250,22 @@ class DatingTalk:
                 extra=keep,
             )
         return await self._relay(turn, desk, member, other, talk, words)
+
+    async def _read(
+        self, turn: PlugTurn, member: Profile, other: Profile, kept: str | None, text: str
+    ) -> TalkReading | None:
+        if self._reader is None:
+            return None
+        thread = await self._thread_of(turn.session.id) if self._thread_of else []
+        if thread and thread[-1].speaker == "member" and thread[-1].text.strip() == text:
+            thread = thread[:-1]
+        return await self._reader.read(
+            member=member.first_name,
+            other=other.first_name,
+            thread=thread,
+            kept=kept,
+            message=text,
+        )
 
     async def _relay(
         self,

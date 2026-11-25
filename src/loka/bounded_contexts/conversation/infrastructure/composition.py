@@ -48,9 +48,11 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
     SqlAlchemyDecisionShadowLog,
 )
 from loka.bounded_contexts.dating.conversation.turns import DatingTurns
+from loka.bounded_contexts.dating.domain.talk_reader import TalkLine
 from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMatchJudge
 from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
+from loka.bounded_contexts.dating.infrastructure.talk_reader import OpenRouterTalkReader
 from loka.bounded_contexts.food.conversation.turns import FoodTurns
 from loka.bounded_contexts.food.infrastructure.menu_reader import OpenRouterMenuReader
 from loka.bounded_contexts.food.infrastructure.store import SqlAlchemyFoodStore
@@ -263,6 +265,13 @@ def photo_judge(settings: Settings) -> OpenRouterPhotoJudge | None:
     return OpenRouterPhotoJudge(settings.ai, S3MediaStorage(settings.object_storage))
 
 
+def talk_reader(settings: Settings) -> OpenRouterTalkReader | None:
+    """Reads who a talk message is for; none without a model."""
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterTalkReader(settings.ai)
+
+
 def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
     """Food, Dating, Found and Booking, each over its own store."""
 
@@ -273,6 +282,14 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
     unlock = UnlockContact(
         MobileMoneyPayments(payment_gateway(settings)), SqlAlchemyUnlockStore(uow.session)
     )
+    exchanges = SqlAlchemyConversationExchanges(uow.session)
+
+    async def thread_of(session_id: uuid.UUID) -> list[TalkLine]:
+        lines = await exchanges.recent(session_id, limit=8)
+        return [
+            TalkLine("member" if line.speaker == "user" else "idia", line.text) for line in lines
+        ]
+
     return {
         "food": FoodTurns(
             SqlAlchemyFoodStore(uow.session), name_of=first_name, reader=menu_reader(settings)
@@ -282,6 +299,8 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             unlock=unlock,
             judge=match_judge(settings),
             photos=photo_judge(settings),
+            reader=talk_reader(settings),
+            thread_of=thread_of,
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

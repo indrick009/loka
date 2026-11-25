@@ -33,12 +33,13 @@ from loka.bounded_contexts.dating.conversation.keys import (
     UNLOCK_KEY,
 )
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
-from loka.bounded_contexts.dating.conversation.talk import DatingTalk
+from loka.bounded_contexts.dating.conversation.talk import DatingTalk, ThreadOf
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
+from loka.bounded_contexts.dating.domain.talk_reader import TalkReader
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
 
@@ -91,12 +92,14 @@ class DatingTurns:
         unlock: UnlockContact | None = None,
         judge: MatchJudge | None = None,
         photos: PhotoCheck | None = None,
+        reader: TalkReader | None = None,
+        thread_of: ThreadOf | None = None,
     ) -> None:
         self._store = store
         self._unlock = unlock
         self._judge = judge
         self._photos = photos
-        self._talk = DatingTalk(store, unlock=unlock)
+        self._talk = DatingTalk(store, unlock=unlock, reader=reader, thread_of=thread_of)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         user, lang = turn.session.user_id, turn.language
