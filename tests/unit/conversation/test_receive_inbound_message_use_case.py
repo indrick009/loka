@@ -333,6 +333,29 @@ async def test_an_idle_session_is_restarted_instead_of_reused_forever() -> None:
     assert reloaded.context == {}
 
 
+async def test_a_photo_sent_as_a_file_is_stored_as_a_photo() -> None:
+    """Journal of 24 Nov 2026, 19:25: « man+2.jpg » refused three times as a document."""
+    h = _harness(user_id=uuid.uuid4())
+
+    await h.use_case.execute(
+        _command(message_kind="DOCUMENT", text="man+2.jpg", media_object_key="chat/a/b.jpg"),
+        now=NOW,
+    )
+
+    assert h.inbound.messages[0].kind is MessageKind.IMAGE
+
+
+async def test_a_real_document_stays_a_document() -> None:
+    h = _harness(user_id=uuid.uuid4())
+
+    await h.use_case.execute(
+        _command(message_kind="DOCUMENT", text="bail.pdf", media_object_key="chat/a/b.pdf"),
+        now=NOW,
+    )
+
+    assert h.inbound.messages[0].kind is MessageKind.DOCUMENT
+
+
 async def _half_filled_dating_profile(h: _Harness) -> ConversationSession:
     await h.use_case.execute(_command(), now=NOW)
     session = h.sessions.store[PHONE]

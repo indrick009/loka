@@ -103,6 +103,11 @@ class ReceiveInboundMessageUseCase:
         received_at = ensure_utc(now)
         phone = PhoneNumber.normalize(_international(command.sender_phone))
         kind = _resolve_kind(command.message_kind)
+        if kind is MessageKind.DOCUMENT and _is_picture(command.media_object_key):
+            # A photo sent « as a file » is still a photo: three were refused
+            # as « man+2.jpg » documents and the dating profile never got one
+            # (journal of 24 Nov 2026, 19:25).
+            kind = MessageKind.IMAGE
 
         existing = await self._inbound.get_by_external_id(
             provider=command.provider, external_message_id=command.external_message_id
@@ -290,6 +295,13 @@ def _resolve_kind(raw: str) -> MessageKind:
         return MessageKind(raw.upper())
     except ValueError:
         return MessageKind.UNSUPPORTED
+
+
+_PICTURE_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp", ".heic")
+
+
+def _is_picture(object_key: str | None) -> bool:
+    return bool(object_key) and str(object_key).lower().endswith(_PICTURE_SUFFIXES)
 
 
 def _bounded_timestamp(value: datetime, received_at: datetime) -> datetime:
