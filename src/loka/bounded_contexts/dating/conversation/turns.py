@@ -443,6 +443,9 @@ class DatingTurns:
         other = await self._store.profile(matched)
         if other is None or self._unlock is None:
             return await self._propose(turn, desk, member, prefix="")
+        if member.sex == "FEMME":
+            # Only the man unlocks for now: she is never asked to pay.
+            return await self._close(turn, desk, texts.match_waiting(other, turn.language))
         payer = payer_answer(turn.text, turn.session.phone.e164)
         if payer is None:
             return say(texts.pay_or_not(), question=UNLOCK_KEY, voiced=False)

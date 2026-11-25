@@ -37,7 +37,8 @@ GUIDE = {
         "read by idia only, never shown. idia proposes one person at a time, of the other "
         "sex; when both say yes, they ask each other questions through idia (10 messages "
         "and 5 photos each, 10 more for 1 000 FCFA with PLUS), numbers hidden. When both "
-        "confirm, it is a match: the number is unlocked for 1 000 FCFA. Then both leave the "
+        "confirm, it is a match: for now only the man unlocks it, for 1 000 FCFA, and "
+        "both get each other's number; the woman never pays for it. Then both leave the "
         "proposals until one says it did not work out. A new photo sent replaces the "
         "profile photo."
     ),

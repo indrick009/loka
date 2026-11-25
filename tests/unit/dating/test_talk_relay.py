@@ -157,7 +157,8 @@ async def _nobody(*_: Any) -> list[Any]:
 
 async def test_send_to_him_relays_the_message_kept_before() -> None:
     talk_, desk, jerry, talk, session = _setup()
-    await _apply(talk_, desk, jerry, talk, _turn(session, "Je veux une photo de toi", addressee="UNCLEAR"))
+    first = _turn(session, "Je veux une photo de toi", addressee="UNCLEAR")
+    await _apply(talk_, desk, jerry, talk, first)
     await _apply(talk_, desk, jerry, talk, _turn(session, "Send to him", addressee="SEND"))
     assert desk.relayed == ["Jerry : « Je veux une photo de toi »"]
 

@@ -213,6 +213,20 @@ def match(other: Profile, language: str) -> str:
     )
 
 
+def match_waiting(other: Profile, language: str) -> str:
+    """To the woman of a match: nothing to pay, his number comes to her."""
+    if _fr(language):
+        return (
+            f"C'est un match ! {other.first_name} ({other.age} ans, {other.city}) a dit oui "
+            "aussi 💛 C'est lui qui débloque la conversation : dès que c'est fait, je "
+            "t'envoie son numéro WhatsApp. Tu n'as rien à faire."
+        )
+    return (
+        f"It's a match! {other.first_name} ({other.age}, {other.city}) said yes too. He "
+        "unlocks the conversation: I will send you his WhatsApp number as soon as he does."
+    )
+
+
 def unlock_sent(phone: str) -> str:
     return (
         f"J'ai envoyé la demande de paiement de 1 000 FCFA au {phone}. Valide-la sur ton "

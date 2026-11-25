@@ -306,7 +306,27 @@ class DatingTalk:
         if not matched:
             await desk.notify(other.user_id, talk_texts.they_confirmed(member), now=turn.now)
             return await self._reply(turn, desk, talk, talk_texts.confirmed(other))
-        # Consent on both sides, after their questions: the only moment a match exists.
+        # Consent on both sides, after their questions: the only moment a match
+        # exists. Only the man unlocks the conversation for now; the woman is
+        # asked for nothing and gets his number when he pays (decision of
+        # 25 Nov 2026).
+        payer = other if member.sex == "FEMME" else member
+        if payer is member:
+            await desk.notify(
+                other.user_id,
+                texts.match_waiting(member, "fr"),
+                now=turn.now,
+                steer=Steer(
+                    flow=FlowName.DATING_PROFILE, step=FlowStep.PUBLISHED, question_key=None
+                ),
+            )
+            await desk.settle(
+                turn,
+                step=FlowStep.COLLECT_CHOICE,
+                question_key=UNLOCK_KEY,
+                context={MATCH_KEY: str(other.profile_id)},
+            )
+            return say(texts.match(other, turn.language), question=UNLOCK_KEY, voiced=False)
         await desk.notify(
             other.user_id,
             texts.match(member, "fr"),
@@ -318,13 +338,8 @@ class DatingTalk:
                 context={MATCH_KEY: str(member.profile_id)},
             ),
         )
-        await desk.settle(
-            turn,
-            step=FlowStep.COLLECT_CHOICE,
-            question_key=UNLOCK_KEY,
-            context={MATCH_KEY: str(other.profile_id)},
-        )
-        return say(texts.match(other, turn.language), question=UNLOCK_KEY, voiced=False)
+        await desk.settle(turn, step=FlowStep.PUBLISHED, question_key=None, context={})
+        return say(texts.match_waiting(other, turn.language), voiced=False)
 
     async def _stop(
         self,
