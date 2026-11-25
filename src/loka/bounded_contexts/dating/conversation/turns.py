@@ -58,6 +58,8 @@ _DID_NOT_WORK = re.compile(
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
 
+PHOTO_KEY = DATING.question_key("photo")
+
 # « montre un autre », « une autre personne », « suivant »: a pass, not a yes
 # (journal of 25 Nov 2026, 07:28: « Montre un autre » then « Ok » became a yes).
 # « Propose autre chose » too (10:38 the same day).
@@ -112,6 +114,9 @@ class DatingTurns:
             return await self._register(turn, desk, user)
         question = turn.session.context.get("next_question")
         photo = turn.facts.get("photo")
+        if not member.photo_key and not turn.session.context.get(TALK_ID):
+            # No valid photo, no activation: the photo comes first.
+            return await self._photo_first(turn, desk, member, photo)
         if isinstance(photo, str) and photo and question in (None, BACK_KEY):
             # A photo once the profile exists replaces the profile's: Jerry was
             # told he could, then nothing happened (journal of 24 Nov, 11:32).
@@ -165,6 +170,26 @@ class DatingTurns:
         if not turn.fresh and turn.session.context.get("next_question") == LIKE_KEY and proposed:
             return await self._answer(turn, desk, member, uuid.UUID(str(proposed)))
         return await self._propose(turn, desk, member, prefix="")
+
+    async def _photo_first(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, photo: object
+    ) -> TurnOutcome:
+        """A profile whose photo was refused or removed: activated by a valid one."""
+        lang = turn.language
+        if not isinstance(photo, str) or not photo:
+            await desk.settle(
+                turn, step=FlowStep.COLLECT_FIELD, question_key=PHOTO_KEY, context={}
+            )
+            return say(texts.photo_needed(lang), question=PHOTO_KEY, voiced=False)
+        refused = await self._refusal(photo, lang)
+        if refused:
+            await desk.settle(
+                turn, step=FlowStep.COLLECT_FIELD, question_key=PHOTO_KEY, context={}
+            )
+            return say(refused, question=PHOTO_KEY, voiced=False)
+        await self._store.update_photo(member.user_id, photo)
+        member = replace(member, photo_key=photo)
+        return await self._propose(turn, desk, member, prefix=texts.photo_updated(lang))
 
     async def _relation(self, turn: PlugTurn, desk: PlugDesk, user: uuid.UUID) -> TurnOutcome:
         """Contacts exchanged: proposed to nobody until the member says it did not work.

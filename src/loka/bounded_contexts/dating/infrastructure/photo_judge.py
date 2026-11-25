@@ -30,7 +30,10 @@ _PROMPT = (
     "STOCK = photo de banque d'images, de publicité ou de mannequin professionnel. "
     "CELEBRITY = personne célèbre. NO_FACE = pas de visage net. GROUP = plusieurs personnes "
     "sans savoir laquelle. CHILD = un enfant. NOT_PHOTO = dessin, capture d'écran, objet. "
-    "Dans le doute sur une photo de téléphone ordinaire, ok = true."
+    "Sans visage humain net et reconnaissable (paysage, objet, animal, fleur, dos, "
+    "silhouette lointaine, image quelconque), ok = false avec NO_FACE, même dans le "
+    "doute. Dans le doute seulement sur une photo de téléphone ordinaire montrant "
+    "bien un visage, ok = true."
 )
 
 

@@ -173,6 +173,20 @@ def no_follow_up(other: Profile) -> str:
     )
 
 
+def photo_needed(language: str) -> str:
+    """A profile without a valid photo: shown to nobody until one comes."""
+    if _fr(language):
+        return (
+            "Ton profil Rencontre n'est pas encore activé : il lui manque une vraie photo "
+            "de toi 📸 Envoie une photo nette où l'on voit bien ton visage, sans filtre ni "
+            "IA. Dès qu'elle est validée, je te présente des personnes qui te correspondent."
+        )
+    return (
+        "Your dating profile is not active yet: it needs a real photo of you, face "
+        "clearly visible. Send one and I will start proposing people."
+    )
+
+
 def photo_updated(language: str) -> str:
     return (
         "📸 Ta photo de profil est mise à jour."

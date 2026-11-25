@@ -203,7 +203,12 @@ class SqlAlchemyDatingStore:
     async def members(self) -> list[Profile]:
         rows = (
             await self._session.execute(
-                select(DatingProfileRow).where(DatingProfileRow.status == ACTIVE)
+                select(DatingProfileRow).where(
+                    DatingProfileRow.status == ACTIVE,
+                    # No valid photo, no proposal: the account waits for one
+                    # (decision of 25 Nov 2026).
+                    DatingProfileRow.photo_key != "",
+                )
             )
         ).scalars()
         return [_profile(row) for row in rows]
