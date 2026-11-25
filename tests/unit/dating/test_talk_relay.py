@@ -99,7 +99,7 @@ async def test_an_unclear_message_is_asked_about_then_sent_on_yes() -> None:
     assert outcome.question == RELAY_KEY
     assert session.context[PENDING_RELAY] == asked
 
-    await _apply(talk_, desk, jerry, talk, _turn(session, "oui"))
+    await _apply(talk_, desk, jerry, talk, _turn(session, "oui", addressee="SEND"))
     assert desk.relayed == [f"Jerry : « {asked} »"]
 
 
@@ -122,13 +122,10 @@ async def test_a_message_for_the_match_is_relayed_at_once() -> None:
     assert desk.relayed == ["Jerry : « Tu aimes quoi le week-end ? »"]
 
 
-async def test_words_for_idia_are_asked_about_even_unclassified() -> None:
-    """Journal of 25 Nov 2026, 08:38: « Rencontre » was relayed to Margaret."""
+async def test_a_message_the_model_did_not_place_is_asked_about() -> None:
     talk_, desk, jerry, talk, session = _setup()
-    for text in ("Rencontre", "Je ne veux pas que tu transmettes à Joyce"):
-        session.context = {TALK_ID: str(talk.talk_id), "next_question": TALK_KEY}
-        outcome = await _apply(talk_, desk, jerry, talk, _turn(session, text, addressee="MATCH"))
-        assert outcome.question == RELAY_KEY
+    outcome = await _apply(talk_, desk, jerry, talk, _turn(session, "Rencontre"))
+    assert outcome.question == RELAY_KEY
     assert desk.relayed == []
 
 
@@ -185,7 +182,7 @@ async def test_envoie_a_her_name_passes_on_the_kept_message() -> None:
     talk_, desk, jerry, talk, session = _setup()
     first = _turn(session, "Envoie moi quelques photos de toi", addressee="IDIA", reply="…")
     await _apply(talk_, desk, jerry, talk, first)
-    await _apply(talk_, desk, jerry, talk, _turn(session, "Envoie à joyce", addressee="UNCLEAR"))
+    await _apply(talk_, desk, jerry, talk, _turn(session, "Envoie à joyce", addressee="SEND"))
     assert desk.relayed == ["Jerry : « Envoie moi quelques photos de toi »"]
 
 

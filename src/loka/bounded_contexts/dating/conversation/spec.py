@@ -113,7 +113,7 @@ PROFILE_FORM = (
 )
 
 # Who a message written in a talk is for, or what it asks of idia.
-ADDRESSEES = ("MATCH", "IDIA", "UNCLEAR", "END", "CONFIRM", "SEND")
+ADDRESSEES = ("MATCH", "IDIA", "UNCLEAR", "END", "CONFIRM", "SEND", "KEEP")
 
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
@@ -132,25 +132,23 @@ RULES = (
     "goes to the other member). 'rencontres' in the facts is where the member's yeses stand: "
     "answer from it only, never invent an answer, and never say someone refused "
     "(say they did not follow up). To a profile idia proposed, 'oui' is AFFIRMATIVE "
-    "and 'non' is NEGATIVE. While the open question is ask.dating.talk, the "
-    "message may be written to the other member, whom idia relays it to: "
-    "extract nothing but 'addressee' and 'relay_text'. 'addressee' is MATCH when it "
-    "is for the other member: there « tu » and « toi » are the other member "
-    "(« je veux une photo de toi »), and so is any question about their life, "
-    "even short (« quel quartier ? », « pourquoi il y a un souci ? »); idia "
-    "knows nothing of them beyond the profile and never answers such a question "
-    "itself. IDIA when it is plainly for idia about how the talk or the app "
-    "works (« on peut envoyer des vidéos ? »), with 'reply' answering it. END "
-    "when the member no longer wants to go on with this person or asks for other "
-    "profiles instead (« je ne veux plus », « dis-lui que je ne veux plus », "
-    "« montre-moi d'autres profils »). CONFIRM when they decide to go ahead with "
-    "this person (« CONFIRMER », « c'est bon pour moi, je la veux »). SEND when "
-    "they ask idia to pass on what they wrote just before (« transmets-lui », "
-    "« send to him »). UNCLEAR otherwise, above all a question about the other "
-    "member in the third person (« qu'est-ce qu'elle attend d'un homme ? »). "
-    "'relay_text', for MATCH: the words to deliver, copied from the message "
-    "without the instruction to idia around them (« demande-lui « tu habites "
-    "où ? » » gives « tu habites où ? »), never rewritten. "
+    "and 'non' is NEGATIVE. While the open question is ask.dating.talk or "
+    "ask.dating.relay, the member is talking with 'discussion_avec' through idia: "
+    "idia passes on what is written to that person. Read the message with the "
+    "recent messages and decide, as a person would, in 'addressee': MATCH when "
+    "it is for that person (« tu », « toi » there are that person; a question "
+    "about their life, even short, is for them: idia knows nothing of them "
+    "beyond the profile and never answers in their place), with 'relay_text' "
+    "the exact words for them, copied without the instruction to idia around "
+    "them (« demande-lui « tu habites où ? » » gives « tu habites où ? »). IDIA "
+    "when it is for idia (how the talk or the app works, changing one's own "
+    "photo, a remark about idia's last message), with 'reply' answering it. "
+    "END when the member no longer wants to go on with that person or wants "
+    "other profiles instead. CONFIRM when they decide to go ahead with that "
+    "person. SEND when they ask idia to pass on 'message_garde' (« envoie-lui », "
+    "« transmets », « send to him », or yes after idia asked whether to send "
+    "it); KEEP when they say not to send it. UNCLEAR only when you really "
+    "cannot tell. "
     "Set 'inappropriate' to true only when it is sexual, insulting "
     "or asks for money."
 )

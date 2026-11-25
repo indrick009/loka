@@ -41,35 +41,17 @@ from loka.bounded_contexts.payment.domain.contact_unlock import DATING_PLUS
 
 Propose = Callable[[str], Awaitable[TurnOutcome]]
 
-# « oui je confirme », « ok elle me plaît »: a decision may open with a yes.
-_LEAD = r"^\W*(?:(?:oui|ouais|ok|yes|non|no)\W+)?(?:je\s+)?"
-_CONFIRM = re.compile(_LEAD + r"(confirm\w*|(il|elle) me plai?\w*|(le|la) veux|valide\w*)\b")
-_STOP = re.compile(
-    _LEAD + r"(stop|arrete\w*|j arrete|(il|elle) ne me plai?\w* pas|pas interesse\w*|"
-    r"abandonne|ne (le|la) veux pas|ne veux plus)\b"
-)
-# « okay good. CONFIRMER » was relayed as a message (journal of 25 Nov 2026,
-# 11:01): the word, anywhere in a few words, is the decision.
-_CONFIRM_WORD = re.compile(r"\bconfirmer?\b")
-_SHORT = 8
+# The two words idia itself asks for, when they are the whole message. Every
+# other message is read by the model, which sees the thread, the other's name
+# and the message kept (decision of 25 Nov 2026: no word lists in its place).
+_KEYWORDS = {"confirmer": "CONFIRM", "confirme": "CONFIRM", "stop": "END"}
 _PLUS = re.compile(r"^\W*(plus|more)\W*$")
-_SEND = re.compile(r"^\W*(oui|ouais|yes|ok|okay|envoie|transmets|vas y|d accord)\b")
-# « Envoie à Joyce », « transmets-lui », « send to him »: an order about the
-# message kept just before, never a message (journal of 25 Nov 2026, 12:52).
-_PASS_ON = re.compile(r"^\W*(envoie\w*|envoi|transmet\w*|send|forward|passe\w*)\b")
-_KEEP = re.compile(r"^\W*(non|no|laisse|annule|pas la peine)\b")
 # A relayed message is a question, not a letter.
 LONGEST = 600
-
-
-_ABOUT_IDIA = re.compile(r"\b(transmet\w*|idia|rencontres?|profils?|d autres?)\b")
-
-
-def _about_idia(folded: str, other: Profile) -> bool:
-    """Words for idia, or the other member named in the third person."""
-    name = _folded(other.first_name).strip()
-    named = bool(name) and re.search(rf"\b{re.escape(name)}\b", folded) is not None
-    return bool(_ABOUT_IDIA.search(folded)) or named
+# Shown to the model in the talk's facts: who the other is, and what idia
+# kept unsent, so « envoie-lui » points at something.
+WITH_KEY = "discussion_avec"
+KEPT_KEY = "message_garde"
 
 
 def _words_for(other: Profile, text: str, extracted: object) -> str:
@@ -95,12 +77,12 @@ def _folded(text: str) -> str:
     return plain.casefold()
 
 
-def _steer(talk: Talk) -> Steer:
+def _steer(talk: Talk, other: Profile) -> Steer:
     return Steer(
         flow=FlowName.DATING_PROFILE,
         step=FlowStep.COLLECT_CHOICE,
         question_key=TALK_KEY,
-        context={TALK_ID: str(talk.talk_id)},
+        context={TALK_ID: str(talk.talk_id), WITH_KEY: other.first_name},
     )
 
 
@@ -114,6 +96,7 @@ class DatingTalk:
         turn: PlugTurn,
         desk: PlugDesk,
         talk: Talk,
+        other: Profile,
         text: str,
         key: str = TALK_KEY,
         *,
@@ -127,7 +110,13 @@ class DatingTalk:
             turn,
             step=FlowStep.COLLECT_CHOICE,
             question_key=key,
-            context={TALK_ID: str(talk.talk_id), PENDING_RELAY: "", **(extra or {})},
+            context={
+                TALK_ID: str(talk.talk_id),
+                WITH_KEY: other.first_name,
+                PENDING_RELAY: "",
+                KEPT_KEY: "",
+                **(extra or {}),
+            },
         )
         return say(text, question=key, step=FlowStep.COLLECT_CHOICE, voiced=False)
 
@@ -168,10 +157,13 @@ class DatingTalk:
         talk = Talk.open(member.profile_id, other.profile_id, now=turn.now)
         await self._store.save_talk(talk)
         await desk.notify(
-            other.user_id, talk_texts.opened(member, "fr"), now=turn.now, steer=_steer(talk)
+            other.user_id,
+            talk_texts.opened(member, "fr"),
+            now=turn.now,
+            steer=_steer(talk, member),
         )
         opened = talk_texts.opened(other, turn.language)
-        return await self._reply(turn, desk, talk, f"{prefix}\n{opened}".strip())
+        return await self._reply(turn, desk, talk, other, f"{prefix}\n{opened}".strip())
 
     async def apply(
         self,
@@ -193,72 +185,50 @@ class DatingTalk:
         media_key = turn.facts.get("media_key")
         if isinstance(media_key, str):
             if turn.facts.get("media_kind") != "IMAGE":
-                return await self._reply(turn, desk, talk, talk_texts.only_text_and_photos())
+                return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
             return await self._photo(turn, desk, member, other, talk, media_key)
         text = " ".join((turn.text or "").split())
         folded = _folded(text)
-        if _STOP.match(folded):
-            return await self._stop(turn, desk, member, other, talk, propose=propose)
-        addressee = turn.facts.get("addressee")
-        if addressee == "END":
-            # « Je ne veux pas Dave, je veux une autre rencontre », then « dis-lui
-            # que je ne veux plus »: both kept the talk open, and his messages
-            # kept reaching her (journal of 25 Nov 2026, 08:54 and 09:45).
-            return await self._stop(turn, desk, member, other, talk, propose=propose)
-        short = len(folded.split()) <= _SHORT
-        if (
-            _CONFIRM.match(folded)
-            or addressee == "CONFIRM"
-            or (short and _CONFIRM_WORD.search(folded))
-        ):
-            return await self._confirm(turn, desk, member, other, talk)
         if turn.session.context.get("next_question") == PLUS_KEY:
             return await self._buy(turn, desk, member, other, talk)
-        pending = turn.session.context.get(PENDING_RELAY)
-        if not isinstance(pending, str) or not pending:
-            pending = None
-        if pending is not None and _PASS_ON.match(folded) and len(folded.split()) <= 5:
-            addressee = "SEND"
-        if addressee == "SEND":
-            # « Send to him » after a message idia kept: that message, not these
-            # words (journal of 25 Nov 2026, 10:40).
-            if pending is None:
-                return await self._reply(turn, desk, talk, talk_texts.nothing_to_send(other))
-            return await self._relay(turn, desk, member, other, talk, pending)
-        if turn.session.context.get("next_question") == RELAY_KEY and pending is not None:
-            if _SEND.match(folded):
-                return await self._relay(turn, desk, member, other, talk, pending)
-            if _KEEP.match(folded):
-                return await self._reply(turn, desk, talk, talk_texts.kept_back(other))
-            # Anything else is a new message, read as such below.
         if _PLUS.match(folded):
             if self._unlock is None:
-                return await self._reply(turn, desk, talk, talk_texts.plus_unavailable(other))
-            return await self._reply(turn, desk, talk, talk_texts.plus_offer(other), PLUS_KEY)
+                return await self._reply(
+                    turn, desk, talk, other, talk_texts.plus_unavailable(other)
+                )
+            return await self._reply(
+                turn, desk, talk, other, talk_texts.plus_offer(other), PLUS_KEY
+            )
         if not text:
-            return await self._reply(turn, desk, talk, talk_texts.only_text_and_photos())
-        # Not everything written in a talk is for the other member: « on peut
-        # envoyer des vidéos ? » and « qu'est-ce qu'elle attend d'un homme ? »
-        # were both relayed to her (journal of 24 Nov 2026, 17:25).
+            return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
+        decision = _KEYWORDS.get(folded.strip(" .!")) or turn.facts.get("addressee")
+        pending = turn.session.context.get(PENDING_RELAY)
+        kept = pending if isinstance(pending, str) and pending else None
+        if decision == "END":
+            return await self._stop(turn, desk, member, other, talk, propose=propose)
+        if decision == "CONFIRM":
+            return await self._confirm(turn, desk, member, other, talk)
+        if decision == "SEND":
+            if kept is None:
+                return await self._reply(turn, desk, talk, other, talk_texts.nothing_to_send(other))
+            return await self._relay(turn, desk, member, other, talk, kept)
+        if decision == "KEEP" and kept is not None:
+            return await self._reply(turn, desk, talk, other, talk_texts.kept_back(other))
         words = _words_for(other, text, turn.facts.get("relay_text"))
-        if addressee != "IDIA" and _about_idia(_folded(words), other):
-            # « Rencontre », « je ne veux pas que tu transmettes à Margaret »:
-            # read as for her, both were relayed (journal of 25 Nov 2026, 08:38).
-            addressee = "UNCLEAR"
-        kept = {PENDING_RELAY: words[:LONGEST]}
-        if addressee == "IDIA" and turn.model_reply:
+        keep = {PENDING_RELAY: words[:LONGEST], KEPT_KEY: words[:LONGEST]}
+        if decision == "IDIA" and turn.model_reply:
             answer = f"{turn.model_reply}\n{talk_texts.not_relayed(other)}"
-            return await self._reply(turn, desk, talk, answer, extra=kept)
-        if addressee != "MATCH":
-            # Unread is not « for her »: « je veux changer ma photo » and « je
-            # parle à toi » reached Jerry unread (journal of 25 Nov 2026, 12:48).
+            return await self._reply(turn, desk, talk, other, answer, extra=keep)
+        if decision != "MATCH":
+            # Only when the model itself cannot tell, or did not say.
             return await self._reply(
                 turn,
                 desk,
                 talk,
+                other,
                 talk_texts.relay_or_not(other, words[:LONGEST]),
                 RELAY_KEY,
-                extra=kept,
+                extra=keep,
             )
         return await self._relay(turn, desk, member, other, talk, words)
 
@@ -272,16 +242,18 @@ class DatingTalk:
         text: str,
     ) -> TurnOutcome:
         if gives_contact(text):
-            return await self._reply(turn, desk, talk, talk_texts.contact_refused())
+            return await self._reply(turn, desk, talk, other, talk_texts.contact_refused())
         if turn.rejected.get("message") == "inappropriate":
-            return await self._reply(turn, desk, talk, talk_texts.inappropriate())
+            return await self._reply(turn, desk, talk, other, talk_texts.inappropriate())
         side = talk.side(member.profile_id)
         if side.messages_left <= 0:
-            return await self._reply(turn, desk, talk, talk_texts.used_up(other, "messages"))
+            return await self._reply(turn, desk, talk, other, talk_texts.used_up(other, "messages"))
         side.sent += 1
         await self._store.save_talk(talk)
         await desk.notify(other.user_id, talk_texts.relayed(member, text[:LONGEST]), now=turn.now)
-        return await self._reply(turn, desk, talk, talk_texts.sent(other, side.messages_left))
+        return await self._reply(
+            turn, desk, talk, other, talk_texts.sent(other, side.messages_left)
+        )
 
     async def _photo(
         self,
@@ -294,7 +266,7 @@ class DatingTalk:
     ) -> TurnOutcome:
         side = talk.side(member.profile_id)
         if side.photos_left <= 0:
-            return await self._reply(turn, desk, talk, talk_texts.used_up(other, "photos"))
+            return await self._reply(turn, desk, talk, other, talk_texts.used_up(other, "photos"))
         side.photos += 1
         await self._store.save_talk(talk)
         await desk.notify(
@@ -303,7 +275,9 @@ class DatingTalk:
             now=turn.now,
             media_object_key=media_key,
         )
-        return await self._reply(turn, desk, talk, talk_texts.photo_sent(other, side.photos_left))
+        return await self._reply(
+            turn, desk, talk, other, talk_texts.photo_sent(other, side.photos_left)
+        )
 
     async def _confirm(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, talk: Talk
@@ -312,7 +286,7 @@ class DatingTalk:
         await self._store.save_talk(talk)
         if not matched:
             await desk.notify(other.user_id, talk_texts.they_confirmed(member), now=turn.now)
-            return await self._reply(turn, desk, talk, talk_texts.confirmed(other))
+            return await self._reply(turn, desk, talk, other, talk_texts.confirmed(other))
         # Consent on both sides, after their questions: the only moment a match
         # exists. Only the man unlocks the conversation for now; the woman is
         # asked for nothing and gets his number when he pays (decision of
@@ -379,7 +353,7 @@ class DatingTalk:
         await self._store.save_talk(talk)
         for me, them in ((a, b), (b, a)):
             await desk.notify(
-                me.user_id, talk_texts.opened(them, "fr"), now=turn.now, steer=_steer(talk)
+                me.user_id, talk_texts.opened(them, "fr"), now=turn.now, steer=_steer(talk, them)
             )
 
     async def _buy(
@@ -387,12 +361,14 @@ class DatingTalk:
     ) -> TurnOutcome:
         """The 1 000 FCFA for another pack of messages and photos."""
         if self._unlock is None:
-            return await self._reply(turn, desk, talk, talk_texts.plus_unavailable(other))
+            return await self._reply(turn, desk, talk, other, talk_texts.plus_unavailable(other))
         payer = payer_answer(turn.text, turn.session.phone.e164)
         if payer is None:
-            return await self._reply(turn, desk, talk, talk_texts.plus_offer(other), PLUS_KEY)
+            return await self._reply(
+                turn, desk, talk, other, talk_texts.plus_offer(other), PLUS_KEY
+            )
         if payer == "":
-            return await self._reply(turn, desk, talk, talk_texts.plus_declined(other))
+            return await self._reply(turn, desk, talk, other, talk_texts.plus_declined(other))
         asked = await self._unlock.request(
             payer_user_id=member.user_id,
             target_user_id=other.user_id,
@@ -402,5 +378,5 @@ class DatingTalk:
             now=turn.now,
         )
         if not asked:
-            return await self._reply(turn, desk, talk, texts.unlock_failed(), PLUS_KEY)
-        return await self._reply(turn, desk, talk, talk_texts.plus_requested(payer))
+            return await self._reply(turn, desk, talk, other, texts.unlock_failed(), PLUS_KEY)
+        return await self._reply(turn, desk, talk, other, talk_texts.plus_requested(payer))
