@@ -8,14 +8,18 @@ Switched on and off by hand, without a deploy (decision of 26 Nov 2026):
 While on, a message gets « je te reviens dans un instant » — once per
 conversation every ``TOLD_FOR_SECONDS`` — and nothing else; a message that only
 closes the exchange (« ok », « merci ») gets nothing at all. Every message kept
-unanswered is listed under ``PENDING_KEY`` to be read again afterwards. The
-admin numbers go through, to test.
+unanswered is listed under ``PENDING_KEY``; once the switch is off, the
+worker reads them again by itself (``replay_forever``): per conversation, every
+photo or video and the last written message — the thread gives the model the
+rest, and five « ?? » do not get five answers. The admin numbers go through,
+to test.
 
 A desk that cannot read Redis lets the message through.
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
 import uuid
 from datetime import UTC, datetime
@@ -24,6 +28,7 @@ from redis.asyncio import Redis
 
 from loka.bounded_contexts.conversation.application.services.closing import is_closing
 from loka.bounded_contexts.conversation.domain.events.message_events import (
+    ConversationAnalysisRequested,
     WhatsAppMessageSendRequested,
 )
 from loka.bounded_contexts.conversation.infrastructure.persistence.conversation_session_repository import (  # noqa: E501
@@ -31,6 +36,9 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.conversation_
 )
 from loka.bounded_contexts.conversation.infrastructure.persistence.inbound_message_repository import (  # noqa: E501
     SqlAlchemyInboundMessageRepository,
+)
+from loka.bounded_contexts.conversation.infrastructure.persistence.messaging_models import (
+    InboundMessageRow,
 )
 from loka.shared.infrastructure.composition import unit_of_work
 from loka.shared.infrastructure.config.settings import Settings
@@ -116,3 +124,55 @@ class MaintenanceDesk:
             await uow.commit()
             journal("maintenance", phone, told=True)
             return True
+
+
+REPLAY_EVERY_SECONDS = 20
+
+
+async def replay_once(database: Database, redis: Redis) -> int:
+    """Hand the kept messages back to the analysis, once maintenance is off."""
+    if await under_maintenance(redis) or not await redis.llen(PENDING_KEY):
+        return 0
+    entries = [str(entry) for entry in await redis.lrange(PENDING_KEY, 0, -1)]
+    await redis.ltrim(PENDING_KEY, len(entries), -1)
+    by_session: dict[str, list[uuid.UUID]] = {}
+    for entry in entries:
+        message, _, session = entry.partition(" ")
+        by_session.setdefault(session, []).append(uuid.UUID(message))
+    staged = 0
+    async with unit_of_work(database) as uow:
+        for ids in by_session.values():
+            found = [await uow.session.get(InboundMessageRow, i) for i in ids]
+            rows = [row for row in found if row is not None]
+            texts = [row for row in rows if row.media_object_key is None]
+            wanted = [row for row in rows if row.media_object_key is not None] + texts[-1:]
+            for row in sorted(wanted, key=lambda r: r.received_at):
+                uow.events.stage(
+                    [
+                        ConversationAnalysisRequested(
+                            aggregate_type="InboundMessage",
+                            aggregate_id=row.id,
+                            aggregate_version=2,
+                            occurred_at=datetime.now(UTC),
+                            message_id=row.id,
+                            session_id=row.session_id,
+                            sender_user_id=row.sender_user_id,
+                            provider=row.provider,
+                            message_kind=row.message_kind,
+                        )
+                    ],
+                    correlation_id=f"maintenance-replay-{row.id}",
+                )
+                staged += 1
+                journal("maintenance_replayed", row.sender_phone, kind=row.message_kind)
+        await uow.commit()
+    return staged
+
+
+async def replay_forever(database: Database, redis: Redis) -> None:
+    while True:
+        try:
+            await replay_once(database, redis)
+        except Exception as exc:  # the list stays; the next pass tries again
+            _logger.warning("maintenance_replay_failed", error=type(exc).__name__)
+        await asyncio.sleep(REPLAY_EVERY_SECONDS)

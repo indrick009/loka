@@ -196,9 +196,15 @@ class DatingTalk:
             return await propose("")
         media_key = turn.facts.get("media_key")
         if isinstance(media_key, str):
-            if turn.facts.get("media_kind") != "IMAGE":
+            kind = turn.facts.get("media_kind")
+            if kind not in ("IMAGE", "VIDEO"):
                 return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
-            return await self._photo(turn, desk, member, other, talk, media_key)
+            # A video is relayed like a photo, on the same allowance: Milly's
+            # « Voilà » video was never passed on (journal of 25 Nov 2026,
+            # 21:56). One over 16 MB is refused before, with the reason.
+            return await self._photo(
+                turn, desk, member, other, talk, media_key, video=kind == "VIDEO"
+            )
         text = " ".join((turn.text or "").split())
         folded = _folded(text)
         if turn.session.context.get("next_question") == PLUS_KEY:
@@ -298,6 +304,8 @@ class DatingTalk:
         other: Profile,
         talk: Talk,
         media_key: str,
+        *,
+        video: bool = False,
     ) -> TurnOutcome:
         side = talk.side(member.profile_id)
         if side.photos_left <= 0:
@@ -306,12 +314,12 @@ class DatingTalk:
         await self._store.save_talk(talk)
         await desk.notify(
             other.user_id,
-            talk_texts.photo_caption(member),
+            talk_texts.photo_caption(member, video=video),
             now=turn.now,
             media_object_key=media_key,
         )
         return await self._reply(
-            turn, desk, talk, other, talk_texts.photo_sent(other, side.photos_left)
+            turn, desk, talk, other, talk_texts.photo_sent(other, side.photos_left, video=video)
         )
 
     async def _confirm(

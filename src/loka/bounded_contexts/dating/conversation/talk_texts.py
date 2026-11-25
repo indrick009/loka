@@ -38,16 +38,17 @@ def relayed(sender: Profile, text: str) -> str:
     return f"{sender.first_name} : « {text} »"
 
 
-def photo_caption(sender: Profile) -> str:
-    return f"Photo de {sender.first_name}"
+def photo_caption(sender: Profile, *, video: bool = False) -> str:
+    return f"{'Vidéo' if video else 'Photo'} de {sender.first_name}"
 
 
 def sent(other: Profile, left: int) -> str:
     return f"✓ Transmis à {other.first_name}. Il te reste {left} message(s)."
 
 
-def photo_sent(other: Profile, left: int) -> str:
-    return f"✓ Photo transmise à {other.first_name}. Il te reste {left} photo(s)."
+def photo_sent(other: Profile, left: int, *, video: bool = False) -> str:
+    what = "Vidéo transmise" if video else "Photo transmise"
+    return f"✓ {what} à {other.first_name}. Il te reste {left} photo(s) ou vidéo(s)."
 
 
 def contact_refused() -> str:
@@ -81,7 +82,10 @@ def kept_back(other: Profile) -> str:
 
 
 def only_text_and_photos() -> str:
-    return "Je ne transmets que les messages écrits et les photos."
+    return (
+        "Je ne transmets que les messages écrits, les photos et les vidéos "
+        "(16 Mo au plus, environ une minute)."
+    )
 
 
 def used_up(other: Profile, what: str) -> str:

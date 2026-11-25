@@ -10,7 +10,10 @@ import asyncio
 import contextlib
 import signal
 
+from redis.asyncio import Redis
+
 from loka.bounded_contexts.conversation.infrastructure.composition import validate_ai_settings
+from loka.interfaces.worker.maintenance_desk import replay_forever
 from loka.interfaces.workers import (
     booking_payments,
     housing_payments,
@@ -91,6 +94,12 @@ async def run() -> None:
         menu_reminders.sweep_forever(database, settings), name="menu-reminders"
     )
 
+    # Maintenance over: the messages kept meanwhile are answered by themselves.
+    maintenance_task = asyncio.create_task(
+        replay_forever(database, Redis.from_url(settings.redis_url, decode_responses=True)),
+        name="maintenance-replay",
+    )
+
     try:
         await stop.wait()
     finally:
@@ -102,6 +111,7 @@ async def run() -> None:
             housing_task,
             referral_task,
             menu_task,
+            maintenance_task,
         ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
