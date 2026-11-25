@@ -12,12 +12,14 @@ one failure mode a cost guard exists to prevent.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import select
 
 from loka.bounded_contexts.ai.application.decision_shadow import DecisionShadow
+from loka.bounded_contexts.ai.infrastructure.agent.conversation_agent import cost_of
 from loka.bounded_contexts.ai.infrastructure.failover import (
     FailoverIntentModel,
     backup_settings,
@@ -28,7 +30,7 @@ from loka.bounded_contexts.auth.infrastructure.persistence.models import UserRow
 from loka.bounded_contexts.booking.conversation.turns import BookingTurns
 from loka.bounded_contexts.booking.infrastructure.seat_maps import StoredSeatMaps
 from loka.bounded_contexts.booking.infrastructure.store import SqlAlchemyBookingStore
-from loka.bounded_contexts.conversation.application.ports import BudgetPolicy
+from loka.bounded_contexts.conversation.application.ports import BudgetPolicy, UsageEntry
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message import (
     AnalyseConversationMessageUseCase,
 )
@@ -80,7 +82,9 @@ from loka.bounded_contexts.housing.infrastructure.composition import LANDLORD_DI
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact
 from loka.bounded_contexts.payment.infrastructure.mobile_money import MobileMoneyPayments
 from loka.bounded_contexts.payment.infrastructure.unlock_store import SqlAlchemyUnlockStore
+from loka.shared.application.context import current_context
 from loka.shared.application.unit_of_work import UnitOfWork
+from loka.shared.infrastructure.ai_usage import RecordUsage
 from loka.shared.infrastructure.composition import (
     create_property_from_conversation_use_case,
     initiate_service_fee_use_case,
@@ -163,7 +167,7 @@ def analyse_conversation_message_use_case(
         response_model=model,
         budget=budget_policy(settings),
         provider_name=settings.ai.provider,
-        triage=photo_triage(settings),
+        triage=photo_triage(settings, usage_recorder(uow, settings)),
         # The one write the analysis triggers: a confirmed listing becomes a
         # property draft. Injected here so the pipeline depends on the port.
         listing=create_property_from_conversation_use_case(uow),
@@ -237,39 +241,73 @@ def form_filler(settings: Settings) -> Any | None:
     return PydanticFormFiller(settings.ai)
 
 
-def menu_reader(settings: Settings) -> OpenRouterMenuReader | None:
+def usage_recorder(uow: SqlAlchemyUnitOfWork, settings: Settings) -> RecordUsage:
+    """Writes each side model call to the ledger, inside the turn's transaction."""
+    ledger = SqlAlchemyAiUsageLedger(uow.session)
+
+    async def record(use_case: str, model: str, tokens_in: int, tokens_out: int, ms: int) -> None:
+        await ledger.append(
+            UsageEntry(
+                use_case=use_case,
+                provider=settings.ai.provider,
+                model=model,
+                input_tokens=tokens_in,
+                output_tokens=tokens_out,
+                latency_ms=ms,
+                cost_usd=cost_of(settings.ai, model, tokens_in, tokens_out),
+                user_id=None,
+                conversation_id=None,
+                correlation_id=current_context().get("correlation_id"),
+                occurred_at=datetime.now(UTC),
+            )
+        )
+
+    return record
+
+
+def menu_reader(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterMenuReader | None:
     """Reads a restaurateur's menu photo; none without a model to read it."""
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
-    return OpenRouterMenuReader(settings.ai, S3MediaStorage(settings.object_storage))
+    return OpenRouterMenuReader(settings.ai, S3MediaStorage(settings.object_storage), record)
 
 
-def match_judge(settings: Settings) -> OpenRouterMatchJudge | None:
+def match_judge(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterMatchJudge | None:
     """Reads dating candidates both ways; none without a model."""
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
-    return OpenRouterMatchJudge(settings.ai)
+    return OpenRouterMatchJudge(settings.ai, record)
 
 
-def photo_triage(settings: Settings) -> OpenRouterPhotoTriage | None:
+def photo_triage(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterPhotoTriage | None:
     """Says what a photo sent with no task shows; none without a model."""
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
-    return OpenRouterPhotoTriage(settings.ai, S3MediaStorage(settings.object_storage))
+    return OpenRouterPhotoTriage(settings.ai, S3MediaStorage(settings.object_storage), record)
 
 
-def photo_judge(settings: Settings) -> OpenRouterPhotoJudge | None:
+def photo_judge(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterPhotoJudge | None:
     """Looks at each dating photo; none without a model."""
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
-    return OpenRouterPhotoJudge(settings.ai, S3MediaStorage(settings.object_storage))
+    return OpenRouterPhotoJudge(settings.ai, S3MediaStorage(settings.object_storage), record)
 
 
-def talk_reader(settings: Settings) -> OpenRouterTalkReader | None:
+def talk_reader(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterTalkReader | None:
     """Reads who a talk message is for; none without a model."""
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
-    return OpenRouterTalkReader(settings.ai)
+    return OpenRouterTalkReader(settings.ai, record)
 
 
 def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
@@ -283,6 +321,7 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
         MobileMoneyPayments(payment_gateway(settings)), SqlAlchemyUnlockStore(uow.session)
     )
     exchanges = SqlAlchemyConversationExchanges(uow.session)
+    record = usage_recorder(uow, settings)
 
     async def thread_of(session_id: uuid.UUID) -> list[TalkLine]:
         lines = await exchanges.recent(session_id, limit=8)
@@ -292,14 +331,16 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
 
     return {
         "food": FoodTurns(
-            SqlAlchemyFoodStore(uow.session), name_of=first_name, reader=menu_reader(settings)
+            SqlAlchemyFoodStore(uow.session),
+            name_of=first_name,
+            reader=menu_reader(settings, record),
         ),
         "dating": DatingTurns(
             SqlAlchemyDatingStore(uow.session),
             unlock=unlock,
-            judge=match_judge(settings),
-            photos=photo_judge(settings),
-            reader=talk_reader(settings),
+            judge=match_judge(settings, record),
+            photos=photo_judge(settings, record),
+            reader=talk_reader(settings, record),
             thread_of=thread_of,
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),

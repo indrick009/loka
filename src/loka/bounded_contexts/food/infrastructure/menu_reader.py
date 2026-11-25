@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 from typing import Any
 
 import httpx
 
 from loka.bounded_contexts.food.domain.reader import MenuReading
+from loka.shared.infrastructure.ai_usage import RecordUsage, tokens_of
 from loka.shared.infrastructure.config.settings import AISettings
 from loka.shared.infrastructure.logging import get_logger
 from loka.shared.infrastructure.object_storage.media import MediaStoreError, S3MediaStorage
@@ -35,7 +37,10 @@ _PROMPT = (
 
 
 class OpenRouterMenuReader:
-    def __init__(self, settings: AISettings, storage: S3MediaStorage) -> None:
+    def __init__(
+        self, settings: AISettings, storage: S3MediaStorage, record: RecordUsage | None = None
+    ) -> None:
+        self._record = record
         self._settings = settings
         self._storage = storage
 
@@ -73,14 +78,27 @@ class OpenRouterMenuReader:
         headers = {"Authorization": f"Bearer {self._settings.api_key.get_secret_value()}"}
         try:
             async with httpx.AsyncClient(base_url=self._settings.base_url, timeout=40) as client:
+                started = time.monotonic()
                 response = await client.post("/chat/completions", json=body, headers=headers)
             response.raise_for_status()
-            content = str(response.json()["choices"][0]["message"]["content"]).strip()
+            data = response.json()
+            await self._usage(model, data, started)
+            content = str(data["choices"][0]["message"]["content"]).strip()
             parsed = json.loads(content.strip("`").removeprefix("json").strip())
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             _logger.warning("menu_reader_failed", model=model, error=type(exc).__name__)
             return None
         return parsed if isinstance(parsed, dict) else None
+
+    async def _usage(self, model: str, data: Any, started: float) -> None:
+        if self._record is None:
+            return
+        try:
+            tokens_in, tokens_out = tokens_of(data)
+            elapsed = int((time.monotonic() - started) * 1000)
+            await self._record("food_menu_reader", model, tokens_in, tokens_out, elapsed)
+        except Exception as exc:  # a ledger failure never costs the answer
+            _logger.warning("ai_usage_not_recorded", error=type(exc).__name__)
 
 
 def _reading(payload: dict[str, Any]) -> MenuReading:
