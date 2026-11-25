@@ -24,6 +24,11 @@ MIN_REPLY_CHARS = 20
 # typo, the second bad luck, the third a user nobody is reading.
 MISREAD_REPEATS = 3
 
+# A receipt (« ✓ Transmis à Jordan. Il te reste 7 message(s). ») is the same
+# sentence after every message relayed, by nature: taken for a loop, it held
+# both members mid-talk for two hours (journal of 25 Nov 2026, 21:55).
+RECEIPT = "✓"
+
 # How far back a repeated sentence still counts as going in circles.
 RECENT_LINES = 4
 # The same sentence a second time is often honest — a question asked again
@@ -50,7 +55,7 @@ def repeats_itself(reply: str, thread: list[Exchange]) -> bool:
     twice may honestly get the same answer; a different message getting the
     sentence idia just said means the last one was not understood either.
     """
-    if len(reply.strip()) < MIN_REPLY_CHARS:
+    if len(reply.strip()) < MIN_REPLY_CHARS or reply.lstrip().startswith(RECEIPT):
         return False
     asked = next((line.text for line in reversed(thread) if line.speaker == "user"), None)
     if asked is None:
