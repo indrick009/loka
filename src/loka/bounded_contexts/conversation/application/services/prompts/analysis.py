@@ -109,7 +109,10 @@ def build_analysis_prompt(
                 | ({"idia_adds": item.warn(default_language)} if item.notice else {})
                 for item in spec.missing(flow, public_known)
             ]
-            if spec
+            # A finished task asks nothing: told the profile's fields were
+            # « missing », the model asked Ismaël his profession again after
+            # his profile was done (journal of 25 Nov 2026, 16:46).
+            if spec and step is not FlowStep.PUBLISHED
             else [] if flow is FlowName.SUPPORT else _missing_fields(flow, public_known)
         ),
         "schema": RESPONSE_SCHEMA,

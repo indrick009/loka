@@ -118,7 +118,9 @@ ADDRESSEES = ("MATCH", "IDIA", "UNCLEAR", "END", "CONFIRM", "SEND", "KEEP")
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
     "DATING_PROFILE (in Cameroon « le gar », « un gars » is a boyfriend, « une go » "
-    "a girlfriend). Fill first_name, age (integer), sex (HOMME or FEMME), "
+    "a girlfriend). 'sex' is the member's own: someone looking for a man (« je "
+    "cherche l'homme », « le gar ») is FEMME, for a woman is HOMME; never guess it "
+    "from a first name. Fill first_name, age (integer), sex (HOMME or FEMME), "
     "profession, city (and country only when said, or plain from a city "
     "abroad: Lyon is France), description (their own words, unchanged, red "
     "flags included) and "
