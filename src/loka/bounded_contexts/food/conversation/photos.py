@@ -36,6 +36,8 @@ class PhotoOutcome:
     unpriced: list[str] = field(default_factory=list)
     # No menu today to attach a plate to: ask for the dishes again.
     ask_dishes: bool = False
+    # The photo went on a dish: what is still missing is asked next.
+    attached: bool = False
 
 
 class DishPhotos:
@@ -52,6 +54,7 @@ class DishPhotos:
         caption: str | None,
         now: datetime,
         language: str,
+        expected: str | None = None,
     ) -> PhotoOutcome:
         reading = (
             await self._reader.read(media_key)
@@ -76,13 +79,13 @@ class DishPhotos:
             # One plate per photo (decision of 25 Nov 2026).
             waiting = [item.name for item in menu.dishes if item.available and not item.media]
             return PhotoOutcome(texts.mixed_photo(waiting, language))
-        said = [text for text in (caption, reading.dish if reading else None) if text]
+        # The dish idia asked the photo of comes before the model's guess.
+        said = [text for text in (caption, expected, reading.dish if reading else None) if text]
         dish = menu.attach(media_key, said)
         if dish is None:
             return PhotoOutcome(texts.photos_full(language))
         await self._store.save_menu(menu)
-        waiting = [item.name for item in menu.dishes if item.available and not item.media]
-        return PhotoOutcome(texts.photo_added(dish.name, waiting, language))
+        return PhotoOutcome(texts.photo_added(dish.name, language), attached=True)
 
 
 def _priced_dish(caption: str | None, media_key: str) -> MenuDish | None:

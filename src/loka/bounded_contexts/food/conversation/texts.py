@@ -125,15 +125,6 @@ def menu_published(name: str, dishes: Sequence[MenuDish], language: str) -> str:
             "Quand un plat est fini, écris par exemple « le ndolè est fini » ; à la "
             "fermeture, « c'est fini pour aujourd'hui »."
         )
-        if bare:
-            # Dish by dish, one plate per photo: a photo of several plates,
-            # or several products sent together, landed on the wrong line
-            # (journal of 25 Nov 2026, 16:00 and 16:05).
-            text += (
-                "\n\n📸 Maintenant, la photo de chaque plat, un par un : un seul plat par "
-                "photo, pris par toi (pas une image d'internet). Les clients choisissent "
-                f"avec les yeux. Commence par « {bare[0]} »."
-            )
         return text
     text = (
         f"Published! Today's menu at {name}:\n{lines}\n\n"
@@ -149,20 +140,43 @@ def menu_published(name: str, dishes: Sequence[MenuDish], language: str) -> str:
     return text
 
 
-def photo_added(dish: str, waiting: Sequence[str], language: str) -> str:
+def photo_added(dish: str, language: str) -> str:
     if _fr(language):
-        rest = (
-            f"Maintenant, la photo de « {waiting[0]} », seul sur la photo."
-            if waiting
-            else "Tous tes plats ont leur photo, bravo 👌"
+        return f"📸 C'est ajouté à « {dish} »."
+    return f"📸 Added to \"{dish}\"."
+
+
+def ask_gap(dish: str, needs: str, language: str) -> str:
+    """What one dish still lacks, asked by its name."""
+    if _fr(language):
+        if needs == "photo":
+            return (
+                f"📸 Envoie la photo de « {dish} », seul sur la photo, prise par toi. "
+                "Pas de photo ? Écris « passer »."
+            )
+        return (
+            f"✍️ Décris « {dish} » en une phrase : ce qu'il y a dans l'assiette, la "
+            "quantité, l'accompagnement… Ou écris « passer »."
         )
-        return f"📸 C'est ajouté à « {dish} ». {rest}"
-    rest = (
-        f"Still without a photo: {', '.join(waiting)}."
-        if waiting
-        else "Every dish has its photo now 👌"
-    )
-    return f"📸 Added to \"{dish}\". {rest}"
+    if needs == "photo":
+        return f"📸 Send the photo of \"{dish}\", alone in the picture. No photo? Say \"skip\"."
+    return f"✍️ Describe \"{dish}\" in one sentence, or say \"skip\"."
+
+
+def described(dish: str, language: str) -> str:
+    return f"✅ C'est noté pour « {dish} »." if _fr(language) else f"✅ Noted for \"{dish}\"."
+
+
+def menu_done(language: str) -> str:
+    if _fr(language):
+        return "C'est tout pour ton menu 👌 Tu pourras compléter un plat quand tu veux."
+    return "Your menu is set 👌 You can complete a dish any time."
+
+
+def menu_complete(language: str) -> str:
+    if _fr(language):
+        return "Tous tes plats sont complets : prix, description et photo 👌"
+    return "Every dish is complete: price, description and photo 👌"
 
 
 def photo_before_menu(language: str) -> str:
@@ -276,9 +290,10 @@ def offers(found: Sequence[DishOffer], language: str, *, wide: bool = False) -> 
         distance = _distance(offer.distance_km, language)
         where = place_label(offer.restaurant.place)
         photo = " 📷" if offer.media else ""
+        about = f"\n   {offer.description[:90]}" if offer.description else ""
         lines.append(
             f"{index}. {offer.dish_name} — {xaf(offer.price_xaf)} — "
-            f"{offer.restaurant.name}, {where}{distance}{photo}"
+            f"{offer.restaurant.name}, {where}{distance}{photo}{about}"
         )
     body = "\n".join(lines)
     if _fr(language):

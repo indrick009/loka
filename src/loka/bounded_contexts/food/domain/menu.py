@@ -42,6 +42,10 @@ class MenuDish:
     key: str | None = None
     available: bool = True
     media: tuple[str, ...] = ()
+    # What is on the plate, in the restaurateur's words. A dish is complete
+    # with a price, a description and at least one photo (decision of 25 Nov
+    # 2026); what is missing is asked, once per dish.
+    description: str = ""
 
     @classmethod
     def of(cls, name: Any, price: Any) -> MenuDish:
@@ -61,6 +65,7 @@ class MenuDish:
             "key": self.key,
             "available": self.available,
             "media": list(self.media),
+            "description": self.description,
         }
 
     @classmethod
@@ -71,6 +76,15 @@ class MenuDish:
             key=raw.get("key"),
             available=bool(raw.get("available", True)),
             media=tuple(str(key) for key in raw.get("media") or ()),
+            description=str(raw.get("description") or ""),
+        )
+
+    def missing(self) -> tuple[str, ...]:
+        """What the dish still lacks to be complete: a photo, a description."""
+        return tuple(
+            need
+            for need, lacking in (("photo", not self.media), ("description", not self.description))
+            if lacking
         )
 
     def same_line(self, other: str) -> bool:
@@ -135,6 +149,15 @@ class DailyMenu:
 
     def close(self, *, now: datetime) -> None:
         self.closed_at = self.closed_at or now
+
+    def describe(self, name: str, description: str) -> MenuDish | None:
+        """Set the description of the dish named, if it is on the menu."""
+        target = next((dish for dish in self.dishes if dish.name == name), None)
+        if target is None:
+            return None
+        updated = replace(target, description=" ".join(description.split())[:200])
+        self.dishes = [updated if dish is target else dish for dish in self.dishes]
+        return updated
 
     def attach(self, media_key: str, said: list[str]) -> MenuDish | None:
         """Put a photo on a dish: the first one named in ``said`` (caption, or

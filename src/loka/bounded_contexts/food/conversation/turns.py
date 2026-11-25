@@ -16,6 +16,7 @@ from loka.bounded_contexts.conversation.application.plugs.forms import (
     xaf,
 )
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn
+from loka.bounded_contexts.conversation.application.services.privacy import fold
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
 )
@@ -100,6 +101,16 @@ class FoodTurns:
         media_key = turn.facts.get("media_key")
         if restaurant is not None and isinstance(media_key, str):
             return await self._photo(turn, desk, restaurant, media_key)
+        completing = turn.session.context.get(COMPLETING)
+        if (
+            restaurant is not None
+            and not turn.fresh
+            and turn.session.context.get("next_question") == COMPLETE_KEY
+            and isinstance(completing, str)
+            and not known.get("dishes")
+            and turn.text
+        ):
+            return await self._completion_answer(turn, desk, restaurant, completing)
         prefix = ""
         if restaurant is None:
             for name in ("restaurant_name", "place"):
@@ -128,7 +139,7 @@ class FoodTurns:
         menu = await self._publish(restaurant, dishes, turn)
         text = texts.menu_published(restaurant.name, menu.open_dishes(), lang)
         text += _sides_question(menu, lang)
-        return await self._done(turn, desk, f"{prefix}\n{text}".strip(), voiced=False)
+        return await self._complete(turn, desk, menu, f"{prefix}\n{text}".strip())
 
     async def _publish(
         self, restaurant: Restaurant, dishes: list[MenuDish], turn: PlugTurn
@@ -140,13 +151,16 @@ class FoodTurns:
         """
         rid = restaurant.restaurant_id
         today = await self._store.menu_of(rid, menu_day(turn.now))
-        before = today or await self._store.last_menu(rid)
-        previous = before.dishes if before is not None else []
+        # Every dish ever published, so a taro photographed once is never
+        # asked again (decision of 25 Nov 2026).
+        previous = (today.dishes if today is not None else []) + await self._store.past_dishes(rid)
         kept = today.dishes if today is not None and today.is_open else []
         merged = [old for old in kept if not any(old.same_line(new.name) for new in dishes)]
         for new in dishes:
-            had = next((old for old in previous if old.same_line(new.name)), None)
-            merged.append(replace(new, media=new.media or (had.media if had else ())))
+            had = [old for old in previous if old.same_line(new.name)]
+            media = new.media or next((old.media for old in had if old.media), ())
+            about = new.description or next((o.description for o in had if o.description), "")
+            merged.append(replace(new, media=media, description=about))
         if today is not None and today.is_open:
             today.dishes = merged
             menu = today
@@ -160,6 +174,7 @@ class FoodTurns:
     ) -> TurnOutcome:
         lang = turn.language
         caption = turn.text if turn.text and not turn.text.startswith("(") else None
+        asked = turn.session.context.get(COMPLETING)
         outcome = await self._photos.take(
             restaurant,
             media_key,
@@ -167,6 +182,7 @@ class FoodTurns:
             caption=caption,
             now=turn.now,
             language=lang,
+            expected=asked if isinstance(asked, str) else None,
         )
         if outcome.publish:
             menu = await self._publish(restaurant, outcome.publish, turn)
@@ -174,10 +190,79 @@ class FoodTurns:
             if outcome.unpriced:
                 text += "\n\n" + texts.unpriced_left_out(outcome.unpriced, lang)
             text += _sides_question(menu, lang)
-            return await self._done(turn, desk, text, voiced=False)
+            return await self._complete(turn, desk, menu, text)
         if outcome.ask_dishes:
             return await self._ask(turn, desk, "dishes", outcome.text)
+        if outcome.attached:
+            today = await self._store.menu_of(restaurant.restaurant_id, menu_day(turn.now))
+            if today is not None:
+                return await self._complete(turn, desk, today, outcome.text)
         return await self._done(turn, desk, outcome.text, voiced=False)
+
+    async def _complete(
+        self, turn: PlugTurn, desk: PlugDesk, menu: DailyMenu, prefix: str
+    ) -> TurnOutcome:
+        """Ask what the next dish lacks: a photo, then a description.
+
+        A dish is complete with a price, a description and a photo; each gap
+        is asked once, by the dish's name, and « passer » moves on.
+        """
+        lang = turn.language
+        raw = turn.session.context.get(SKIPPED)
+        skipped = [str(item) for item in raw] if isinstance(raw, list) else []
+        gap = next(
+            (
+                (dish, need)
+                for dish in menu.open_dishes()
+                for need in dish.missing()
+                if f"{dish.name}:{need}" not in skipped
+            ),
+            None,
+        )
+        if gap is None:
+            done = texts.menu_complete(lang) if not skipped else texts.menu_done(lang)
+            return await self._done(turn, desk, f"{prefix}\n\n{done}".strip(), voiced=False)
+        dish, needs = gap
+        await desk.settle(
+            turn,
+            step=FlowStep.COLLECT_FIELD,
+            question_key=COMPLETE_KEY,
+            context={COMPLETING: dish.name, NEEDS: needs, SKIPPED: skipped},
+        )
+        ask = texts.ask_gap(dish.name, str(needs), lang)
+        return say(
+            f"{prefix}\n\n{ask}".strip(),
+            question=COMPLETE_KEY,
+            step=FlowStep.COLLECT_FIELD,
+            voiced=False,
+        )
+
+    async def _completion_answer(
+        self, turn: PlugTurn, desk: PlugDesk, restaurant: Restaurant, name: str
+    ) -> TurnOutcome:
+        """The description asked, or « passer »: then the next gap."""
+        lang = turn.language
+        menu = await self._store.menu_of(restaurant.restaurant_id, menu_day(turn.now))
+        if menu is None:
+            return await self._done(turn, desk, texts.no_open_menu(lang))
+        needs = str(turn.session.context.get(NEEDS) or "")
+        text = (turn.text or "").strip()
+        raw = turn.session.context.get(SKIPPED)
+        skipped = [str(item) for item in raw] if isinstance(raw, list) else []
+        if _SKIP.search(fold(text)):
+            await desk.settle(
+                turn,
+                step=FlowStep.COLLECT_FIELD,
+                question_key=COMPLETE_KEY,
+                context={SKIPPED: [*skipped, f"{name}:{needs}"]},
+            )
+            turn.session.context[SKIPPED] = [*skipped, f"{name}:{needs}"]
+            return await self._complete(turn, desk, menu, "")
+        if needs == "description" and len(text) >= 3:
+            menu.describe(name, text)
+            await self._store.save_menu(menu)
+            return await self._complete(turn, desk, menu, texts.described(name, lang))
+        return await self._complete(turn, desk, menu, "")
 
     async def _close(
         self, turn: PlugTurn, desk: PlugDesk, restaurant: Restaurant
@@ -373,7 +458,13 @@ class FoodTurns:
                     continue
                 found.append(
                     DishOffer(
-                        restaurant, menu.menu_id, item.name, item.price_xaf, distance, item.media
+                        restaurant,
+                        menu.menu_id,
+                        item.name,
+                        item.price_xaf,
+                        distance,
+                        item.media,
+                        item.description,
                     )
                 )
         found.sort(key=lambda offer: offer.distance_km if offer.distance_km is not None else 99.0)
@@ -434,6 +525,12 @@ class FoodTurns:
 
 _YES = ("oui", "yes", "ok", "d'accord", "dac", "vas-y", "go", "toujours")
 _NO = ("non", "no", "laisse", "pas", "trop loin")
+
+
+# The open question while a dish is being completed, and what it is about.
+COMPLETE_KEY = FOOD.question_key("complete")
+COMPLETING, NEEDS, SKIPPED = "_completing", "_needs", "_skipped"
+_SKIP = re.compile(r"\b(passer|passe|pas de photo|je n en ai pas|plus tard|suivant)\b")
 
 
 def _sides_question(menu: DailyMenu, language: str) -> str:

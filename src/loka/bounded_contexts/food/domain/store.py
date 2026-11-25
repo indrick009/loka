@@ -6,7 +6,7 @@ import uuid
 from datetime import date, datetime
 from typing import Any, Protocol
 
-from loka.bounded_contexts.food.domain.menu import DailyMenu
+from loka.bounded_contexts.food.domain.menu import DailyMenu, MenuDish
 from loka.bounded_contexts.food.domain.restaurant import Restaurant
 
 
@@ -18,6 +18,10 @@ class FoodStore(Protocol):
     async def menu_of(self, restaurant_id: uuid.UUID, day: date) -> DailyMenu | None: ...
 
     async def last_menu(self, restaurant_id: uuid.UUID) -> DailyMenu | None: ...
+
+    async def past_dishes(self, restaurant_id: uuid.UUID) -> list[MenuDish]:
+        """Every dish of the restaurant's recent menus, newest first."""
+        ...
 
     async def save_menu(self, menu: DailyMenu) -> None:
         """Insert or replace the restaurant's menu for that day."""

@@ -40,3 +40,4 @@ class DishOffer:
     price_xaf: int
     distance_km: float | None
     media: tuple[str, ...] = ()
+    description: str = ""

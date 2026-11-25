@@ -78,6 +78,17 @@ class SqlAlchemyFoodStore:
         ).scalar_one_or_none()
         return _menu(row) if row else None
 
+    async def past_dishes(self, restaurant_id: uuid.UUID) -> list[MenuDish]:
+        rows = (
+            await self._session.execute(
+                select(FoodDailyMenuRow)
+                .where(FoodDailyMenuRow.restaurant_id == restaurant_id)
+                .order_by(FoodDailyMenuRow.day.desc())
+                .limit(60)
+            )
+        ).scalars()
+        return [dish for row in rows for dish in _menu(row).dishes]
+
     async def save_menu(self, menu: DailyMenu) -> None:
         await self._session.execute(
             delete(FoodDailyMenuRow).where(

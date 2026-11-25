@@ -77,7 +77,9 @@ RULES = (
     "asks where to find a dish is FOOD_SEARCH, with 'dish' when he names one. A "
     "line number picked from a list idia sent goes in 'choice'; several lines "
     "picked ('1 et 2') go in 'choices'. A dish keeps its accompaniment in its "
-    "name (« ndolè plantain », « poisson braisé bâton »); escargots are a dish."
+    "name (« ndolè plantain », « poisson braisé bâton »); escargots are a dish. "
+    "What he says about a dish (what is on the plate, the quantity) goes in its "
+    "'description', in his words."
 )
 
 ENTITIES: dict[str, Any] = {
@@ -86,7 +88,11 @@ ENTITIES: dict[str, Any] = {
         "type": "array",
         "items": {
             "type": "object",
-            "properties": {"name": {"type": "string"}, "price": {"type": "integer"}},
+            "properties": {
+                "name": {"type": "string"},
+                "price": {"type": "integer"},
+                "description": {"type": "string"},
+            },
         },
     },
     "same_menu": {"type": "boolean"},
@@ -109,7 +115,9 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
             if not isinstance(item, dict):
                 continue
             try:
-                dishes.append(MenuDish.of(item.get("name"), item.get("price")).as_dict())
+                line = MenuDish.of(item.get("name"), item.get("price"))
+                about = text_of(item.get("description"), longest=200)
+                dishes.append({**line.as_dict(), "description": about or ""})
             except DomainError as exc:
                 rejected[f"dish:{item.get('name')}"] = exc.message
         if dishes:
