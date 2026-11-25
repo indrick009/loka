@@ -26,7 +26,8 @@ GUIDE = {
         "the months of advance he can pay. idia sends the lodgings that match; he picks "
         "one; idia asks the landlord whether it is still free; once confirmed, the tenant "
         "gets the landlord's number and the exact place for 1 000 FCFA by Mobile Money. "
-        "Nothing is paid before the landlord confirms. A landlord publishes for free: "
+        "Nothing is paid before the landlord confirms. A lease of a few months is an "
+        "ordinary lodging: the landlord sets the minimum duration. A landlord publishes for free: "
         "kind, place, rent, conditions, photos. The landlord decides the visit, deposit "
         "and contract."
     ),

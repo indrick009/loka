@@ -163,6 +163,21 @@ class SqlAlchemyDatingStore:
         ).scalars()
         return [_profile(row) for row in rows]
 
+    async def passed_on(self, profile_id: uuid.UUID) -> list[Profile]:
+        rows = (
+            await self._session.execute(
+                select(DatingProfileRow)
+                .join(DatingAnswerRow, DatingAnswerRow.to_profile == DatingProfileRow.id)
+                .where(
+                    DatingAnswerRow.from_profile == profile_id,
+                    DatingAnswerRow.liked.is_(False),
+                    DatingProfileRow.status == ACTIVE,
+                )
+                .order_by(DatingAnswerRow.created_at.desc())
+            )
+        ).scalars()
+        return [_profile(row) for row in rows]
+
     async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None:
         row = await self._row_of(user_id)
         if row is not None:

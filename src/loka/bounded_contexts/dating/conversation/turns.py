@@ -57,7 +57,14 @@ _DID_NOT_WORK = re.compile(
 _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
 
+# « montre un autre », « une autre personne », « suivant »: a pass, not a yes
+# (journal of 25 Nov 2026, 07:28: « Montre un autre » then « Ok » became a yes).
+_NEXT = re.compile(r"\b(un|une) autre\b|\bautre (profil|personne)\b|\bsuivant|\bnext\b")
+
+
 def _answer(turn: PlugTurn) -> bool | None:
+    if _NEXT.search(fold(turn.text or "")):
+        return False
     if turn.intent == "AFFIRMATIVE":
         return True
     if turn.intent == "NEGATIVE":
@@ -104,6 +111,12 @@ class DatingTurns:
                 return await self._close(turn, desk, refused)
             await self._store.update_photo(user, photo)
             return await self._close(turn, desk, texts.photo_updated(turn.language))
+        if question in (None, BACK_KEY):
+            again = await self._named_again(member, turn.text or "")
+            if again is not None:
+                # « Je vais essayer Dave »: a « non » may be taken back (journal
+                # of 25 Nov 2026, 07:56, answered « rien de neuf » twice).
+                return await self._offer(turn, desk, again, prefix="")
         looking = turn.facts.get("looking")
         if isinstance(looking, list) and looking and question in (None, BACK_KEY):
             # « peu importe » once the profile exists widens where to look.
@@ -277,6 +290,33 @@ class DatingTurns:
             return ""
         verdict = await self._photos.check(photo)
         return "" if verdict.ok else texts.photo_refused(verdict.reason, language)
+
+    async def _named_again(self, member: Profile, text: str) -> Profile | None:
+        """A profile this member passed on, named in the message."""
+        words = set(fold(text).split())
+        for other in await self._store.passed_on(member.profile_id):
+            if fold(other.first_name) in words:
+                return other
+        return None
+
+    async def _offer(
+        self, turn: PlugTurn, desk: PlugDesk, other: Profile, *, prefix: str, score: float = 0.0
+    ) -> TurnOutcome:
+        """Show one profile and wait for OUI or NON."""
+        await desk.settle(
+            turn,
+            step=FlowStep.COLLECT_CHOICE,
+            question_key=LIKE_KEY,
+            context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3)},
+        )
+        text = f"{prefix}\n{texts.proposal(other, turn.language)}".strip()
+        return say(
+            text,
+            question=LIKE_KEY,
+            step=FlowStep.COLLECT_CHOICE,
+            voiced=False,
+            media=other.photo_key or None,
+        )
 
     async def _standing(self, member: Profile, language: str) -> str:
         """The member's yeses: those awaiting an answer, those not followed up."""

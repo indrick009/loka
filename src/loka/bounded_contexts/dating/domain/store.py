@@ -37,6 +37,9 @@ class DatingStore(Protocol):
 
     async def update_photo(self, user_id: uuid.UUID, photo_key: str) -> None: ...
 
+    async def passed_on(self, profile_id: uuid.UUID) -> list[Profile]:
+        """Active profiles this member said no to, latest first."""
+
     async def update_looking(self, user_id: uuid.UUID, looking: tuple[str, ...]) -> None: ...
 
     async def refusals(self) -> dict[uuid.UUID, tuple[int, int]]:
