@@ -117,7 +117,8 @@ ADDRESSEES = ("MATCH", "IDIA", "UNCLEAR", "END", "CONFIRM", "SEND", "KEEP")
 
 RULES = (
     " Dating: someone looking for love, a partner or a relationship is "
-    "DATING_PROFILE. Fill first_name, age (integer), sex (HOMME or FEMME), "
+    "DATING_PROFILE (in Cameroon « le gar », « un gars » is a boyfriend, « une go » "
+    "a girlfriend). Fill first_name, age (integer), sex (HOMME or FEMME), "
     "profession, city (and country only when said, or plain from a city "
     "abroad: Lyon is France), description (their own words, unchanged, red "
     "flags included) and "
@@ -126,7 +127,8 @@ RULES = (
     "and it may be changed later, once the profile exists). "
     "Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
-    "to another member. Once the profile exists (step PUBLISHED), never ask a "
+    "to another member, and never say what someone looks like or is from it. "
+    "Once the profile exists (step PUBLISHED), never ask a "
     "profile question again; to change the photo, the member simply sends a new "
     "photo here; during a talk, with the caption « profil » (any other photo "
     "goes to the other member). 'rencontres' in the facts is where the member's yeses stand: "
@@ -232,7 +234,10 @@ DATING = DomainSpec(
     holding=frozenset({"ask.dating.talk", "ask.dating.plus", "ask.dating.relay"}),
     cues={
         "DATING_PROFILE": (
+            # « Trouve-moi le gar », « une go »: in Cameroon a gar is a
+            # boyfriend (journal of 25 Nov 2026, 16:38, handed to the team).
             r"\b(quelqu un de serieux|rencontres?|ame s(oe)?ur|l amour|celibataire|"
+            r"(le|un|mon|ma|une) (gar|go|copain|copine|cherie?|petite? ami\w*)|(un|mon) gars|"
             r"relation serieuse|"
             r"me caser|ma moitie|go serieuse|dating|marry|serious (man|woman|"
             r"relationship))\b"

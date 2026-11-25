@@ -13,7 +13,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 from loka.bounded_contexts.food.conversation import texts
-from loka.bounded_contexts.food.domain.menu import MenuDish, menu_day
+from loka.bounded_contexts.food.domain.menu import MAX_MEDIA_PER_DISH, MenuDish, menu_day
 from loka.bounded_contexts.food.domain.reader import MenuReader
 from loka.bounded_contexts.food.domain.restaurant import Restaurant
 from loka.bounded_contexts.food.domain.store import FoodStore
@@ -83,6 +83,11 @@ class DishPhotos:
         said = [text for text in (caption, expected, reading.dish if reading else None) if text]
         dish = menu.attach(media_key, said)
         if dish is None:
+            # Every dish has a photo already: ask which one this is for, rather
+            # than « 3 au plus » to dishes holding one (25 Nov 2026, 16:33).
+            room = [item.name for item in menu.dishes if len(item.media) < MAX_MEDIA_PER_DISH]
+            if room:
+                return PhotoOutcome(texts.photo_which_dish(room, language))
             return PhotoOutcome(texts.photos_full(language))
         await self._store.save_menu(menu)
         return PhotoOutcome(texts.photo_added(dish.name, language), attached=True)

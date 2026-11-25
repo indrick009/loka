@@ -203,6 +203,16 @@ def mixed_photo(waiting: Sequence[str], language: str) -> str:
     return f"This photo shows several dishes together: please send one photo per dish.{ask}"
 
 
+def photo_which_dish(names: Sequence[str], language: str) -> str:
+    listed = ", ".join(f"« {name} »" for name in names[:6])
+    if _fr(language):
+        return (
+            "C'est pour quel plat, cette photo ? Renvoie-la avec le nom du plat en légende "
+            f"({listed}), ou avec le nom et le prix si c'est un nouveau plat."
+        )
+    return f"Which dish is this photo for? Send it again with the dish's name ({listed})."
+
+
 def photos_full(language: str) -> str:
     if _fr(language):
         return "Chaque plat de ton menu a déjà ses photos (3 au plus par plat)."

@@ -314,6 +314,10 @@ class TurnApplier:
         outcome = await self._plugs[spec.name].apply(turn, self._desk)
         if (
             reply_text
+            # A form question asked again, or small talk; never a domain's own
+            # answer: Travis's « Non » to a profile got the model's « je te
+            # propose quelqu'un d'autre » instead (journal of 25 Nov 2026, 16:38).
+            and (verdict.intent == "SUPPORT" or outcome.asks == spec.field_of(asked))
             and not facts
             and outcome.question == asked
             and asked not in HOLDING_QUESTIONS
