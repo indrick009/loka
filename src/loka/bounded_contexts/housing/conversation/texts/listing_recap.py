@@ -216,14 +216,46 @@ def media_received_text(
     return words["document"]
 
 
+# The question asked about photos sent with no task, by what they show.
+_SUBJECT_QUESTION: dict[str, dict[str, str]] = {
+    "fr": {
+        "FOOD": "C'est un plat : tu veux publier le menu de ton restaurant, ou tu cherches "
+        "à manger ?",
+        "MENU": "C'est un menu : tu veux publier le menu du jour de ton restaurant ?",
+        "LODGING": "C'est un logement : tu veux le mettre en location ? Dis-moi de quel "
+        "logement il s'agit.",
+        "DOCUMENT": "C'est une pièce d'identité : tu l'as trouvée, ou tu as perdu la tienne ?",
+        "PORTRAIT": "C'est pour créer ton profil Rencontre ?",
+    },
+    "en": {
+        "FOOD": "It is a dish: do you want to publish your restaurant's menu, or are you "
+        "looking for food?",
+        "MENU": "It is a menu: do you want to publish your restaurant's menu of the day?",
+        "LODGING": "It is a lodging: do you want to rent it out? Tell me which place it is.",
+        "DOCUMENT": "It is an ID document: did you find it, or lose yours?",
+        "PORTRAIT": "Is it for your dating profile?",
+    },
+}
+
+
 def media_kept_text(
-    *, count: int, photos_only: bool, listing_started: bool, language: str
+    *,
+    count: int,
+    photos_only: bool,
+    listing_started: bool,
+    language: str,
+    subject: str | None = None,
 ) -> str:
     """Sent before any listing exists: kept, and said to be kept."""
     words = _MEDIA_TEXT.get(language, _MEDIA_TEXT["fr"])
-    return words["kept" if listing_started else "kept_first"].format(
-        count=_amount(words, count=count, photos_only=photos_only)
-    )
+    amount = _amount(words, count=count, photos_only=photos_only)
+    if listing_started:
+        return words["kept"].format(count=amount)
+    question = _SUBJECT_QUESTION.get(language, _SUBJECT_QUESTION["fr"]).get(subject or "")
+    if question is None:
+        return words["kept_first"].format(count=amount)
+    received = "Bien reçu" if language != "en" else "Received"
+    return f"{received} ({amount}) 👍 {question}"
 
 
 def kept_media_published_text(*, count: int, photos_only: bool, language: str) -> str:

@@ -43,6 +43,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     FormFiller,
     IdiaAgent,
     IntentModel,
+    PhotoTriage,
     PropertyListing,
     PropertySearchGateway,
     ResponseModel,
@@ -152,6 +153,7 @@ class AnalyseConversationMessageUseCase:
         agent: ConversationAgent | None = None,
         form_filler: FormFiller | None = None,
         idia: IdiaAgent | None = None,
+        triage: PhotoTriage | None = None,
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -173,6 +175,7 @@ class AnalyseConversationMessageUseCase:
             unlock_payments=unlock_payments,
             demands=demands,
             follow_up=follow_up,
+            triage=triage,
         )
         self._applier = TurnApplier(
             uow,

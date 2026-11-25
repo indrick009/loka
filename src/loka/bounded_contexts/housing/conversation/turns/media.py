@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from loka.bounded_contexts.conversation.application.ports import PropertyListing
+from loka.bounded_contexts.conversation.application.ports import PhotoTriage, PropertyListing
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.session_writer import (  # noqa: E501
     SessionWriter,
 )
@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     )
 
 _logger = get_logger(__name__)
+# What the photos sent with no task show, once looked at.
+_SUBJECT_KEY = "_photo_subject"
 
 # What each WhatsApp kind becomes on a listing. A voice note or a sticker is
 # absent on purpose: both used to be filed as photos of the lodging.
@@ -80,9 +82,15 @@ def refused_media(session: ConversationSession, *, kind: MessageKind, refused: s
 
 
 class ListingMedia:
-    def __init__(self, listing: PropertyListing | None, writer: SessionWriter) -> None:
+    def __init__(
+        self,
+        listing: PropertyListing | None,
+        writer: SessionWriter,
+        triage: PhotoTriage | None = None,
+    ) -> None:
         self._listing = listing
         self._writer = writer
+        self._triage = triage
 
     async def read(
         self,
@@ -174,13 +182,23 @@ class ListingMedia:
             *(earlier if isinstance(earlier, list) else []),
             {"key": object_key, "kind": kind},
         ]
-        session.merge_context({PENDING_MEDIA_KEY: kept}, now=now)
+        started = session.flow in LISTING_FLOWS
+        subject = session.context.get(_SUBJECT_KEY)
+        if not started and kind == "PHOTO" and subject is None and self._triage is not None:
+            # The first photo of an album says what it is about: a dish is not
+            # a lodging to rent.
+            subject = await self._triage.subject(object_key) or "OTHER"
+        update: dict[str, object] = {PENDING_MEDIA_KEY: kept}
+        if isinstance(subject, str):
+            update[_SUBJECT_KEY] = subject
+        session.merge_context(update, now=now)
         await self._writer.save(session, observed=observed)
         return media_kept_text(
             count=len(kept),
             photos_only=all(item.get("kind") == "PHOTO" for item in kept),
-            listing_started=session.flow in LISTING_FLOWS,
+            listing_started=started,
             language=session.language,
+            subject=subject if isinstance(subject, str) else None,
         )
 
     async def attach_kept(

@@ -35,6 +35,9 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.application.use_cases.voice_platform_reply import (
     VoicePlatformReplyUseCase,
 )
+from loka.bounded_contexts.conversation.infrastructure.adapters.photo_triage import (
+    OpenRouterPhotoTriage,
+)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
@@ -158,6 +161,7 @@ def analyse_conversation_message_use_case(
         response_model=model,
         budget=budget_policy(settings),
         provider_name=settings.ai.provider,
+        triage=photo_triage(settings),
         # The one write the analysis triggers: a confirmed listing becomes a
         # property draft. Injected here so the pipeline depends on the port.
         listing=create_property_from_conversation_use_case(uow),
@@ -243,6 +247,13 @@ def match_judge(settings: Settings) -> OpenRouterMatchJudge | None:
     if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
         return None
     return OpenRouterMatchJudge(settings.ai)
+
+
+def photo_triage(settings: Settings) -> OpenRouterPhotoTriage | None:
+    """Says what a photo sent with no task shows; none without a model."""
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterPhotoTriage(settings.ai, S3MediaStorage(settings.object_storage))
 
 
 def photo_judge(settings: Settings) -> OpenRouterPhotoJudge | None:

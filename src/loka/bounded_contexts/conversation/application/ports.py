@@ -61,6 +61,19 @@ class ResponseModel(Protocol):
     async def generate_response(self, prompt: Prompt) -> LlmResponse: ...
 
 
+# What a photo sent with no task in progress shows.
+PHOTO_SUBJECTS = ("FOOD", "MENU", "LODGING", "DOCUMENT", "PORTRAIT", "OTHER")
+
+
+class PhotoTriage(Protocol):
+    """Says what a photo shows, so idia asks the right question about it.
+
+    ``None`` when it cannot tell: the question is then a neutral one.
+    """
+
+    async def subject(self, object_key: str) -> str | None: ...
+
+
 class PropertyListing(Protocol):
     """Turns a confirmed listing conversation into a real property draft.
 

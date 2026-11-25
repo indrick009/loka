@@ -14,6 +14,7 @@ from loka.bounded_contexts.conversation.application.ports import (
     AvailabilityAnswers,
     AvailabilityRequests,
     DemandFollowUp,
+    PhotoTriage,
     PropertyListing,
     TenantDemands,
     UnlockPayments,
@@ -85,10 +86,11 @@ class HousingTurns:
         unlock_payments: UnlockPayments | None = None,
         demands: TenantDemands | None = None,
         follow_up: DemandFollowUp | None = None,
+        triage: PhotoTriage | None = None,
     ) -> None:
         self._writer = writer
         self._classifier = classifier
-        self.media = ListingMedia(listing, writer)
+        self.media = ListingMedia(listing, writer, triage)
         self._listing = LandlordListing(listing, self.media, writer)
         self._availability = LandlordAvailability(availability)
         self._search = TenantSearch(demands, availability_requests)
