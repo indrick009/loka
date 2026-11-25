@@ -153,6 +153,14 @@ def photo_refused(reason: str | None, language: str) -> str:
     )
 
 
+def no_follow_up(other: Profile) -> str:
+    """To a member whose yes got a no: the fact, never the word « refused »."""
+    return (
+        f"{other.first_name} n'a pas donné suite 💛 Ce n'était peut-être pas la bonne personne. "
+        "Tu veux voir d'autres profils ? Écris « rencontre » et je t'en présente."
+    )
+
+
 def photo_updated(language: str) -> str:
     return (
         "📸 Ta photo de profil est mise à jour."

@@ -376,6 +376,10 @@ class DatingTurns:
             now=turn.now,
         )
         if not answer:
+            if await self._store.likes(other.profile_id, member.profile_id):
+                # They said yes and wait: told now, never left with a yes that
+                # gets no answer (decision of 25 Nov 2026), never « refused ».
+                await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)
             return await self._propose(turn, desk, member, prefix=texts.passed(lang))
         their_answer = await self._store.likes(other.profile_id, member.profile_id)
         if their_answer:
