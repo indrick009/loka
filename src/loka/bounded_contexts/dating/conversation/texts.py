@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from loka.bounded_contexts.conversation.application.services.complaints import report_hint
 from loka.bounded_contexts.dating.domain.profile import Profile
+from loka.shared.domain.pricing import DATING_UNLOCK, DATING_UNLOCK_SHOWN
 
 
 def _fr(language: str) -> bool:
@@ -311,12 +312,13 @@ def match(other: Profile, language: str) -> str:
         return (
             f"C'est un match ! {other.first_name} ({other.age} ans, {other.city}) a dit oui "
             "aussi. idia ne donne jamais un contact sans l'accord des deux : c'est le "
-            "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : 500 FCFA (promo -50 %) par "
-            "Mobile Money sur ce numéro, ou envoie le numéro à utiliser."
+            "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : "
+            + DATING_UNLOCK_SHOWN
+            + " par Mobile Money sur ce numéro, ou envoie le numéro à utiliser."
         )
     return (
         f"It's a match! {other.first_name} ({other.age}, {other.city}) said yes too. "
-        "Reply PAY to get their WhatsApp number: 500 FCFA by Mobile Money."
+        "Reply PAY to get their WhatsApp number: " + DATING_UNLOCK + " by Mobile Money."
     )
 
 
@@ -336,7 +338,7 @@ def match_waiting(other: Profile, language: str) -> str:
 
 def unlock_sent(phone: str) -> str:
     return (
-        f"J'ai envoyé la demande de paiement de 500 FCFA au {phone}. Valide-la sur ton "
+        f"J'ai envoyé la demande de paiement de {DATING_UNLOCK} au {phone}. Valide-la sur ton "
         "téléphone : je t'envoie son numéro dès que c'est fait."
     )
 
@@ -350,7 +352,7 @@ def unlock_later() -> str:
 
 
 def pay_or_not() -> str:
-    return "Réponds PAYER pour obtenir son numéro (500 FCFA, promo -50 %), ou NON."
+    return f"Réponds PAYER pour obtenir son numéro ({DATING_UNLOCK_SHOWN}), ou NON."
 
 
 def in_relation(language: str) -> str:

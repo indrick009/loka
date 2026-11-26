@@ -1,4 +1,4 @@
-"""Tell a tenant his 500 FCFA withdrawal did not go through.
+"""Tell a tenant his fee withdrawal did not go through.
 
 A failed payment is not a dead end: nothing was debited, so the honest move is
 to say so and put him back on the step that reads his retry. The ``_unlock``

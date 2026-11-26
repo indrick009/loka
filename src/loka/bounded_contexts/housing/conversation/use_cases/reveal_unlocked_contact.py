@@ -1,4 +1,4 @@
-"""Send the tenant what the 500 FCFA bought, once the provider has settled.
+"""Send the tenant what the fee bought, once the provider has settled.
 
 This is the only place the landlord's number and the lodging's location are
 handed over, and it runs only after a ``PaymentSucceeded``. Nothing of the

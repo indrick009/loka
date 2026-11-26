@@ -102,6 +102,7 @@ from loka.bounded_contexts.reviews_complaints.domain.value_objects.provider impo
 from loka.bounded_contexts.reviews_complaints.infrastructure.composition import (
     introduction_directory,
 )
+from loka.shared.domain.pricing import LODGING_FEE_XAF
 from loka.shared.infrastructure.config.settings import Settings
 from loka.shared.infrastructure.db.engine import Database
 from loka.shared.infrastructure.db.unit_of_work import SqlAlchemyUnitOfWork
@@ -193,7 +194,7 @@ def initiate_service_fee_use_case(
         # The catalogue's answer to Payment's own question, and the only thing
         # Payment learns about a listing.
         availability=ListingAvailabilityReader(uow),
-        service_fee_xaf=settings.payment.service_fee_xaf,
+        service_fee_xaf=LODGING_FEE_XAF,
     )
 
 

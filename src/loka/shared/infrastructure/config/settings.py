@@ -211,7 +211,7 @@ class FapshiSettings(BaseModel):
 
 
 class PaymentSettings(BaseModel):
-    service_fee_xaf: int = 500
+    # Prices are in ``loka.shared.domain.pricing`` (PRICES__* in the .env).
     webhook_secret: SecretStr = SecretStr("change-me")
     gateway: str = "mock"
     callback_tolerance_seconds: int = 300

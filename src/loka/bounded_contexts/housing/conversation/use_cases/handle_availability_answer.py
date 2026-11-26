@@ -3,7 +3,7 @@
 The tenant chose a lodging and is waiting on the owner's word; this is what
 that word does to his thread.
 
-*Confirmed* — the offer of the 500 FCFA unlock is written, preceded by what
+*Confirmed* — the offer of the paid unlock is written, preceded by what
 the landlord said to the tenant's terms when they were put to him (§8), and the session is
 moved to ``CONFIRM_PAYMENT`` with the (tenant, listing) pair kept under
 ``_unlock`` so the next message is read as his answer to the offer and not as a

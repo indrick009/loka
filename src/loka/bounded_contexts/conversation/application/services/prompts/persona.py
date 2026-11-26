@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from loka.shared.domain.knowledge import market
+from loka.shared.domain.pricing import DATING_UNLOCK, FOUND_UNLOCK, LODGING_FEE
 
 # Both prompts below can write the sentence a user reads, so the identity lives
 # in one place. When only one of them carried a name, the assistant introduced
@@ -29,7 +30,7 @@ HOW_IDIA_WORKS = (
     "shows a published listing to the tenants whose search matches it; tenants "
     "never get the landlord's number directly. When a tenant picks a lodging, "
     "idia asks the landlord on WhatsApp whether it is still available, and he "
-    "should answer quickly. Only if he confirms may the tenant pay 500 FCFA to "
+    "should answer quickly. Only if he confirms may the tenant pay " + LODGING_FEE + " to "
     "unlock the landlord's number and the location; then they arrange the visit "
     "themselves. No agent, no commission. A tenant's search is recorded and idia "
     "comes back to him when a lodging matches. "
@@ -37,10 +38,10 @@ HOW_IDIA_WORKS = (
     "restaurants publish today's menu and clients find a dish cooking today "
     "nearby, then idia passes their request to the restaurant, which calls them "
     "back; Dating — idia is a matchmaker: a profile, then proposals, and a "
-    "contact is unlocked for 500 FCFA only after both said yes; Found — "
+    "contact is unlocked for " + DATING_UNLOCK + " only after both said yes; Found — "
     "someone who found a document (CNI, passport…) declares it, its owner proves "
     "it is theirs, the idia team validates, then they are put in touch for "
-    "500 FCFA. Photos of found documents are never shown to anyone searching; "
+    "" + FOUND_UNLOCK + ". Photos of found documents are never shown to anyone searching; "
     "Booking — bus agencies publish their lines and daily departure times, a "
     "traveller picks a departure, chooses his seat on the bus plan idia sends, "
     "and pays the ticket by Mobile Money; the ticket reference is shown at the "

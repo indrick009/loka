@@ -157,7 +157,7 @@ class AvailabilityRequests(Protocol):
 
 
 class UnlockRequestOutcome(StrEnum):
-    """What asking for the 500 FCFA produced, in the terms the reply needs."""
+    """What asking for the fee produced, in the terms the reply needs."""
 
     REQUESTED = "REQUESTED"
     ALREADY_UNLOCKED = "ALREADY_UNLOCKED"
@@ -187,7 +187,7 @@ class UnlockPayments(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class UnlockedContact:
-    """What the 500 FCFA buys, once it is settled: a number and a place.
+    """What the fee buys, once it is settled: a number and a place.
 
     The landlord's number, read aloud on the phone; a label for the lodging as
     the tenant already saw it; and the point when the listing has one. All three

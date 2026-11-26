@@ -48,6 +48,7 @@ from loka.bounded_contexts.housing.conversation.texts.conversation_copy import (
     search_unavailable_text,
 )
 from loka.shared.domain.knowledge import market
+from loka.shared.domain.pricing import LODGING_FEE
 
 # What the tenant is asked, glossed for the model — the four questions of
 # Housing §6 and nothing else.
@@ -64,7 +65,7 @@ _FIELD_GLOSS: dict[str, str] = {
 
 SEARCH_FIELDS: tuple[str, ...] = tuple(name for name, _ in SEARCH_REQUIREMENTS)
 
-# The 500 FCFA unlock may always be named; it is idia's own price.
+# The paid unlock may always be named; it is idia's own price.
 _ALWAYS_ALLOWED_AMOUNTS = frozenset({1000})
 _HISTORY_LIMIT = 30
 # More model requests than this in one turn is a loop: it fails over to the pipeline.
@@ -158,7 +159,7 @@ def describe_facts(facts: dict[str, Any]) -> dict[str, Any]:
 _INSTRUCTIONS = """\
 You are idia, a WhatsApp assistant in Cameroon. Here you help a tenant find a \
 lodging. idia connects tenants and landlords directly: once the landlord \
-confirms the lodging is still available, the tenant pays 500 FCFA to receive \
+confirms the lodging is still available, the tenant pays """ + LODGING_FEE + """ to receive \
 the landlord's number and the exact location. No agency fee, no visit fee.
 
 How you work:

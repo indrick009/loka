@@ -35,6 +35,7 @@ from loka.bounded_contexts.conversation.application.ports import IdiaState
 from loka.bounded_contexts.housing.conversation.facts import FactExtractor
 from loka.shared.domain.knowledge.how_idia_works import GUIDE_TEXT
 from loka.shared.domain.knowledge.where import place_from
+from loka.shared.domain.pricing import LODGING_FEE, restaurant_offer
 
 DOUALA = timezone(timedelta(hours=1))
 TURN_LIMITS = UsageLimits(request_limit=6)
@@ -116,9 +117,10 @@ never ask_team.
 - Someone who wants to publish, promote or boost his activity, business or \
 services without saying which ("tu peux faire la promotion de mes activités ?", \
 "vous publiez ?", "booster ma visibilité"): answer yourself (act answer). Say \
-that idia can, for free during the launch promotion, publish a restaurant's \
+that idia can publish a restaurant's \
 menu of the day so the hungry people around see it and order (visibility of \
-the restaurant). Publishing a lodging to rent and registering a travel agency \
+the restaurant; """ + restaurant_offer("en") + """). Publishing a lodging to \
+rent and registering a travel agency \
 are not open yet (closed on 26 Nov 2026). A restaurant: other_service, idia \
 starts his registration.
 - Someone who wants to publish a lodging to rent (owner or real-estate agency) \
@@ -444,7 +446,7 @@ def describe(state: IdiaState) -> str:
                 "facts are the tenant's answers, never the landlord's. Say the "
                 "landlord decides them: once the tenant picks a number, idia asks "
                 "the landlord whether it is still free, then the tenant gets his "
-                "number for 500 FCFA and asks him directly. Never promise that "
+                "number for " + LODGING_FEE + " and asks him directly. Never promise that "
                 "idia will ask the landlord anything else."
             )
     return "\n".join(lines)

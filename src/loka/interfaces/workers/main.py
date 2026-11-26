@@ -78,7 +78,7 @@ async def run() -> None:
     booking_task = asyncio.create_task(
         booking_payments.sweep_forever(database, settings), name="booking-payments"
     )
-    # A validated 500 FCFA unlock hands over the two contacts.
+    # A validated paid unlock hands over the two contacts.
     unlock_task = asyncio.create_task(
         unlock_payments.sweep_forever(database, settings), name="unlock-payments"
     )

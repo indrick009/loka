@@ -4,14 +4,14 @@ Nothing of his triggered this message: a listing went live, or his own search
 found something a moment after the thread acknowledged it. So it is staged on
 the thread he last used, and his session is moved to the step that reads his
 answer — the choice step that leads on to the availability check and the
-500 FCFA unlock. Without that move his "1" would be read as a fresh message
+paid unlock. Without that move his "1" would be read as a fresh message
 and the lodgings he was just sent would name nothing.
 
 His session is only taken over while it is still his search. A tenant who has
 since started something else — publishing a lodging of his own — still gets
 the message, but his form is not torn up to read a digit he may never send.
 
-A tenant waiting on an owner's answer, or on the 500 FCFA offer, is not
+A tenant waiting on an owner's answer, or on the fee offer, is not
 interrupted at all: a new list would turn his "oui" to the payment into a
 choice. ``TenantBusy`` asks the caller to try again later.
 """

@@ -8,6 +8,8 @@ described here that the platform does not do is a promise idia breaks.
 
 from __future__ import annotations
 
+from loka.shared.domain.pricing import DATING_PACK, DATING_UNLOCK, FOUND_UNLOCK, LODGING_FEE
+
 GUIDE = {
     "Documents perdus et trouvés": (
         "Only DOCUMENTS: CNI, passport, driving licence, student card, other official "
@@ -17,7 +19,7 @@ GUIDE = {
         "written on it, where and when, a photo); it stays hidden from everyone. Someone "
         "who lost one declares it too; when a declared document may be theirs, they must "
         "prove it is theirs with what only the owner knows; the idia team checks the "
-        "proof. Only then the owner gets the finder's number for 500 FCFA by Mobile "
+        "proof. Only then the owner gets the finder's number for " + FOUND_UNLOCK + " by Mobile "
         "Money, to arrange the handover. idia never confirms a name or that a document "
         "was found before that check."
     ),
@@ -25,7 +27,7 @@ GUIDE = {
         "A tenant gives four things: the kind of lodging, where, the maximum monthly rent, "
         "the months of advance he can pay. idia sends the lodgings that match; he picks "
         "one; idia asks the landlord whether it is still free; once confirmed, the tenant "
-        "gets the landlord's number and the exact place for 500 FCFA by Mobile Money. "
+        "gets the landlord's number and the exact place for " + LODGING_FEE + " by Mobile Money. "
         "Nothing is paid before the landlord confirms. A lease of a few months is an "
         "ordinary lodging: the landlord sets the minimum duration. A landlord publishes for free: "
         "kind, place, rent, conditions, photos. The landlord decides the visit, deposit "
@@ -37,8 +39,8 @@ GUIDE = {
         "read by idia only, never shown. idia never shows a list of members (« montre-moi "
         "les filles de Bafoussam »): it proposes one person at a time, of the other "
         "sex; when both say yes, they ask each other questions through idia (10 messages "
-        "and 5 photos each, 10 more for 500 FCFA with PLUS), numbers hidden. When both "
-        "confirm, it is a match: for now only the man unlocks it, for 500 FCFA, and "
+        "and 5 photos each, 10 more for " + DATING_PACK + " with PLUS), numbers hidden. When both "
+        "confirm, it is a match: for now only the man unlocks it, for " + DATING_UNLOCK + ", and "
         "both get each other's number; the woman never pays for it. Then both leave the "
         "proposals until one says it did not work out. A new photo sent replaces the "
         "profile photo; it must show the member, of the sex declared. To delete the "

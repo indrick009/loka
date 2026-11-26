@@ -199,7 +199,7 @@ def analyse_conversation_message_use_case(
         demands=ConversationTenantDemands(uow),
         # A month on, his "oui"/"non" to "cherchez-vous toujours ?".
         follow_up=ConversationDemandFollowUp(uow),
-        # The 500 FCFA unlock: the tenant's yes becomes a withdrawal request.
+        # The paid unlock: the tenant's yes becomes a withdrawal request.
         # The conversation depends on the act of asking, not on Payment's use
         # case, and settlement stays out of it — only the provider's callback
         # releases the contact.

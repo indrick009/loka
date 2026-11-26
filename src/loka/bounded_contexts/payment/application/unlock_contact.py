@@ -1,4 +1,4 @@
-"""Ask a payer's phone for the 500 FCFA that unlocks someone's contact."""
+"""Ask a payer's phone for the fee that unlocks someone's contact."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Protocol
 
 from loka.bounded_contexts.payment.domain.contact_unlock import (
     DATING_PLUS,
-    UNLOCK_FEE_XAF,
     ContactUnlock,
+    fee_for,
 )
 
 _NO = ("non", "no", "pas maintenant", "plus tard", "annule")
@@ -61,7 +61,7 @@ class UnlockContact:
         unlock_id = uuid.uuid4()
         reference = await self._payments.request(
             reservation_id=unlock_id,
-            amount_xaf=UNLOCK_FEE_XAF,
+            amount_xaf=fee_for(purpose),
             payer_phone=payer_phone,
             label=(
                 "idia - questions supplementaires"

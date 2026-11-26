@@ -29,10 +29,10 @@ from loka.bounded_contexts.conversation.infrastructure.messaging_composition imp
 )
 from loka.interfaces.http.container import get_container
 from loka.shared.domain.errors import AuthorizationDenied, ValidationFailed
+from loka.shared.domain.pricing import AGENCY_SEAT_XAF
 from loka.shared.infrastructure.composition import unit_of_work
 
 router = APIRouter(tags=["agencies"])
-DEFAULT_COMMISSION_XAF = 200
 _PAGE = (Path(__file__).parent.parent / "pages" / "agency.html").read_text(encoding="utf-8")
 
 
@@ -77,7 +77,7 @@ async def register(body: Registration, request: Request) -> dict[str, str]:
             raise ValidationFailed("une agence existe déjà avec ce numéro")
         agency = Agency(
             uuid.uuid4(), " ".join(body.name.split()), phone, _digest(key),
-            DEFAULT_COMMISSION_XAF, now,
+            AGENCY_SEAT_XAF, now,
         )
         desk = ConversationDesk(uow, uow.repository(CONVERSATION_SESSION_REPOSITORY))
         # The key goes to the agency's own WhatsApp, never back to the form:

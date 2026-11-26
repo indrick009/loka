@@ -11,6 +11,7 @@ from loka.bounded_contexts.food.domain.menu import MenuDish
 from loka.bounded_contexts.food.domain.restaurant import DishOffer
 from loka.shared.domain.knowledge.nearby import reach
 from loka.shared.domain.knowledge.where import place_label
+from loka.shared.domain.pricing import restaurant_offer
 
 
 def _fr(language: str) -> bool:
@@ -58,12 +59,10 @@ def registered(name: str, place: dict[str, Any], language: str) -> str:
     where = place_label(place)
     if _fr(language):
         return (
-            f"Ton restaurant « {name} » est enregistré ({where}). "
-            "La publication est gratuite pendant la promotion de lancement 🎉"
+            f"Ton restaurant « {name} » est enregistré ({where}). {restaurant_offer('fr')}"
         )
     return (
-        f"Your restaurant \"{name}\" is registered ({where}). "
-        "Publishing is free during the launch promotion 🎉"
+        f"Your restaurant \"{name}\" is registered ({where}). {restaurant_offer('en')}"
     )
 
 
@@ -100,8 +99,7 @@ def menu_live(name: str, dishes: Sequence[MenuDish], language: str) -> str:
             f"Ton menu du jour est en ligne ({name}) :\n{lines}\n\n"
             "Tous les clients qui cherchent à manger près de toi le voient jusqu'à minuit, "
             "et leurs commandes t'arrivent ici. Pour en avoir plus : publie ton menu chaque "
-            "jour, tôt le matin, avec une photo de chaque plat. La publication est gratuite "
-            "pendant la promotion de lancement 🎉\n"
+            f"jour, tôt le matin, avec une photo de chaque plat. {restaurant_offer('fr')}\n"
             "Un plat à changer ? Écris-le avec son prix (« eru 1 500 »), ou « le ndolè est "
             "fini »."
         )
@@ -109,7 +107,7 @@ def menu_live(name: str, dishes: Sequence[MenuDish], language: str) -> str:
         f"Your menu of the day is live ({name}):\n{lines}\n\n"
         "Every client looking for food near you sees it until midnight, and their orders "
         "reach you here. For more: publish every day, early, with a photo of each dish. "
-        "Publishing is free during the launch promotion 🎉"
+        + restaurant_offer("en")
     )
 
 

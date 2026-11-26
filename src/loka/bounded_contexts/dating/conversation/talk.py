@@ -452,7 +452,7 @@ class DatingTalk:
     async def _buy(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, talk: Talk
     ) -> TurnOutcome:
-        """The 500 FCFA for another pack of messages and photos."""
+        """The the fee for another pack of messages and photos."""
         if self._unlock is None:
             return await self._reply(turn, desk, talk, other, talk_texts.plus_unavailable(other))
         payer = payer_answer(turn.text, turn.session.phone.e164)

@@ -217,7 +217,7 @@ def _apply_facts(prop: Property, facts: Mapping[str, Any], *, now: datetime) -> 
         neighbourhood = location.get("neighbourhood")
         # A shared pin makes the location exact rather than merely
         # neighbourhood-level, and that precision is what the tenant is paying
-        # 500 FCFA to receive — so it has to survive into the listing.
+        # the fee to receive — so it has to survive into the listing.
         coordinates = _coordinates_of(location)
         guard(
             lambda: prop.set_location(

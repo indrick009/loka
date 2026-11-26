@@ -189,7 +189,7 @@ class TenantSearch:
         actually happens (housing spec §9).
 
         A number naming nothing is re-asked rather than resolved to the nearest
-        listing: charging 500 FCFA for a lodging the tenant never saw is
+        listing: charging the fee for a lodging the tenant never saw is
         worse than one more question. The one exception is a *single* result —
         there, "je prends" names the only lodging there is.
         """

@@ -856,7 +856,7 @@ class DatingTurns:
     async def _pay(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, matched: uuid.UUID
     ) -> TurnOutcome:
-        """The 500 FCFA unlock, only ever offered after both said yes."""
+        """The paid unlock, only ever offered after both said yes."""
         other = await self._store.profile(matched)
         if other is None or self._unlock is None:
             return await self._propose(turn, desk, member, prefix="")

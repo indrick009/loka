@@ -81,7 +81,7 @@ def _build_choice(raw: Any) -> int:
 
     Bounded by what was actually shown: a tenant answering "7" to a list of
     three has not chosen anything, and resolving it to the nearest listing
-    would charge him 500 FCFA for a lodging he never saw.
+    would charge him the fee for a lodging he never saw.
     """
     choice = _as_int(raw)
     if not 1 <= choice <= MAX_RESULT_CHOICES:
