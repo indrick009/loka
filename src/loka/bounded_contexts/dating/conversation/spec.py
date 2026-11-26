@@ -146,6 +146,10 @@ RULES = (
     "sought: age_min / age_max (« plus de 26 ans », « entre 25 et 35 », « pas plus "
     "de 40 ans »), read from the description too, or ages_any for « peu importe » "
     "when the open question is the age; it may be changed later too. "
+    "Once the profile exists, a member who says what they want in the other — "
+    "looks, character, passions, religion, age… (« je veux une fille brune de 18 à "
+    "23 ans, timide, qui aime danser ») — is DATING_PROFILE with 'wishes_text': "
+    "their words, unchanged (and age_min / age_max when an age is said). "
     "Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
     "to another member, and never say what someone looks like or is from it. "
@@ -190,6 +194,7 @@ ENTITIES: dict[str, Any] = {
     "inappropriate": {"type": "boolean"},
     "addressee": {"type": "string", "enum": list(ADDRESSEES)},
     "relay_text": {"type": "string"},
+    "wishes_text": {"type": "string"},
 }
 
 
@@ -234,6 +239,9 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
             rejected["description"] = "too short"
     if entities.get("addressee") in ADDRESSEES:
         facts["addressee"] = entities["addressee"]
+    wishes = text_of(entities.get("wishes_text"), longest=400)
+    if wishes and len(wishes) >= 4:
+        facts["wishes_text"] = wishes
     relay_text = text_of(entities.get("relay_text"), longest=600)
     if relay_text:
         facts["relay_text"] = relay_text

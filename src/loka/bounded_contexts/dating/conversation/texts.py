@@ -94,6 +94,12 @@ def trait_noted(language: str) -> str:
     return "Merci, c'est noté 💛" if _fr(language) else "Thanks, noted 💛"
 
 
+def wishes_noted(language: str) -> str:
+    if _fr(language):
+        return "C'est noté 💛 J'en tiens compte pour les prochaines personnes que je te présente."
+    return "Noted 💛 I'll take it into account for the next people I introduce."
+
+
 def ages_noted(language: str) -> str:
     return (
         "C'est noté, je ne te propose que des personnes de l'âge que tu cherches."

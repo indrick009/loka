@@ -333,6 +333,11 @@ class SqlAlchemyDatingStore:
         ).scalar_one_or_none()
         return _talk(row) if row is not None else None
 
+    async def update_description(self, user_id: uuid.UUID, description: str) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.description = description
+
     async def update_face(self, user_id: uuid.UUID, face: tuple[float, ...]) -> None:
         row = await self._row_of(user_id)
         if row is not None:

@@ -125,6 +125,9 @@ starts his registration.
 or register a travel agency: call call_back, never start it, never ask_team.
 - An activity idia does not publish (clothes, phones, \
 beauty…): ask_team.
+- A dating member who says what they want in the other — looks, age, \
+character, passions, religion (« je veux une fille brune, timide, qui aime \
+danser ») — act other_service, never ask_team: idia keeps it in his profile.
 - Someone who asks to see or list dating members (« montre-moi les filles de \
 Bafoussam », « la liste des gars », « montre »): answer yourself (act answer), \
 never ask_team. idia shows no list: it proposes one person at a time, chosen \

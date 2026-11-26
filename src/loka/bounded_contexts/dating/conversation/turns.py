@@ -211,6 +211,9 @@ class DatingTurns:
                 await self._store.update_looking(user, wanted)
                 member = replace(member, looking=wanted)
                 return await self._propose(turn, desk, member, prefix="")
+        wishes = turn.facts.get("wishes_text")
+        if isinstance(wishes, str) and question in (None, BACK_KEY, LIKE_KEY):
+            return await self._more_wishes(turn, desk, member, wishes)
         ages = turn.facts.get("ages")
         if isinstance(ages, dict) and question in (None, BACK_KEY, LIKE_KEY):
             # « J'ai dit plus de 26 ans »: the range is kept, and the next person
@@ -325,6 +328,24 @@ class DatingTurns:
             return member
         await self._store.update_attributes(member.user_id, reading.traits, reading.wishes)
         return replace(member, traits=reading.traits, wishes=reading.wishes)
+
+    async def _more_wishes(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, wishes: str
+    ) -> TurnOutcome:
+        """What the member wants, said after the profile: kept with their words
+        and read again into wishes (see ``attributes``). « Une fille brune,
+        timide, qui aime danser » was handed to the team (journal of 26 Nov
+        2026, 11:43)."""
+        if wishes not in member.description:
+            description = f"{member.description}\nCe que je recherche aussi : {wishes}"
+            await self._store.update_description(member.user_id, description)
+            member = await self._read(replace(member, description=description))
+        ages = turn.facts.get("ages")
+        if isinstance(ages, dict) and (ages.get("min") is not None or ages.get("max") is not None):
+            low, high = ages.get("min"), ages.get("max")
+            await self._store.update_ages(member.user_id, low, high)
+            member = replace(member, age_min=low, age_max=high)
+        return await self._propose(turn, desk, member, prefix=texts.wishes_noted(turn.language))
 
     async def _read_face(self, member: Profile) -> Profile:
         """The face of the photo as a vector (see ``faces``); unchanged without."""

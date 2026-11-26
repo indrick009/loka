@@ -98,6 +98,9 @@ class DatingStore(Protocol):
         """``(waiting, silent)``: yeses given between ``since`` and ``before`` the
         other never answered."""
 
+    async def update_description(self, user_id: uuid.UUID, description: str) -> None:
+        """The member's own words, completed with what they added later."""
+
     async def update_face(self, user_id: uuid.UUID, face: tuple[float, ...]) -> None: ...
 
     async def all_answers(self) -> dict[uuid.UUID, list[tuple[uuid.UUID, bool]]]:
