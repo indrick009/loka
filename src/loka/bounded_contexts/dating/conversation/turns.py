@@ -23,6 +23,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
 )
 from loka.bounded_contexts.dating.conversation import texts
 from loka.bounded_contexts.dating.conversation.keys import (
+    ASKED_TRAIT,
     BACK_KEY,
     LIKE_KEY,
     MATCH_KEY,
@@ -31,11 +32,17 @@ from loka.bounded_contexts.dating.conversation.keys import (
     RELAY_KEY,
     TALK_ID,
     TALK_KEY,
+    TRAIT_KEY,
     UNLOCK_KEY,
 )
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk, ThreadOf
-from loka.bounded_contexts.dating.domain.attributes import BASE_KEYS
+from loka.bounded_contexts.dating.domain.attributes import (
+    ASKABLE,
+    ASKED_PREFIX,
+    BASE_KEYS,
+    missing_fact,
+)
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
@@ -143,6 +150,10 @@ class DatingTurns:
         if member is None:
             return await self._register(turn, desk, user)
         question = turn.session.context.get("next_question")
+        if question == TRAIT_KEY and not turn.fresh:
+            answered = await self._trait(turn, desk, member)
+            if answered is not None:
+                return answered
         photo = turn.facts.get("photo")
         if not member.photo_key and not turn.session.context.get(TALK_ID):
             # No valid photo, no activation: the photo comes first.
@@ -229,6 +240,43 @@ class DatingTurns:
                 await self._store.save_talk(talk)
             await self._store.withdraw(user)
         return await self._close(turn, desk, texts.withdrawn(turn.language))
+
+    async def _ask_missing(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile
+    ) -> None:
+        """Ask ``other`` a plain fact ``member``'s wishes need and their profile
+        lacks, once, when they are free: the next rankings can use it. The
+        proposal never waits on it."""
+        key = missing_fact(member.all_wishes(), other.all_traits())
+        if key is None or await desk.busy(other.user_id, now=turn.now):
+            return
+        marked = {**other.traits, f"{ASKED_PREFIX}{key}": "1"}
+        await self._store.update_attributes(other.user_id, marked, other.wishes)
+        await desk.notify(
+            other.user_id,
+            texts.trait_question(ASKABLE[key]),
+            now=turn.now,
+            steer=Steer(
+                flow=FlowName.DATING_PROFILE,
+                step=FlowStep.COLLECT_CHOICE,
+                question_key=TRAIT_KEY,
+                context={ASKED_TRAIT: key},
+            ),
+        )
+
+    async def _trait(self, turn: PlugTurn, desk: PlugDesk, member: Profile) -> TurnOutcome | None:
+        """The answer to ``_ask_missing``'s question, kept as the member's trait.
+
+        ``None`` when the message is something else (a question back, a photo):
+        the turn goes on as usual."""
+        key = turn.session.context.get(ASKED_TRAIT)
+        text = " ".join((turn.text or "").split())
+        if not isinstance(key, str) or not text or "?" in text or len(text) > 80:
+            return None
+        await self._store.update_attributes(
+            member.user_id, {**member.traits, key: text}, member.wishes
+        )
+        return await self._close(turn, desk, texts.trait_noted(turn.language))
 
     async def _read(self, member: Profile) -> Profile:
         """What the member is and wants, read once from the profile (see
@@ -400,6 +448,7 @@ class DatingTurns:
                 context={"rencontres": state or "aucune demande en cours", "_quiet": quiet + 1},
             )
         other, score, why = await self._best(member, ranked, refusals)
+        await self._ask_missing(turn, desk, member, other)
         await desk.settle(
             turn,
             step=FlowStep.COLLECT_CHOICE,

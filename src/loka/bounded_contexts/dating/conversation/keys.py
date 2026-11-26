@@ -15,6 +15,9 @@ RELAY_KEY = DATING.question_key("relay")
 PENDING_RELAY = "_relay"
 # In a relation: whether it worked out, or back to the proposals.
 BACK_KEY = DATING.question_key("back")
+# A plain fact about the member another's wish needs (see ``attributes``).
+TRAIT_KEY = DATING.question_key("trait")
+ASKED_TRAIT = "_trait"
 
 PROPOSED_KEY = "_proposed"
 MATCH_KEY = "_match"

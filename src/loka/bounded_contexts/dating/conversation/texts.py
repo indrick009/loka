@@ -60,6 +60,14 @@ def yes_or_no_to(other: Profile, language: str) -> str:
     return f"Just reply YES if {other.first_name} interests you, or NO."
 
 
+def trait_question(question: str) -> str:
+    return f"Petite question pour que je te propose les bonnes personnes 💛 : {question}"
+
+
+def trait_noted(language: str) -> str:
+    return "Merci, c'est noté 💛" if _fr(language) else "Thanks, noted 💛"
+
+
 def ages_noted(language: str) -> str:
     return (
         "C'est noté, je ne te propose que des personnes de l'âge que tu cherches."

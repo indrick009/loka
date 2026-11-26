@@ -39,6 +39,34 @@ BASE_KEYS: dict[str, str] = {
     "ville": "ville où la personne vit",
 }
 
+# Facts a member can simply be asked when another's wish needs them and their
+# profile does not say (decision of 26 Nov 2026). Asked neutrally: never what
+# the other is looking for, or the answer would bend to it.
+ASKABLE: dict[str, str] = {
+    "religion": "tu es de quelle religion ? (ou « aucune »)",
+    "enfants": "as-tu des enfants ? (non, ou combien)",
+    "veut_enfants": "veux-tu des enfants plus tard ?",
+    "tabac": "est-ce que tu fumes ?",
+    "alcool": "est-ce que tu bois de l'alcool ? (non, un peu, oui)",
+    "taille": "tu mesures combien ? (par exemple 1m75)",
+    "situation": "quelle est ta situation : célibataire, divorcé(e), veuf/veuve… ?",
+}
+ASKED_PREFIX = "_asked_"
+
+
+def missing_fact(wishes: tuple[Wish, ...], traits: Mapping[str, str]) -> str | None:
+    """The first askable key a wish needs that ``traits`` neither holds nor was
+    already asked for."""
+    for wish in wishes:
+        if (
+            wish.key in ASKABLE
+            and not traits.get(wish.key)
+            and f"{ASKED_PREFIX}{wish.key}" not in traits
+        ):
+            return wish.key
+    return None
+
+
 # How much one satisfied or contradicted preference moves the ranking, next
 # to word affinity (rarely above 0.3) and the age weight (0.5).
 PREFER_WEIGHT = 0.3
