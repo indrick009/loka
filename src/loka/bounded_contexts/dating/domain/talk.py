@@ -27,6 +27,9 @@ class Side:
     photos: int = 0
     packs: int = 1
     confirmed: bool = False
+    # When this member last wrote, sent a photo or confirmed (epoch seconds):
+    # whoever acted last waits on the other (see ``Talk.waiting``).
+    last_at: int = 0
 
     @property
     def messages_left(self) -> int:
@@ -65,6 +68,17 @@ class Talk:
         if self.first.confirmed and self.second.confirmed:
             self.status = MATCHED
         return self.status == MATCHED
+
+    def acted(self, profile_id: uuid.UUID, *, now: datetime) -> None:
+        self.side(profile_id).last_at = int(now.timestamp())
+
+    def waiting(self) -> tuple[Side, Side] | None:
+        """``(waiting, silent)``: the member who acted last and has had no word
+        back since, and the one he waits on; ``None`` while nobody waits."""
+        first, second = self.first, self.second
+        if first.last_at == second.last_at:
+            return None
+        return (first, second) if first.last_at > second.last_at else (second, first)
 
     def close(self) -> None:
         self.status = CLOSED

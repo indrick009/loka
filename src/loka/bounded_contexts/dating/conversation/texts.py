@@ -302,3 +302,24 @@ def stay_in_relation(language: str) -> str:
     if _fr(language):
         return "Super, je vous souhaite le meilleur ! Écris-moi si ça change."
     return "Great, all the best to you both! Write to me if that changes."
+
+
+def still_waiting_yes(silent: list[str]) -> str:
+    """Yeses left unanswered for hours: nobody is held waiting (26 Nov 2026)."""
+    names = _names(silent, True)
+    verb = "n'a" if len(silent) == 1 else "n'ont"
+    return (
+        f"{names} {verb} pas encore répondu 💛 Tu n'as pas besoin d'attendre : "
+        "écris « rencontre » et je te présente d'autres profils en attendant. "
+        "Dès qu'une réponse arrive, je te préviens."
+    )
+
+
+def still_waiting_talk(silent: Profile, *, confirmed: bool) -> str:
+    """A talk where the other has not answered for hours."""
+    what = "à ton CONFIRMER" if confirmed else "à ton dernier message"
+    return (
+        f"{silent.first_name} n'a pas encore répondu {what}. Votre discussion reste "
+        "ouverte. Si tu préfères découvrir d'autres profils, dis-le-moi : je fermerai "
+        "cette discussion et je t'en présente d'autres."
+    )

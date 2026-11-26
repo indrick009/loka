@@ -16,6 +16,7 @@ from loka.bounded_contexts.conversation.infrastructure.composition import valida
 from loka.interfaces.worker.maintenance_desk import replay_forever
 from loka.interfaces.workers import (
     booking_payments,
+    dating_nudges,
     housing_payments,
     menu_reminders,
     openrouter_watch,
@@ -106,6 +107,11 @@ async def run() -> None:
         openrouter_watch.watch_forever(database, settings), name="openrouter-watch"
     )
 
+    # Whoever waits on a silent match is offered other profiles.
+    nudges_task = asyncio.create_task(
+        dating_nudges.sweep_forever(database, settings), name="dating-nudges"
+    )
+
     try:
         await stop.wait()
     finally:
@@ -119,6 +125,7 @@ async def run() -> None:
             menu_task,
             maintenance_task,
             openrouter_task,
+            nudges_task,
         ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

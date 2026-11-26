@@ -78,5 +78,13 @@ class DatingStore(Protocol):
 
     async def save_talk(self, talk: Talk) -> None: ...
 
+    async def open_talks(self) -> list[Talk]: ...
+
+    async def unanswered_yeses(
+        self, before: datetime, since: datetime
+    ) -> list[tuple[Profile, Profile]]:
+        """``(waiting, silent)``: yeses given between ``since`` and ``before`` the
+        other never answered."""
+
     async def liked_by_both(self, profile_id: uuid.UUID) -> list[uuid.UUID]:
         """Profiles that liked this member and that he liked back, oldest first."""

@@ -290,6 +290,7 @@ class DatingTalk:
         if side.messages_left <= 0:
             return await self._reply(turn, desk, talk, other, talk_texts.used_up(other, "messages"))
         side.sent += 1
+        talk.acted(member.profile_id, now=turn.now)
         await self._store.save_talk(talk)
         await desk.notify(other.user_id, talk_texts.relayed(member, text[:LONGEST]), now=turn.now)
         return await self._reply(
@@ -311,6 +312,7 @@ class DatingTalk:
         if side.photos_left <= 0:
             return await self._reply(turn, desk, talk, other, talk_texts.used_up(other, "photos"))
         side.photos += 1
+        talk.acted(member.profile_id, now=turn.now)
         await self._store.save_talk(talk)
         await desk.notify(
             other.user_id,
@@ -326,6 +328,7 @@ class DatingTalk:
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, talk: Talk
     ) -> TurnOutcome:
         matched = talk.confirm(member.profile_id)
+        talk.acted(member.profile_id, now=turn.now)
         await self._store.save_talk(talk)
         if not matched:
             await desk.notify(other.user_id, talk_texts.they_confirmed(member), now=turn.now)

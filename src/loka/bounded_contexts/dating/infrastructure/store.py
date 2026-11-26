@@ -49,6 +49,7 @@ def _side(profile_id: uuid.UUID, raw: dict[str, int]) -> Side:
         photos=int(raw.get("photos", 0)),
         packs=int(raw.get("packs", 1)),
         confirmed=bool(raw.get("confirmed", 0)),
+        last_at=int(raw.get("last_at", 0)),
     )
 
 
@@ -58,6 +59,7 @@ def _raw(side: Side) -> dict[str, int]:
         "photos": side.photos,
         "packs": side.packs,
         "confirmed": int(side.confirmed),
+        "last_at": side.last_at,
     }
 
 
@@ -322,6 +324,38 @@ class SqlAlchemyDatingStore:
         row.first_side = _raw(talk.first)
         row.second_side = _raw(talk.second)
         await self._session.flush()
+
+    async def open_talks(self) -> list[Talk]:
+        rows = await self._session.execute(
+            select(DatingTalkRow).where(DatingTalkRow.status == OPEN)
+        )
+        return [_talk(row) for row in rows.scalars()]
+
+    async def unanswered_yeses(
+        self, before: datetime, since: datetime
+    ) -> list[tuple[Profile, Profile]]:
+        """``(waiting, silent)``: a yes given before ``before`` that the other,
+        still active, has neither answered nor turned into a talk."""
+        back = aliased(DatingAnswerRow)
+        rows = await self._session.execute(
+            select(DatingAnswerRow.from_profile, DatingAnswerRow.to_profile).where(
+                DatingAnswerRow.liked.is_(True),
+                DatingAnswerRow.created_at < before,
+                DatingAnswerRow.created_at >= since,
+                ~select(back.id)
+                .where(
+                    back.from_profile == DatingAnswerRow.to_profile,
+                    back.to_profile == DatingAnswerRow.from_profile,
+                )
+                .exists(),
+            )
+        )
+        pairs: list[tuple[Profile, Profile]] = []
+        for waiting_id, silent_id in rows.all():
+            waiting, silent = await self.profile(waiting_id), await self.profile(silent_id)
+            if waiting is not None and silent is not None:
+                pairs.append((waiting, silent))
+        return pairs
 
     async def liked_by_both(self, profile_id: uuid.UUID) -> list[uuid.UUID]:
         mine = aliased(DatingAnswerRow)

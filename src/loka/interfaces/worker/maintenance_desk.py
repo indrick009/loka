@@ -145,7 +145,10 @@ async def replay_once(database: Database, redis: Redis) -> int:
             found = [await uow.session.get(InboundMessageRow, i) for i in ids]
             rows = [row for row in found if row is not None]
             texts = [row for row in rows if row.media_object_key is None]
-            wanted = [row for row in rows if row.media_object_key is not None] + texts[-1:]
+            # « Bonjour » then « 👀 »: the closing is not what awaits an answer
+            # (26 Nov 2026, two users got nothing back).
+            said = [row for row in texts if not is_closing(row.text)] or texts
+            wanted = [row for row in rows if row.media_object_key is not None] + said[-1:]
             for row in sorted(wanted, key=lambda r: r.received_at):
                 uow.events.stage(
                     [
