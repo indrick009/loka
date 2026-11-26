@@ -61,6 +61,25 @@ class _Nudge:
     steer: Steer | None = None
 
 
+async def _still_waiting(
+    store: SqlAlchemyDatingStore, now: datetime, since: datetime
+) -> list[tuple[Profile, Profile]]:
+    """Yeses unanswered for an hour whose giver still waits: not one matched
+    since, nor one talking with someone else. Eva, matched with Ismaël, would
+    have been put before Dave as « quelqu'un qui t'attend » (26 Nov 2026)."""
+    matched_after = now - timedelta(days=MATCH_QUIET_DAYS)
+    pairs = []
+    for waiting, silent in await store.unanswered_yeses(
+        now - timedelta(minutes=ASK_AFTER_MINUTES), since
+    ):
+        if await store.matched_since(waiting.profile_id, matched_after):
+            continue
+        if await store.open_talk_of(waiting.profile_id) is not None:
+            continue
+        pairs.append((waiting, silent))
+    return pairs
+
+
 async def _silent_side(
     store: SqlAlchemyDatingStore, redis: Redis, now: datetime
 ) -> list[_Nudge]:
@@ -70,9 +89,7 @@ async def _silent_side(
     nudges: list[_Nudge] = []
     asked: set[str] = set()
     since = now - timedelta(days=LOOK_BACK_DAYS)
-    for waiting, silent in await store.unanswered_yeses(
-        now - timedelta(minutes=ASK_AFTER_MINUTES), since
-    ):
+    for waiting, silent in await _still_waiting(store, now, since):
         sid = str(silent.profile_id)
         # One person at a time: a second proposal would take the first one's place.
         if sid in asked or await redis.exists(_ASKED_KEY.format(silent=sid)):
@@ -129,12 +146,7 @@ async def nudge_once(database: Database, redis: Redis, *, now: datetime) -> int:
             )
         # Members someone said yes to, still unanswered: Morel, in a talk
         # Margaret left, is told someone else waits for him.
-        wanted = {
-            silent.profile_id
-            for _, silent in await store.unanswered_yeses(
-                now - timedelta(minutes=ASK_AFTER_MINUTES), since
-            )
-        }
+        wanted = {silent.profile_id for _, silent in await _still_waiting(store, now, since)}
         for talk in await store.open_talks():
             pair = talk.waiting()
             if pair is None or pair[0].last_at > int(cutoff.timestamp()):
