@@ -121,7 +121,7 @@ class Profile:
 
     def looks_like(self, other: Profile) -> bool:
         """Another number, but seemingly the same person: same first name, sex
-        and age (± 1), and the same work or town. Evrad, 24, carreleur, had a
+        and age, and the same work or town. Evrad, 24, carreleur, had a
         profile in Dschang and another in Bafoussam (26 Nov 2026)."""
         first = normalize(self.first_name).split()[:1]
         return (
@@ -129,7 +129,7 @@ class Profile:
             and bool(first)
             and first == normalize(other.first_name).split()[:1]
             and other.sex == self.sex
-            and abs(other.age - self.age) <= 1
+            and other.age == self.age
             and (
                 normalize(other.profession) == normalize(self.profession)
                 or normalize(other.city) == normalize(self.city)
