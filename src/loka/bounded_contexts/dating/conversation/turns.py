@@ -463,7 +463,17 @@ class DatingTurns:
         if other is None:
             return await self._propose(turn, desk, member, prefix="")
         if answer is None:
-            return say(texts.yes_or_no(lang), question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE)
+            # The person proposed, again, with the photo: rewritten by the model,
+            # the bare « réponds OUI ou NON » became « voici quelqu'un qui
+            # pourrait te plaire » with no name and no photo (Dave, « rencontre »,
+            # journal of 26 Nov 2026, 07:42).
+            return say(
+                texts.proposal(other, lang),
+                question=LIKE_KEY,
+                step=FlowStep.COLLECT_CHOICE,
+                voiced=False,
+                media=other.photo_key or None,
+            )
         raw_score = turn.session.context.get("_score")
         score = float(raw_score) if isinstance(raw_score, int | float) else 0.0
         return await self._decide(turn, desk, member, other, liked=answer, score=score)
