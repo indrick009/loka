@@ -22,6 +22,20 @@ def inappropriate(language: str) -> str:
     return "Your description cannot be accepted as it is. Please rephrase it simply."
 
 
+def looks_like_another(language: str) -> str:
+    """Said once, when the new profile resembles one already registered."""
+    if _fr(language):
+        return (
+            "⚠️ Ton profil ressemble beaucoup à un profil déjà inscrit avec un autre "
+            "numéro. C'est un seul compte par personne : si nous constatons que les "
+            "deux sont à toi, les deux comptes seront supprimés."
+        )
+    return (
+        "⚠️ Your profile looks a lot like one already registered with another number. "
+        "It's one account per person: if we find both are yours, both will be deleted."
+    )
+
+
 def ready(language: str) -> str:
     if _fr(language):
         return "Ton profil est prêt !"

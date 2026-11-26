@@ -53,6 +53,7 @@ from loka.bounded_contexts.dating.domain.talk import CLOSED
 from loka.bounded_contexts.dating.domain.talk_reader import TalkReader
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
+from loka.shared.infrastructure.conversation_log import journal
 
 # Never taken from a passing remark: the description is asked with its privacy
 # promise. Where to look is kept when said, and still asked after the
@@ -400,7 +401,14 @@ class DatingTurns:
         )
         await self._store.add(member)
         member = await self._read(member)
-        return await self._propose(turn, desk, member, prefix=texts.ready(lang))
+        prefix = texts.ready(lang)
+        twin = next((o for o in await self._store.members() if member.looks_like(o)), None)
+        if twin is not None:
+            # Warned now; the team deletes both if they prove to be one person
+            # (decision of 26 Nov 2026).
+            journal("dating_lookalike", str(user), twin=str(twin.user_id))
+            prefix = f"{texts.looks_like_another(lang)}\n\n{prefix}"
+        return await self._propose(turn, desk, member, prefix=prefix)
 
     async def _propose(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, *, prefix: str

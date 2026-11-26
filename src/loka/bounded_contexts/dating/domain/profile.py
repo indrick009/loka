@@ -119,6 +119,23 @@ class Profile:
             self.age_max is None or other.age <= self.age_max
         )
 
+    def looks_like(self, other: Profile) -> bool:
+        """Another number, but seemingly the same person: same first name, sex
+        and age (± 1), and the same work or town. Evrad, 24, carreleur, had a
+        profile in Dschang and another in Bafoussam (26 Nov 2026)."""
+        first = normalize(self.first_name).split()[:1]
+        return (
+            other.user_id != self.user_id
+            and bool(first)
+            and first == normalize(other.first_name).split()[:1]
+            and other.sex == self.sex
+            and abs(other.age - self.age) <= 1
+            and (
+                normalize(other.profession) == normalize(self.profession)
+                or normalize(other.city) == normalize(self.city)
+            )
+        )
+
     def could_meet(self, other: Profile) -> bool:
         """Both ways: the sex each seeks, and each lives where the other looks.
 
