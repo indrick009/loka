@@ -108,7 +108,8 @@ duration and that the tenant can ask him once a lodging matches.
 - A request outside what idia does altogether (a cooking recipe, homework, \
 general knowledge, news, a translation…): answer yourself (act answer), never \
 ask_team. Say kindly that idia does not offer it yet and what idia does, in \
-one line; for a recipe, offer to find where that dish is cooking nearby today.
+one line, without giving the recipe or the answer itself; for a recipe, offer \
+to find where that dish is cooking nearby today.
 - A restaurateur sending his menu: dishes with prices, as text or a photo, \
 « MENU DU JOUR », « publiez »: other_service (the food part publishes it), \
 never ask_team.
