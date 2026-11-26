@@ -39,9 +39,10 @@ BASE_KEYS: dict[str, str] = {
     "ville": "ville où la personne vit",
 }
 
-# Facts a member can simply be asked when another's wish needs them and their
-# profile does not say (decision of 26 Nov 2026). Asked neutrally: never what
-# the other is looking for, or the answer would bend to it.
+# Facts a member is asked after saying yes to someone whose wishes need them,
+# when their profile does not say (decision of 26 Nov 2026). Asked neutrally:
+# never what the other is looking for, or the answer would bend to it. The
+# obvious is never asked: everyone here is looking, so « célibataire ? » is not.
 ASKABLE: dict[str, str] = {
     "religion": "tu es de quelle religion ? (ou « aucune »)",
     "enfants": "as-tu des enfants ? (non, ou combien)",
@@ -49,7 +50,6 @@ ASKABLE: dict[str, str] = {
     "tabac": "est-ce que tu fumes ?",
     "alcool": "est-ce que tu bois de l'alcool ? (non, un peu, oui)",
     "taille": "tu mesures combien ? (par exemple 1m75)",
-    "situation": "quelle est ta situation : célibataire, divorcé(e), veuf/veuve… ?",
 }
 ASKED_PREFIX = "_asked_"
 

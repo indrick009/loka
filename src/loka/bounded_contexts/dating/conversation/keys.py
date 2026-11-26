@@ -18,6 +18,8 @@ BACK_KEY = DATING.question_key("back")
 # A plain fact about the member another's wish needs (see ``attributes``).
 TRAIT_KEY = DATING.question_key("trait")
 ASKED_TRAIT = "_trait"
+# Whose yes waits on that answer: the person the member said yes to.
+FOR_KEY = "_trait_for"
 
 PROPOSED_KEY = "_proposed"
 MATCH_KEY = "_match"

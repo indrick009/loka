@@ -25,6 +25,7 @@ from loka.bounded_contexts.dating.conversation import texts
 from loka.bounded_contexts.dating.conversation.keys import (
     ASKED_TRAIT,
     BACK_KEY,
+    FOR_KEY,
     LIKE_KEY,
     MATCH_KEY,
     PLUS_KEY,
@@ -41,6 +42,7 @@ from loka.bounded_contexts.dating.domain.attributes import (
     ASKABLE,
     ASKED_PREFIX,
     BASE_KEYS,
+    fit,
     missing_fact,
 )
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
@@ -242,27 +244,29 @@ class DatingTurns:
             await self._store.withdraw(user)
         return await self._close(turn, desk, texts.withdrawn(turn.language))
 
-    async def _ask_missing(
-        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile
-    ) -> None:
-        """Ask ``other`` a plain fact ``member``'s wishes need and their profile
-        lacks, once, when they are free: the next rankings can use it. The
-        proposal never waits on it."""
-        key = missing_fact(member.all_wishes(), other.all_traits())
-        if key is None or await desk.busy(other.user_id, now=turn.now):
-            return
-        marked = {**other.traits, f"{ASKED_PREFIX}{key}": "1"}
-        await self._store.update_attributes(other.user_id, marked, other.wishes)
-        await desk.notify(
-            other.user_id,
-            texts.trait_question(ASKABLE[key]),
-            now=turn.now,
-            steer=Steer(
-                flow=FlowName.DATING_PROFILE,
-                step=FlowStep.COLLECT_CHOICE,
-                question_key=TRAIT_KEY,
-                context={ASKED_TRAIT: key},
-            ),
+    async def _questions_first(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, score: float
+    ) -> TurnOutcome | None:
+        """After a yes, the plain facts ``other`` asked for (« pas de fumeur »)
+        and ``member``'s profile does not say, one at a time, before ``other``
+        hears of the yes (decision of 26 Nov 2026). Nobody is asked anything
+        a person they like did not care about."""
+        key = missing_fact(other.all_wishes(), member.all_traits())
+        if key is None:
+            return None
+        marked = {**member.traits, f"{ASKED_PREFIX}{key}": "1"}
+        await self._store.update_attributes(member.user_id, marked, member.wishes)
+        await desk.settle(
+            turn,
+            step=FlowStep.COLLECT_CHOICE,
+            question_key=TRAIT_KEY,
+            context={ASKED_TRAIT: key, FOR_KEY: str(other.profile_id), "_score": score},
+        )
+        return say(
+            texts.trait_question_for(other, ASKABLE[key]),
+            question=TRAIT_KEY,
+            step=FlowStep.COLLECT_CHOICE,
+            voiced=False,
         )
 
     async def _trait(self, turn: PlugTurn, desk: PlugDesk, member: Profile) -> TurnOutcome | None:
@@ -274,10 +278,15 @@ class DatingTurns:
         text = " ".join((turn.text or "").split())
         if not isinstance(key, str) or not text or "?" in text or len(text) > 80:
             return None
-        await self._store.update_attributes(
-            member.user_id, {**member.traits, key: text}, member.wishes
-        )
-        return await self._close(turn, desk, texts.trait_noted(turn.language))
+        traits = {**member.traits, key: text}
+        await self._store.update_attributes(member.user_id, traits, member.wishes)
+        raw_for = turn.session.context.get(FOR_KEY)
+        other = await self._store.profile(uuid.UUID(raw_for)) if isinstance(raw_for, str) else None
+        if other is None:
+            return await self._close(turn, desk, texts.trait_noted(turn.language))
+        raw_score = turn.session.context.get("_score")
+        score = float(raw_score) if isinstance(raw_score, int | float) else 0.0
+        return await self._after_yes(turn, desk, replace(member, traits=traits), other, score)
 
     async def _read(self, member: Profile) -> Profile:
         """What the member is and wants, read once from the profile (see
@@ -456,7 +465,6 @@ class DatingTurns:
                 context={"rencontres": state or "aucune demande en cours", "_quiet": quiet + 1},
             )
         other, score, why = await self._best(member, ranked, refusals)
-        await self._ask_missing(turn, desk, member, other)
         await desk.settle(
             turn,
             step=FlowStep.COLLECT_CHOICE,
@@ -621,6 +629,27 @@ class DatingTurns:
                 # gets no answer (decision of 25 Nov 2026), never « refused ».
                 await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)
             return await self._propose(turn, desk, member, prefix=texts.passed(lang))
+        return await self._after_yes(turn, desk, member, other, score)
+
+    async def _after_yes(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, score: float
+    ) -> TurnOutcome:
+        """The questions ``other``'s wishes call for, then the yes goes on."""
+        lang = turn.language
+        asking = await self._questions_first(turn, desk, member, other, score)
+        if asking is not None:
+            return asking
+        if not fit(other.all_wishes(), member.all_traits())[0]:
+            # An answer that contradicts what the other will never accept: the
+            # yes stops here, and the other never hears of it.
+            await self._store.answer(
+                from_profile=member.profile_id,
+                to_profile=other.profile_id,
+                liked=False,
+                score=score,
+                now=turn.now,
+            )
+            return await self._propose(turn, desk, member, prefix=texts.not_for_them(other))
         their_answer = await self._store.likes(other.profile_id, member.profile_id)
         if their_answer:
             # Both said yes: their questions first, the match once both confirm.

@@ -74,8 +74,20 @@ def yes_or_no_to(other: Profile, language: str) -> str:
     return f"Just reply YES if {other.first_name} interests you, or NO."
 
 
-def trait_question(question: str) -> str:
-    return f"Petite question pour que je te propose les bonnes personnes 💛 : {question}"
+def trait_question_for(other: Profile, question: str) -> str:
+    """Asked after a yes, before ``other`` hears of it."""
+    return (
+        f"C'est noté pour {other.first_name} 💛 Pour être sûr que ça peut marcher entre "
+        f"vous, une petite question : {question}"
+    )
+
+
+def not_for_them(other: Profile) -> str:
+    """The answer contradicts what ``other`` will never accept: said kindly."""
+    return (
+        f"Merci pour ta réponse 🙏 D'après ce que {other.first_name} recherche, ça ne "
+        "pourra malheureusement pas coller entre vous. Je ne lui transmets pas ton oui."
+    )
 
 
 def trait_noted(language: str) -> str:
