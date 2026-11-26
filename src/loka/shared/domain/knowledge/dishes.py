@@ -81,11 +81,26 @@ DISHES: tuple[Dish, ...] = (
     Dish("water_fufu", "Water fufu", ("water fufu", "waterfufu", "fufu")),
     Dish("garri", "Garri", ("garri", "tapioca")),
     Dish("bhb", "Beignets haricots bouillie", ("bhb", "beignet haricot", "beignets haricots")),
-    Dish("riz", "Riz", ("riz", "riz sauce", "riz gras", "riz jollof", "jollof")),
+    # Complete plates of rice: « Fried rice au poulet » was asked its
+    # accompaniment (journal of 26 Nov 2026, 11:31).
+    Dish("fried_rice", "Fried rice", (
+        "fried rice", "riz saute", "riz sautee", "riz cantonais", "riz frit",
+    )),
+    Dish("jollof", "Jollof rice", ("jollof", "jollof rice", "riz jollof", "riz gras")),
+    Dish("riz", "Riz", ("riz", "riz sauce", "rice", "white rice")),
+    # From the research of 26 Nov 2026 (anglophone and western plates).
+    Dish("kati_kati", "Kati kati", ("kati kati", "katikati"), ("corn fufu", "njama njama")),
+    Dish("corn_chaff", "Corn chaff", ("corn chaff", "cornchaff", "corn chap")),
+    Dish("kwacoco", "Kwacoco", ("kwacoco", "kwacoco bible")),
+    Dish("banga", "Banga soup", ("banga", "mbanga", "banga soup", "mbanga soup"), ("kwacoco",)),
+    Dish("egusi", "Egusi", ("egusi", "egusi soup", "pistache"), ("water fufu", "garri")),
+    Dish("mbol", "Mbol", ("mbol",), ("plantain", "manioc")),
+    Dish("njapche", "Njapche", ("njapche", "njapchet"), ("macabo", "taro")),
+    Dish("bouillon", "Bouillon", ("bouillon de poisson", "bouillon de silure", "bouillon")),
     Dish("plantain", "Plantains", ("plantain", "plantains", "alloco", "frites de plantain")),
     Dish("spaghetti", "Omelette spaghetti", ("omelette spaghetti", "spaghetti", "spag")),
     Dish("haricot", "Haricots", ("haricot", "haricots"), ("riz", "plantain", "beignets")),
-    Dish("pepper_soup", "Pepper soup", ("pepper soup", "bouillon", "soupe")),
+    Dish("pepper_soup", "Pepper soup", ("pepper soup", "soupe")),
     Dish("chawarma", "Chawarma", ("chawarma", "shawarma")),
     Dish("poulet", "Poulet", ("poulet",), _BRAISE),
     Dish("poisson", "Poisson", ("poisson",), _BRAISE),
@@ -96,7 +111,9 @@ SIDE_WORDS = (
     "plantain", "plantains", "alloco", "baton", "batons", "bobolo", "miondo", "manioc",
     "riz", "couscous", "fufu", "garri", "tapioca", "macabo", "taro", "igname", "patate",
     "patates", "frites", "pain", "pomme", "pommes", "beignet", "beignets", "complement",
-    "complements", "accompagnement",
+    "complements", "accompagnement", "rice", "fried", "jollof", "chips", "fries", "yam",
+    "bread", "fufu", "kwacoco", "attieke", "spaghetti", "pates", "macaroni", "pile",
+    "pilees", "kumkum",
 )
 _SIDES = re.compile(rf"\b({'|'.join(SIDE_WORDS)})\b")
 

@@ -29,3 +29,7 @@ class MenuReading:
 class MenuReader(Protocol):
     async def read(self, object_key: str, caption: str | None = None) -> MenuReading | None:
         """``None`` when the photo could not be read (no model, provider down)."""
+
+    async def lacking_sides(self, names: list[str]) -> list[tuple[str, list[str]]] | None:
+        """The dishes named whose plate does not say what it is eaten with, each
+        with the usual accompaniments; ``None`` when the model cannot answer."""

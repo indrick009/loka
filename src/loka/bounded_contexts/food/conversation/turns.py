@@ -61,6 +61,7 @@ class FoodTurns:
     ) -> None:
         self._store = store
         self._name_of = name_of
+        self._reader = reader
         self._photos = DishPhotos(store, reader)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
@@ -69,6 +70,29 @@ class FoodTurns:
         if turn.flow is FlowName.FOOD_RESTAURANT:
             return await self._restaurateur(turn, desk, turn.session.user_id)
         return await self._client(turn, desk, turn.session.user_id)
+
+    async def _sides_question(self, menu: DailyMenu, language: str) -> str:
+        """Which accompaniment a sauce comes with, when the menu does not say.
+
+        The model decides, knowing Cameroonian plates: the dish table asked
+        « Fried rice au poulet » its accompaniment (journal of 26 Nov 2026,
+        11:31). The table answers only when the model cannot.
+        """
+        dishes = menu.open_dishes()
+        lacking = (
+            await self._reader.lacking_sides([dish.name for dish in dishes])
+            if self._reader is not None and dishes
+            else None
+        )
+        if lacking is None:
+            if any(is_side(dish.name) and needs_side(dish.name) is None for dish in dishes):
+                return ""
+            lacking = [
+                (dish.name, list(plate.sides))
+                for dish in dishes
+                if (plate := needs_side(dish.name))
+            ]
+        return "\n\n" + texts.ask_sides(lacking, language) if lacking else ""
 
     async def _ask(
         self, turn: PlugTurn, desk: PlugDesk, name: str, prefix: str = ""
@@ -138,7 +162,7 @@ class FoodTurns:
             return await self._ask(turn, desk, "dishes", f"{prefix} {hint}".strip())
         menu = await self._publish(restaurant, dishes, turn)
         text = texts.menu_published(restaurant.name, menu.open_dishes(), lang)
-        text += _sides_question(menu, lang)
+        text += await self._sides_question(menu, lang)
         return await self._complete(turn, desk, menu, f"{prefix}\n{text}".strip())
 
     async def _publish(
@@ -190,7 +214,7 @@ class FoodTurns:
             text = texts.menu_published(restaurant.name, menu.open_dishes(), lang)
             if outcome.unpriced:
                 text += "\n\n" + texts.unpriced_left_out(outcome.unpriced, lang)
-            text += _sides_question(menu, lang)
+            text += await self._sides_question(menu, lang)
             return await self._complete(turn, desk, menu, text)
         if outcome.ask_dishes:
             return await self._ask(turn, desk, "dishes", outcome.text)
@@ -545,19 +569,6 @@ _NO = ("non", "no", "laisse", "pas", "trop loin")
 COMPLETE_KEY = FOOD.question_key("complete")
 COMPLETING, NEEDS, SKIPPED = "_completing", "_needs", "_skipped"
 _SKIP = re.compile(r"\b(passer|passe|pas de photo|je n en ai pas|plus tard|suivant)\b")
-
-
-def _sides_question(menu: DailyMenu, language: str) -> str:
-    """Which accompaniment a sauce comes with, when the menu does not say.
-
-    Nothing when the menu lists its accompaniments apart (« couscous maïs
-    500 »): the client picks them there.
-    """
-    dishes = menu.open_dishes()
-    if any(is_side(dish.name) and needs_side(dish.name) is None for dish in dishes):
-        return ""
-    lacking = [(dish.name, plate.sides) for dish in dishes if (plate := needs_side(dish.name))]
-    return "\n\n" + texts.ask_sides(lacking, language) if lacking else ""
 
 
 def _yes_no(turn: PlugTurn) -> bool | None:

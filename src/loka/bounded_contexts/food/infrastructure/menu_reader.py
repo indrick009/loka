@@ -44,6 +44,24 @@ _PROMPT = (
 )
 
 
+# Whether a menu line needs its accompaniment said (decision of 26 Nov 2026):
+# « Fried rice au poulet » was asked « avec quoi le sers-tu ? ».
+_SIDES_PROMPT = (
+    "Tu connais la cuisine camerounaise (ndolè, eru, okok, koki, achu, mbongo, nkui, "
+    "kondrè, sanga, ekwang, kwacoco, banga soup, corn chaff, kati kati, poulet DG, soya, "
+    "fried rice, jollof, riz sauté, omelette spaghetti, bouillons, brochettes, poisson ou "
+    "poulet braisé…). Pour chaque plat de ce menu, dis s'il manque l'accompagnement : "
+    "seulement quand le nom désigne une sauce ou une viande qu'on mange avec autre chose "
+    "(plantain, bâton de manioc, riz, couscous, water fufu, frites…) et que le nom ne le "
+    "dit pas. Un plat complet en lui-même (fried rice, jollof, poulet DG, riz sauté, "
+    "spaghetti, bouillon, soupe, soya, salade, beignets-haricots), un accompagnement vendu "
+    "seul, une boisson, un dessert ou un produit vendu cru ou au kilo n'en manque pas. Si "
+    "le menu liste ses accompagnements à part, aucun plat n'en manque. Réponds en JSON : "
+    '{"lacking": [{"name": "nom exact du plat", "sides": ["2 à 4 accompagnements '
+    'habituels"]}]}, une liste vide si aucun.'
+)
+
+
 class OpenRouterMenuReader:
     def __init__(
         self, settings: AISettings, storage: S3MediaStorage, record: RecordUsage | None = None
@@ -67,22 +85,37 @@ class OpenRouterMenuReader:
                 return _reading(payload)
         return None
 
+    async def lacking_sides(self, names: list[str]) -> list[tuple[str, list[str]]] | None:
+        menu = "\n".join(f"- {name}" for name in names)
+        for model in dict.fromkeys((self._settings.default_model, self._settings.fallback_model)):
+            payload = await self._post(
+                model, [{"role": "user", "content": f"{_SIDES_PROMPT}\n\nMenu :\n{menu}"}]
+            )
+            if payload is None or not isinstance(payload.get("lacking"), list):
+                continue
+            known = set(names)
+            return [
+                (str(item["name"]), [str(side) for side in item.get("sides") or []][:4])
+                for item in payload["lacking"]
+                if isinstance(item, dict) and item.get("name") in known
+            ]
+        return None
+
     async def _ask(self, model: str, image: str, caption: str | None) -> dict[str, Any] | None:
         said = f"\nLégende du restaurateur : « {caption.strip()[:200]} »" if caption else ""
+        content = [
+            {"type": "text", "text": _PROMPT + said},
+            {"type": "image_url", "image_url": {"url": image}},
+        ]
+        return await self._post(model, [{"role": "user", "content": content}])
+
+    async def _post(self, model: str, messages: list[dict[str, Any]]) -> dict[str, Any] | None:
         body = {
             "model": model,
             "temperature": 0,
             "max_tokens": 1500,
             "response_format": {"type": "json_object"},
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": _PROMPT + said},
-                        {"type": "image_url", "image_url": {"url": image}},
-                    ],
-                }
-            ],
+            "messages": messages,
         }
         headers = {"Authorization": f"Bearer {self._settings.api_key.get_secret_value()}"}
         try:
@@ -92,8 +125,8 @@ class OpenRouterMenuReader:
             response.raise_for_status()
             data = response.json()
             await self._usage(model, data, started)
-            content = str(data["choices"][0]["message"]["content"]).strip()
-            parsed = json.loads(content.strip("`").removeprefix("json").strip())
+            text = str(data["choices"][0]["message"]["content"]).strip()
+            parsed = json.loads(text.strip("`").removeprefix("json").strip())
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             _logger.warning("menu_reader_failed", model=model, error=type(exc).__name__)
             return None
