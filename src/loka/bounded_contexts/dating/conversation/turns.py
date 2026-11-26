@@ -57,6 +57,7 @@ from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Prof
 from loka.bounded_contexts.dating.domain.profile_reader import ProfileReader
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import CLOSED
+from loka.bounded_contexts.dating.domain.talk_agent import TalkAgent
 from loka.bounded_contexts.dating.domain.talk_reader import TalkReader
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING as DATING_PURPOSE
@@ -159,6 +160,8 @@ class DatingTurns:
         thread_of: ThreadOf | None = None,
         profiles: ProfileReader | None = None,
         faces: FaceReader | None = None,
+        talk_agent: TalkAgent | None = None,
+        talk_agent_phones: frozenset[str] | None = None,
     ) -> None:
         self._store = store
         self._faces = faces
@@ -167,7 +170,13 @@ class DatingTurns:
         self._photos = photos
         self._profiles = profiles
         self._talk = DatingTalk(
-            store, unlock=unlock, reader=reader, thread_of=thread_of, photos=photos
+            store,
+            unlock=unlock,
+            reader=reader,
+            thread_of=thread_of,
+            photos=photos,
+            agent=talk_agent,
+            agent_phones=talk_agent_phones,
         )
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:

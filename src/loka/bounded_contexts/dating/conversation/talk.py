@@ -37,6 +37,7 @@ from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.relay import gives_contact
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import Talk
+from loka.bounded_contexts.dating.domain.talk_agent import TalkAgent, TalkSituation
 from loka.bounded_contexts.dating.domain.talk_reader import TalkLine, TalkReader, TalkReading
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING_PLUS
@@ -103,9 +104,15 @@ class DatingTalk:
         reader: TalkReader | None = None,
         thread_of: ThreadOf | None = None,
         photos: PhotoCheck | None = None,
+        agent: TalkAgent | None = None,
+        agent_phones: frozenset[str] | None = None,
     ) -> None:
         self._store = store
         self._photos = photos
+        # The model conducts the talk (see ``domain/talk_agent``): for the
+        # numbers in ``agent_phones`` only while it is tried, for all with None.
+        self._agent = agent
+        self._agent_phones = agent_phones
         self._unlock = unlock
         self._reader = reader
         self._thread_of = thread_of
@@ -226,6 +233,12 @@ class DatingTalk:
             )
         if not text:
             return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
+        if self._agent is not None and (
+            self._agent_phones is None or turn.session.phone.e164 in self._agent_phones
+        ):
+            conducted = await self._conduct(turn, desk, member, other, talk, text, propose=propose)
+            if conducted is not None:
+                return conducted
         if _AGREE.match(folded) and await self._offered_to_close(turn):
             # « Oui » to « dis-le-moi : je fermerai ta discussion » closes it;
             # read by the model, it could reach the other as a message.
@@ -280,6 +293,90 @@ class DatingTalk:
                 extra=keep,
             )
         return await self._relay(turn, desk, member, other, talk, words)
+
+    async def _conduct(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        member: Profile,
+        other: Profile,
+        talk: Talk,
+        text: str,
+        *,
+        propose: Propose,
+    ) -> TurnOutcome | None:
+        """The model chooses the move and speaks; this code carries it out.
+        ``None`` when the model cannot be asked: the reading below decides."""
+        assert self._agent is not None
+        pending = turn.session.context.get(PENDING_RELAY)
+        kept = pending if isinstance(pending, str) and pending else None
+        thread = await self._thread_of(turn.session.id) if self._thread_of else []
+        if thread and thread[-1].speaker == "member" and thread[-1].text.strip() == text:
+            thread = thread[:-1]
+        side, them = talk.side(member.profile_id), talk.other(member.profile_id)
+        move = await self._agent.move(
+            TalkSituation(
+                member=member.first_name,
+                other=other.first_name,
+                other_card=(
+                    f"{other.first_name}, {other.age} ans, {other.profession}, "
+                    f"{other.city} ({other.country})"
+                ),
+                thread=thread,
+                message=text,
+                kept=kept,
+                messages_left=side.messages_left,
+                photos_left=side.photos_left,
+                member_confirmed=side.confirmed,
+                other_confirmed=them.confirmed,
+            )
+        )
+        if move is None:
+            return None
+        journal("dating_talk_move", str(member.user_id), move=move.move)
+        if move.move == "CONTACT" or (
+            move.move == "RELAY" and gives_contact(move.relay_text or text)
+        ):
+            return await self._refuse_contact(turn, desk, member, other, talk, text)
+        if move.move == "END":
+            return await self._stop(turn, desk, member, other, talk, propose=propose)
+        if move.move == "CONFIRM":
+            return await self._confirm(turn, desk, member, other, talk)
+        if move.move == "BUY_MORE":
+            if self._unlock is None:
+                return await self._reply(
+                    turn, desk, talk, other, talk_texts.plus_unavailable(other)
+                )
+            return await self._reply(
+                turn, desk, talk, other, talk_texts.plus_offer(other), PLUS_KEY
+            )
+        if move.move == "SHOW_PHOTO" and other.photo_key:
+            # The photo the member was proposed, again: nothing counted.
+            await desk.notify(
+                member.user_id,
+                talk_texts.profile_photo(other),
+                now=turn.now,
+                media_object_key=other.photo_key,
+            )
+            reply = move.reply or talk_texts.profile_photo_sent(other)
+            return await self._reply(turn, desk, talk, other, reply)
+        if move.move == "SEND_KEPT":
+            if kept is None:
+                return await self._reply(turn, desk, talk, other, talk_texts.nothing_to_send(other))
+            if gives_contact(kept):
+                return await self._refuse_contact(turn, desk, member, other, talk, kept)
+            return await self._relay(turn, desk, member, other, talk, kept)
+        if move.move == "DROP_KEPT":
+            return await self._reply(turn, desk, talk, other, talk_texts.kept_back(other))
+        if move.move == "RELAY":
+            words = _words_for(other, text, move.relay_text)
+            return await self._relay(turn, desk, member, other, talk, words)
+        if not move.reply:
+            return None
+        answer = f"{move.reply}\n{talk_texts.not_relayed(other)}"
+        words = _words_for(other, text, None)[:LONGEST]
+        keep = {PENDING_RELAY: words, KEPT_KEY: words} if move.keep else None
+        return await self._reply(turn, desk, talk, other, answer, extra=keep)
 
     async def _refuse_contact(
         self,

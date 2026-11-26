@@ -72,6 +72,17 @@ def relay_or_not(other: Profile, text: str) -> str:
     )
 
 
+def profile_photo(other: Profile) -> str:
+    return f"Photo de profil de {other.first_name}"
+
+
+def profile_photo_sent(other: Profile) -> str:
+    return (
+        f"Voici à nouveau la photo de profil de {other.first_name} 📸 Pour en voir "
+        f"d'autres, demande-les-lui : je lui transmets."
+    )
+
+
 def not_relayed(other: Profile) -> str:
     return f"(Rien n'a été transmis à {other.first_name}.)"
 

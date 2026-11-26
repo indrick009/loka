@@ -11,6 +11,7 @@ one failure mode a cost guard exists to prevent.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -57,6 +58,7 @@ from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMa
 from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
 from loka.bounded_contexts.dating.infrastructure.profile_reader import OpenRouterProfileReader
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
+from loka.bounded_contexts.dating.infrastructure.talk_agent import OpenRouterTalkAgent
 from loka.bounded_contexts.dating.infrastructure.talk_reader import OpenRouterTalkReader
 from loka.bounded_contexts.food.conversation.turns import FoodTurns
 from loka.bounded_contexts.food.infrastructure.menu_reader import OpenRouterMenuReader
@@ -321,6 +323,26 @@ def talk_reader(
     return OpenRouterTalkReader(settings.ai, record)
 
 
+def talk_agent(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterTalkAgent | None:
+    """The model that conducts dating talks, when ``DATING__TALK_AGENT`` is
+    ``test`` or ``on`` (decision of 26 Nov 2026); none otherwise."""
+    if os.environ.get("DATING__TALK_AGENT", "off").strip() not in ("test", "on"):
+        return None
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterTalkAgent(settings.ai, record)
+
+
+def talk_agent_phones() -> frozenset[str] | None:
+    """``test``: only the numbers in ``DATING__TALK_AGENT_PHONES``; ``on``: all."""
+    if os.environ.get("DATING__TALK_AGENT", "off").strip() == "on":
+        return None
+    raw = os.environ.get("DATING__TALK_AGENT_PHONES", "+237692617975")
+    return frozenset(phone.strip() for phone in raw.split(",") if phone.strip())
+
+
 def profile_reader(
     settings: Settings, record: RecordUsage | None = None
 ) -> OpenRouterProfileReader | None:
@@ -364,6 +386,8 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             thread_of=thread_of,
             profiles=profile_reader(settings, record),
             faces=face_reader(S3MediaStorage(settings.object_storage)),
+            talk_agent=talk_agent(settings, record),
+            talk_agent_phones=talk_agent_phones(),
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(
