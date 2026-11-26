@@ -34,7 +34,13 @@ _PROMPT = (
     "tu le reconnais (ndolè, eru, poulet DG, poisson braisé, soya, okok, koki, achu...), "
     "sinon null. MIXED = plusieurs plats ou produits différents sur la même photo "
     "(un étalage, une table garnie, plusieurs pots ou assiettes différents), sans menu "
-    "écrit. OTHER = autre chose. N'invente aucun plat ni prix."
+    "écrit. OTHER = autre chose. N'invente aucun plat ni prix.\n"
+    "Pour DISH, ajoute aussi : 'price' = le prix donné par la légende du restaurateur "
+    "s'il y en a une (« 1000f », « 1000g », « 1 000 », « 1500 frs », « 2 mil » ; un "
+    "nombre seul sous 100 = milliers), sinon null ; et 'description' = une phrase "
+    "courte et appétissante de ce qu'on voit dans l'assiette (ingrédients, "
+    "accompagnement, quantité), sans inventer ce qu'on ne voit pas. Quand la légende "
+    "nomme le plat, 'dish' est ce nom-là, tel qu'écrit, corrigé des fautes de frappe."
 )
 
 
@@ -46,7 +52,7 @@ class OpenRouterMenuReader:
         self._settings = settings
         self._storage = storage
 
-    async def read(self, object_key: str) -> MenuReading | None:
+    async def read(self, object_key: str, caption: str | None = None) -> MenuReading | None:
         try:
             data, content_type = await self._storage.get(object_key)
         except MediaStoreError as exc:
@@ -56,12 +62,13 @@ class OpenRouterMenuReader:
             return None
         image = f"data:{content_type};base64,{base64.b64encode(data).decode()}"
         for model in dict.fromkeys((self._settings.default_model, self._settings.fallback_model)):
-            payload = await self._ask(model, image)
+            payload = await self._ask(model, image, caption)
             if payload is not None:
                 return _reading(payload)
         return None
 
-    async def _ask(self, model: str, image: str) -> dict[str, Any] | None:
+    async def _ask(self, model: str, image: str, caption: str | None) -> dict[str, Any] | None:
+        said = f"\nLégende du restaurateur : « {caption.strip()[:200]} »" if caption else ""
         body = {
             "model": model,
             "temperature": 0,
@@ -71,7 +78,7 @@ class OpenRouterMenuReader:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": _PROMPT},
+                        {"type": "text", "text": _PROMPT + said},
                         {"type": "image_url", "image_url": {"url": image}},
                     ],
                 }
@@ -113,8 +120,12 @@ def _reading(payload: dict[str, Any]) -> MenuReading:
         valid = isinstance(price, int) and not isinstance(price, bool)
         lines.append((str(item["name"]).strip(), price if valid else None))
     dish = payload.get("dish")
+    price = payload.get("price")
+    described = payload.get("description")
     return MenuReading(
         kind=kind if kind in ("MENU", "DISH", "MIXED") else "OTHER",
         lines=lines,
         dish=dish.strip() if isinstance(dish, str) and dish.strip() else None,
+        price=price if isinstance(price, int) and not isinstance(price, bool) else None,
+        description=" ".join(described.split())[:200] if isinstance(described, str) else None,
     )

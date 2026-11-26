@@ -92,17 +92,15 @@ class MenuDish:
         )
 
     def missing(self) -> tuple[str, ...]:
-        """What the dish still lacks to be complete: a photo, a description.
+        """What the dish still lacks to be complete: a photo.
 
-        A dish read on a menu page lacks neither: the page shows and says it.
+        The description is written from the photo (see ``reader``), never asked:
+        « décris ton Fried rice au poulet » was a chore (decision of 26 Nov
+        2026). A dish read on a menu page lacks nothing: the page shows it.
         """
         if self.menu_photo:
             return ()
-        return tuple(
-            need
-            for need, lacking in (("photo", not self.media), ("description", not self.description))
-            if lacking
-        )
+        return ("photo",) if not self.media else ()
 
     def same_line(self, other: str) -> bool:
         """The same menu line, renamed or completed: « ndolè » then « ndolè

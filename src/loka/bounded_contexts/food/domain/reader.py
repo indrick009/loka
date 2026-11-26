@@ -18,10 +18,14 @@ class MenuReading:
     kind: PhotoKind
     # A written menu: each line as read, the price None when none is written.
     lines: list[tuple[str, int | None]] = field(default_factory=list)
-    # A plate: the dish it shows, when recognisable ("ndolè").
+    # A plate: the dish it shows, when recognisable ("ndolè"), or the one the
+    # caption names; the price the caption gives; what the plate holds, in a
+    # sentence, so the restaurateur is never asked to describe it.
     dish: str | None = None
+    price: int | None = None
+    description: str | None = None
 
 
 class MenuReader(Protocol):
-    async def read(self, object_key: str) -> MenuReading | None:
+    async def read(self, object_key: str, caption: str | None = None) -> MenuReading | None:
         """``None`` when the photo could not be read (no model, provider down)."""

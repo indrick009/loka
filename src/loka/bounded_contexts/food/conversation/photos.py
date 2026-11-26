@@ -14,7 +14,7 @@ from datetime import datetime
 
 from loka.bounded_contexts.food.conversation import texts
 from loka.bounded_contexts.food.domain.menu import MAX_MEDIA_PER_DISH, MenuDish, menu_day
-from loka.bounded_contexts.food.domain.reader import MenuReader
+from loka.bounded_contexts.food.domain.reader import MenuReader, MenuReading
 from loka.bounded_contexts.food.domain.restaurant import Restaurant
 from loka.bounded_contexts.food.domain.store import FoodStore
 from loka.shared.domain.errors import DomainError
@@ -22,7 +22,7 @@ from loka.shared.domain.errors import DomainError
 THOUSANDS_BELOW = 100  # "ndolè 2" on a board is 2 000 FCFA
 # A caption naming a dish and its price: « Eru and fufu 1500 », « soya : 1 000 f ».
 _PRICED_CAPTION = re.compile(
-    r"^\s*(?P<name>[^\d]{2,60}?)\s*[:\-\u2013=]?\s*(?P<price>\d[\d\s.]{0,8})\s*(?:f|fcfa|frs?|xaf)?\s*$",
+    r"^\s*(?P<name>[^\d]{2,60}?)\s*[:\-\u2013=]?\s*(?P<price>\d[\d\s.]{0,8})\s*(?:f|fcfa|frs?|xaf|cfa|francs?|g)?\s*$",
     re.IGNORECASE,
 )
 
@@ -57,7 +57,7 @@ class DishPhotos:
         expected: str | None = None,
     ) -> PhotoOutcome:
         reading = (
-            await self._reader.read(media_key)
+            await self._reader.read(media_key, caption)
             if self._reader is not None and kind == "IMAGE"
             else None
         )
@@ -70,22 +70,31 @@ class DishPhotos:
             if dishes:
                 return PhotoOutcome(publish=dishes, unpriced=unpriced)
             return PhotoOutcome(texts.menu_without_prices(unpriced, language), ask_dishes=True)
-        priced = _priced_dish(caption, media_key)
-        if priced is not None:
+        priced = _read_dish(reading, media_key) or _priced_dish(caption, media_key)
+        menu_now = await self._store.menu_of(restaurant.restaurant_id, menu_day(now))
+        if priced is not None and (
+            menu_now is None or not any(item.is_named(priced.name) for item in menu_now.dishes)
+        ):
             # The plate and its price in one message: it is a dish of the menu,
             # with its photo (journal of 5 Nov 2026: « Eru and fufu 1500 » was
             # answered « j'ai bien ta photo, mais pas de menu du jour »).
             return PhotoOutcome(publish=[priced])
-        menu = await self._store.menu_of(restaurant.restaurant_id, menu_day(now))
+        menu = menu_now
         if menu is None:
             return PhotoOutcome(texts.photo_before_menu(language), ask_dishes=True)
         if reading is not None and reading.kind == "MIXED":
             # One plate per photo (decision of 25 Nov 2026).
             waiting = [item.name for item in menu.dishes if item.available and not item.media]
             return PhotoOutcome(texts.mixed_photo(waiting, language))
-        # The dish idia asked the photo of comes before the model's guess.
-        said = [text for text in (caption, expected, reading.dish if reading else None) if text]
-        dish = menu.attach(media_key, said)
+        # What the caption and the photo name come first; the dish idia asked a
+        # photo of only when they name none: « bouillon de silure 1000g » went
+        # on the Fried rice idia was asking about (journal of 26 Nov 2026, 11:32).
+        named = [text for text in (caption, reading.dish if reading else None) if text]
+        if named and not any(item.is_named(text) for item in menu.dishes for text in named):
+            if caption:
+                return PhotoOutcome(texts.photo_new_dish(caption, language))
+            named = []
+        dish = menu.attach(media_key, named or [text for text in (expected,) if text])
         if dish is None:
             # Every dish has a photo already: ask which one this is for, rather
             # than « 3 au plus » to dishes holding one (25 Nov 2026, 16:33).
@@ -93,8 +102,22 @@ class DishPhotos:
             if room:
                 return PhotoOutcome(texts.photo_which_dish(room, language))
             return PhotoOutcome(texts.photos_full(language))
+        if reading is not None and reading.description and not dish.description:
+            dish = menu.describe(dish.name, reading.description) or dish
         await self._store.save_menu(menu)
         return PhotoOutcome(texts.photo_added(dish.name, language), attached=True)
+
+
+def _read_dish(reading: MenuReading | None, media_key: str) -> MenuDish | None:
+    """The plate the model read, named and priced by its caption."""
+    if reading is None or reading.kind != "DISH" or not reading.dish or not reading.price:
+        return None
+    amount = reading.price * 1000 if 0 < reading.price < THOUSANDS_BELOW else reading.price
+    try:
+        dish = MenuDish.of(reading.dish, amount)
+    except DomainError:
+        return None
+    return replace(dish, media=(media_key,), description=reading.description or "")
 
 
 def _priced_dish(caption: str | None, media_key: str) -> MenuDish | None:

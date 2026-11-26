@@ -359,6 +359,20 @@ def still_nothing(dish: str | None, place: dict[str, Any], language: str) -> str
     )
 
 
+def photo_new_dish(caption: str, language: str) -> str:
+    """A photo whose caption names a dish not on today's menu, without a price."""
+    name = " ".join(caption.split())[:60]
+    if _fr(language):
+        return (
+            f"« {name} » n'est pas encore dans ton menu du jour. Renvoie la photo avec "
+            f"son nom et son prix, par exemple « {name} 1000 », et je l'ajoute."
+        )
+    return (
+        f"« {name} » is not on today's menu yet. Send the photo again with its name and "
+        f"price, for example « {name} 1000 », and I'll add it."
+    )
+
+
 def pick_a_number(count: int, language: str) -> str:
     if _fr(language):
         return f"Réponds avec le numéro du plat, entre 1 et {count}."
