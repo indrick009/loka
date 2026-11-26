@@ -45,6 +45,7 @@ class DatingAnswerRow(Base):
     to_profile: Mapped[uuid.UUID] = mapped_column(PGUUID(as_uuid=True), nullable=False)
     liked: Mapped[bool] = mapped_column(Boolean, nullable=False)
     score: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     __table_args__ = (UniqueConstraint("from_profile", "to_profile", name="uq_dating_answer"),)

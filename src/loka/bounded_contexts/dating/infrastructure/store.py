@@ -333,6 +333,20 @@ class SqlAlchemyDatingStore:
         ).scalar_one_or_none()
         return _talk(row) if row is not None else None
 
+    async def note_reason(
+        self, from_profile: uuid.UUID, to_profile: uuid.UUID, reason: str
+    ) -> None:
+        row = (
+            await self._session.execute(
+                select(DatingAnswerRow).where(
+                    DatingAnswerRow.from_profile == from_profile,
+                    DatingAnswerRow.to_profile == to_profile,
+                )
+            )
+        ).scalar_one_or_none()
+        if row is not None:
+            row.reason = reason[:500]
+
     async def update_description(self, user_id: uuid.UUID, description: str) -> None:
         row = await self._row_of(user_id)
         if row is not None:

@@ -98,6 +98,11 @@ class DatingStore(Protocol):
         """``(waiting, silent)``: yeses given between ``since`` and ``before`` the
         other never answered."""
 
+    async def note_reason(
+        self, from_profile: uuid.UUID, to_profile: uuid.UUID, reason: str
+    ) -> None:
+        """Why the member said no to that profile, in their words."""
+
     async def update_description(self, user_id: uuid.UUID, description: str) -> None:
         """The member's own words, completed with what they added later."""
 

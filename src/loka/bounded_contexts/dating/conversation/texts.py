@@ -280,6 +280,28 @@ def liked(language: str) -> str:
     )
 
 
+def why_not(other: Profile, language: str) -> str:
+    """After a « non »: what did not suit, to choose the next one better."""
+    if _fr(language):
+        return (
+            f"D'accord 👍 Pour mieux choisir la prochaine personne : qu'est-ce qui ne t'a "
+            f"pas plu chez {other.first_name} ? (l'âge, la distance, la photo, le métier, "
+            "la description… ou écris « passer »)"
+        )
+    return (
+        f"All right 👍 To choose the next one better: what didn't suit you about "
+        f"{other.first_name}? (age, distance, photo, job… or write « skip »)"
+    )
+
+
+def reason_noted(language: str) -> str:
+    return (
+        "Merci, j'en tiens compte pour la suite 💛"
+        if _fr(language)
+        else "Thanks, I'll keep it in mind 💛"
+    )
+
+
 def passed(language: str) -> str:
     return "D'accord." if _fr(language) else "All right."
 

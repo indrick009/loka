@@ -24,3 +24,9 @@ FOR_KEY = "_trait_for"
 PROPOSED_KEY = "_proposed"
 MATCH_KEY = "_match"
 TALK_ID = "_talk"
+# Why a profile proposed was turned down, asked after the « non »: read into
+# the member's wishes (decision of 26 Nov 2026).
+REASON_KEY = DATING.question_key("reason")
+REASON_FOR = "_reason_for"
+# How many times the member let the question go: after two, it is not asked.
+REASON_SKIPS = "_reason_skips"

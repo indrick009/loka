@@ -30,6 +30,9 @@ from loka.bounded_contexts.dating.conversation.keys import (
     MATCH_KEY,
     PLUS_KEY,
     PROPOSED_KEY,
+    REASON_FOR,
+    REASON_KEY,
+    REASON_SKIPS,
     RELAY_KEY,
     TALK_ID,
     TALK_KEY,
@@ -111,6 +114,22 @@ _ERASE = r"(supprim|effac|retir|desactiv|enlev|delete|remove)\w*"
 _LEAVE = re.compile(rf"\b{_ERASE}\b.*\bprofil|\bprofil\w*\b.*\b{_ERASE}\b")
 
 
+MAX_REASON_SKIPS = 2
+_SKIP_REASON = re.compile(
+    r"^\W*(passer|passe|skip|rien|non|no|aucune?|je sais pas|je ne sais pas|ok|okay|oki|"
+    r"d accord|rien de special|comme ca)\W*$"
+)
+_REFUSAL_WORDS = re.compile(r"^\W*(non+|no|nan|pas interesse\w*|je ne veux pas|bof)\b[\W]*")
+
+
+def _reason_in(text: str) -> str | None:
+    """The reason given with the « non » itself: « Non il est trop âgé »."""
+    rest = _REFUSAL_WORDS.sub("", fold(text)).strip(" .,!")
+    if len(rest.split()) < 3 or _NEXT.search(rest):
+        return None
+    return " ".join(text.split())
+
+
 def _answer(turn: PlugTurn) -> bool | None:
     if _NEXT.search(fold(turn.text or "")) or _REFUSE.search(fold(turn.text or "")):
         return False
@@ -165,6 +184,8 @@ class DatingTurns:
         if member is None:
             return await self._register(turn, desk, user)
         question = turn.session.context.get("next_question")
+        if question == REASON_KEY and not turn.fresh:
+            return await self._reason(turn, desk, member)
         if question == TRAIT_KEY and not turn.fresh:
             answered = await self._trait(turn, desk, member)
             if answered is not None:
@@ -326,6 +347,60 @@ class DatingTurns:
             return member
         await self._store.update_attributes(member.user_id, reading.traits, reading.wishes)
         return replace(member, traits=reading.traits, wishes=reading.wishes)
+
+    async def _after_no(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile
+    ) -> TurnOutcome:
+        """The reason of a « non », said with it or asked once, then the next
+        person (decision of 26 Nov 2026): it says what to choose next."""
+        given = _reason_in(turn.text or "")
+        if given:
+            member = await self._learn_reason(member, other, given)
+            return await self._propose(turn, desk, member, prefix=texts.reason_noted(turn.language))
+        skips = member.traits.get(REASON_SKIPS, "0")
+        if not skips.isdigit() or int(skips) >= MAX_REASON_SKIPS:
+            return await self._propose(turn, desk, member, prefix=texts.passed(turn.language))
+        await desk.settle(
+            turn,
+            step=FlowStep.COLLECT_CHOICE,
+            question_key=REASON_KEY,
+            context={REASON_FOR: str(other.profile_id)},
+        )
+        return say(
+            texts.why_not(other, turn.language),
+            question=REASON_KEY,
+            step=FlowStep.COLLECT_CHOICE,
+            voiced=False,
+        )
+
+    async def _reason(self, turn: PlugTurn, desk: PlugDesk, member: Profile) -> TurnOutcome:
+        """The answer to « qu'est-ce qui ne t'a pas plu ? »."""
+        raw = turn.session.context.get(REASON_FOR)
+        other = await self._store.profile(uuid.UUID(raw)) if isinstance(raw, str) else None
+        text = " ".join((turn.text or "").split())
+        if other is None or not text or _SKIP_REASON.match(fold(text)):
+            skips = member.traits.get(REASON_SKIPS, "0")
+            count = int(skips) + 1 if skips.isdigit() else 1
+            traits = {**member.traits, REASON_SKIPS: str(count)}
+            await self._store.update_attributes(member.user_id, traits, member.wishes)
+            return await self._propose(
+                turn, desk, replace(member, traits=traits), prefix=texts.passed(turn.language)
+            )
+        member = await self._learn_reason(member, other, text)
+        return await self._propose(turn, desk, member, prefix=texts.reason_noted(turn.language))
+
+    async def _learn_reason(self, member: Profile, other: Profile, reason: str) -> Profile:
+        """Kept with the « non », and read into the member's wishes: « trop
+        jeune », « trop loin », « pas mon style » shape the next proposals."""
+        await self._store.note_reason(member.profile_id, other.profile_id, reason)
+        line = (
+            f"Une personne qui ne m'a pas plu ({other.first_name}, {other.age} ans, "
+            f"{other.profession}, {other.city}) : {reason}"
+        )
+        traits = {k: v for k, v in member.traits.items() if k != REASON_SKIPS}
+        description = f"{member.description}\n{line}"
+        await self._store.update_description(member.user_id, description)
+        return await self._read(replace(member, description=description, traits=traits))
 
     async def _more_wishes(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, wishes: str
@@ -690,7 +765,6 @@ class DatingTurns:
         score: float,
     ) -> TurnOutcome:
         """Record a yes or a no to ``other``, then what follows from it."""
-        lang = turn.language
         answer = liked
         await self._store.answer(
             from_profile=member.profile_id,
@@ -711,7 +785,7 @@ class DatingTurns:
                 # They said yes and wait: told now, never left with a yes that
                 # gets no answer (decision of 25 Nov 2026), never « refused ».
                 await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)
-            return await self._propose(turn, desk, member, prefix=texts.passed(lang))
+            return await self._after_no(turn, desk, member, other)
         return await self._after_yes(turn, desk, member, other, score)
 
     async def _after_yes(
