@@ -234,7 +234,7 @@ class PropertySearchRepository:
             "type": row.property_type,
             "city": row.city,
             "neighbourhood": row.neighbourhood,
-            # No coordinates: the exact position is what the 1 000 FCFA unlock
+            # No coordinates: the exact position is what the 500 FCFA unlock
             # sells, and this search is public (security review, 22 Nov 2026).
             "price_xaf": row.public_price_xaf,
             "rent_xaf": row.rent_xaf,

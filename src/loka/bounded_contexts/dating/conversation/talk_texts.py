@@ -94,7 +94,7 @@ def used_up(other: Profile, what: str) -> str:
     return (
         f"Tu as utilisé tes {what}. Écris CONFIRMER si {other.first_name} te plaît, "
         f"STOP pour arrêter, ou PLUS pour {MESSAGES_PER_PACK} messages et "
-        f"{PHOTOS_PER_PACK} photos de plus (1 000 FCFA)."
+        f"{PHOTOS_PER_PACK} photos de plus (500 FCFA)."
     )
 
 
@@ -125,7 +125,7 @@ def they_stopped(sender: Profile) -> str:
 
 def plus_offer(other: Profile) -> str:
     return (
-        f"Pour 1 000 FCFA, tu as {MESSAGES_PER_PACK} messages et {PHOTOS_PER_PACK} "
+        f"Pour 500 FCFA, tu as {MESSAGES_PER_PACK} messages et {PHOTOS_PER_PACK} "
         f"photos de plus avec {other.first_name}. Réponds PAYER pour payer avec ce "
         "numéro, envoie le numéro Mobile Money à utiliser, ou NON."
     )
@@ -133,7 +133,7 @@ def plus_offer(other: Profile) -> str:
 
 def plus_requested(phone: str) -> str:
     return (
-        f"J'ai envoyé la demande de 1 000 FCFA au {phone}. Valide-la sur ton téléphone : "
+        f"J'ai envoyé la demande de 500 FCFA au {phone}. Valide-la sur ton téléphone : "
         "tes messages en plus arrivent dès que c'est fait. En attendant, tu peux "
         "écrire CONFIRMER ou STOP."
     )

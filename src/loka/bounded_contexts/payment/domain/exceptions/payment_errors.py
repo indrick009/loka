@@ -34,7 +34,7 @@ class AvailabilityNotConfirmed(DomainError):
     """The landlord has not said the lodging is still free, so nobody pays.
 
     A business rule, not a failure: the tenant is told the landlord is being
-    asked, and offered other lodgings meanwhile. Charging 1 000 FCFA for a
+    asked, and offered other lodgings meanwhile. Charging 500 FCFA for a
     contact that leads to an already-rented room is the single outcome the
     availability check exists to prevent (housing spec §9).
     """

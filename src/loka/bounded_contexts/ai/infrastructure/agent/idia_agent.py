@@ -444,7 +444,7 @@ def describe(state: IdiaState) -> str:
                 "facts are the tenant's answers, never the landlord's. Say the "
                 "landlord decides them: once the tenant picks a number, idia asks "
                 "the landlord whether it is still free, then the tenant gets his "
-                "number for 1 000 FCFA and asks him directly. Never promise that "
+                "number for 500 FCFA and asks him directly. Never promise that "
                 "idia will ask the landlord anything else."
             )
     return "\n".join(lines)

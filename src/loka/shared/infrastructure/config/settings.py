@@ -211,7 +211,7 @@ class FapshiSettings(BaseModel):
 
 
 class PaymentSettings(BaseModel):
-    service_fee_xaf: int = 1000
+    service_fee_xaf: int = 500
     webhook_secret: SecretStr = SecretStr("change-me")
     gateway: str = "mock"
     callback_tolerance_seconds: int = 300

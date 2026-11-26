@@ -85,7 +85,7 @@ def validated(language: str) -> str:
     if _fr(language):
         return (
             "Bonne nouvelle : l'équipe idia a validé que ce document est bien à toi. "
-            "La mise en relation avec la personne qui l'a trouvé coûte 1 000 FCFA, "
+            "La mise en relation avec la personne qui l'a trouvé coûte 500 FCFA, "
             "seuls frais à payer : réponds PAYER (Mobile Money sur ce numéro), ou "
             "envoie le numéro à utiliser. "
             "La restitution se fera dans un lieu public ou au commissariat, et rien "
@@ -93,7 +93,7 @@ def validated(language: str) -> str:
         )
     return (
         "Good news: the idia team validated that this document is yours. Being put "
-        "in touch with the finder costs 1,000 FCFA, the only fee; payment opens very "
+        "in touch with the finder costs 500 FCFA, the only fee; payment opens very "
         "soon. The handover happens in a public place or a police station."
     )
 
@@ -112,13 +112,13 @@ def refused(language: str) -> str:
 
 def unlock_sent(phone: str) -> str:
     return (
-        f"J'ai envoyé la demande de paiement de 1 000 FCFA au {phone}. Valide-la sur ton "
+        f"J'ai envoyé la demande de paiement de 500 FCFA au {phone}. Valide-la sur ton "
         "téléphone : je te mets en relation dès que c'est fait."
     )
 
 
 def pay_or_not() -> str:
-    return "Réponds PAYER pour être mis en relation (1 000 FCFA), ou NON."
+    return "Réponds PAYER pour être mis en relation (500 FCFA), ou NON."
 
 
 def unlock_later() -> str:

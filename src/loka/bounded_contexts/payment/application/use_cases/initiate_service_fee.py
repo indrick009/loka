@@ -1,4 +1,4 @@
-"""Initiate the 1 000 FCFA unlock of one listing for one tenant.
+"""Initiate the 500 FCFA unlock of one listing for one tenant.
 
 The URL-friendly phrasing is that the caller "pays" or "unlocks" the contact;
 the domain language is precise: this creates a payment and asks the provider
@@ -69,7 +69,7 @@ class InitiateServiceFeeUseCase:
         *,
         gateway: PaymentGateway,
         availability: ListingAvailability | None = None,
-        service_fee_xaf: int = 1000,
+        service_fee_xaf: int = 500,
         payment_message: str = "idia - contact du bailleur",
         logger: structlog.stdlib.BoundLogger | None = None,
     ) -> None:
@@ -183,7 +183,7 @@ class InitiateServiceFeeUseCase:
         """No charge before the landlord said the lodging is still free.
 
         The state can have changed between publication and this request, and
-        the only person who knows is the landlord. Taking 1 000 FCFA for a
+        the only person who knows is the landlord. Taking 500 FCFA for a
         contact that leads nowhere is the one failure this whole check exists
         to prevent (housing spec §9).
         """

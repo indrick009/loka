@@ -2,7 +2,7 @@
 
 ``availability.questions`` asks the owner "le logement est encore disponible ?";
 this queue hears his answer and does the two things the conversation needs:
-moves the tenant who chose that lodging to the 1 000 FCFA offer when the answer
+moves the tenant who chose that lodging to the 500 FCFA offer when the answer
 is yes, or tells him it is gone and returns him to his list when it is no.
 
 An answer with no ``tenant_id`` is not an error: a landlord may volunteer

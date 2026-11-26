@@ -505,7 +505,7 @@ class AnalyseConversationMessageUseCase:
         """Close a turn that did not reach the model.
 
         ``text`` is the raw message, handed on so a step read by a rule alone —
-        the 1 000 FCFA answer — can be decided without a model.
+        the 500 FCFA answer — can be decided without a model.
         """
         verdict = self._judge(
             session,

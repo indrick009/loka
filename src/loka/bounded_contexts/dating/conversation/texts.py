@@ -311,12 +311,12 @@ def match(other: Profile, language: str) -> str:
         return (
             f"C'est un match ! {other.first_name} ({other.age} ans, {other.city}) a dit oui "
             "aussi. idia ne donne jamais un contact sans l'accord des deux : c'est le "
-            "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : 1 000 FCFA par "
+            "cas. Pour obtenir son numéro WhatsApp, réponds PAYER : 500 FCFA (promo -50 %) par "
             "Mobile Money sur ce numéro, ou envoie le numéro à utiliser."
         )
     return (
         f"It's a match! {other.first_name} ({other.age}, {other.city}) said yes too. "
-        "Reply PAY to get their WhatsApp number: 1,000 FCFA by Mobile Money."
+        "Reply PAY to get their WhatsApp number: 500 FCFA by Mobile Money."
     )
 
 
@@ -336,7 +336,7 @@ def match_waiting(other: Profile, language: str) -> str:
 
 def unlock_sent(phone: str) -> str:
     return (
-        f"J'ai envoyé la demande de paiement de 1 000 FCFA au {phone}. Valide-la sur ton "
+        f"J'ai envoyé la demande de paiement de 500 FCFA au {phone}. Valide-la sur ton "
         "téléphone : je t'envoie son numéro dès que c'est fait."
     )
 
@@ -350,7 +350,7 @@ def unlock_later() -> str:
 
 
 def pay_or_not() -> str:
-    return "Réponds PAYER pour obtenir son numéro (1 000 FCFA), ou NON."
+    return "Réponds PAYER pour obtenir son numéro (500 FCFA, promo -50 %), ou NON."
 
 
 def in_relation(language: str) -> str:

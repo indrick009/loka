@@ -1,4 +1,4 @@
-"""The tenant's answer to the 1 000 FCFA offer.
+"""The tenant's answer to the 500 FCFA offer.
 
 Platform text and one rule, never the model: "oui" must mean pay with the
 number shown, a number must mean that number, and nothing else may start a

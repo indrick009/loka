@@ -1,4 +1,4 @@
-"""The two halves of the 1 000 FCFA unlock, as the conversation needs them.
+"""The two halves of the 500 FCFA unlock, as the conversation needs them.
 
 Both are narrow adapters, and both exist because the conversation must not
 learn another context's vocabulary:

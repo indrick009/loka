@@ -1,4 +1,4 @@
-"""The 1 000 FCFA that buys a way to reach someone, outside housing.
+"""The 500 FCFA that buys a way to reach someone, outside housing.
 
 Dating unlocks only after a reciprocal match; Found only after the idia team
 validated ownership. Consent, or proof, always precedes the payment: this
@@ -11,7 +11,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 
-UNLOCK_FEE_XAF = 1000
+UNLOCK_FEE_XAF = 500
 
 PENDING = "PENDING"
 PAID = "PAID"

@@ -151,7 +151,7 @@ class TestTheLandlordConfirms:
         }
         assert session.context["next_question"] == PAYMENT_QUESTION_KEY
         [message] = uow.events.staged
-        assert "1 000 FCFA" in message.text
+        assert "500 FCFA" in message.text
         assert uow.commits == 1
 
     async def test_the_landlords_answer_to_the_offer_comes_first(self) -> None:
@@ -174,7 +174,7 @@ class TestTheLandlordConfirms:
         assert message.text.startswith(
             "Bonne nouvelle : le propriétaire accepte 55 000 FCFA par mois."
         )
-        assert "1 000 FCFA" in message.text
+        assert "500 FCFA" in message.text
 
     async def test_refusal_asks_nothing_and_returns_to_the_list(self) -> None:
         session = a_tenant_waiting_on_availability(shown=True)
@@ -192,7 +192,7 @@ class TestTheLandlordConfirms:
         assert session.step is FlowStep.COLLECT_PROPERTY_CHOICE
         assert UNLOCK_KEY not in session.context
         [message] = uow.events.staged
-        assert "1 000 FCFA" not in message.text
+        assert "500 FCFA" not in message.text
         assert "n'est plus disponible" in message.text
 
     async def test_an_answer_after_the_tenant_moved_on_is_left_alone(self) -> None:

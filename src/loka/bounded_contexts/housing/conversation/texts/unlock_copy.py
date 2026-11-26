@@ -1,4 +1,4 @@
-"""What idia says, and reads, around the 1 000 FCFA unlock.
+"""What idia says, and reads, around the 500 FCFA unlock.
 
 Platform text and rules, never the model's. This is the one exchange where a
 misread costs money: "oui" must mean pay with the number shown, a number must
@@ -73,21 +73,21 @@ _TEXT: dict[str, dict[str, str]] = {
         "offer": (
             "Bonne nouvelle : le propriétaire confirme que le logement est toujours "
             "disponible.\nPour recevoir son numéro et la localisation du logement, "
-            "les frais idia sont de 1 000 FCFA, payés une seule fois.\n"
+            "les frais idia sont de 500 FCFA, payés une seule fois.\n"
             "Voulez-vous payer avec ce numéro ({phone}) ? Répondez OUI, ou envoyez le "
             "numéro Mobile Money ou Orange Money à utiliser. Répondez NON pour annuler."
         ),
         "requested": (
-            "J'ai envoyé une demande de paiement de 1 000 FCFA au {phone}. Validez-la "
+            "J'ai envoyé une demande de paiement de 500 FCFA au {phone}. Validez-la "
             "sur votre téléphone avec votre code secret Mobile Money ou Orange Money. "
             "Je vous envoie le contact du propriétaire dès que le paiement est confirmé."
         ),
         "waiting": (
-            "Votre paiement de 1 000 FCFA est en attente de validation sur le {phone}. "
+            "Votre paiement de 500 FCFA est en attente de validation sur le {phone}. "
             "Dès qu'il est confirmé, je vous envoie le contact du propriétaire."
         ),
         "unclear": (
-            "Répondez OUI pour payer 1 000 FCFA avec ce numéro ({phone}), envoyez un "
+            "Répondez OUI pour payer 500 FCFA avec ce numéro ({phone}), envoyez un "
             "autre numéro Mobile Money ou Orange Money, ou répondez NON pour annuler."
         ),
         "cancelled": (
@@ -104,7 +104,7 @@ _TEXT: dict[str, dict[str, str]] = {
             "réessayer, ou envoyez un autre numéro Mobile Money ou Orange Money."
         ),
         "failed": (
-            "Le paiement de 1 000 FCFA n'a pas abouti, rien n'a été débité. Répondez OUI "
+            "Le paiement de 500 FCFA n'a pas abouti, rien n'a été débité. Répondez OUI "
             "pour réessayer avec le {phone}, ou envoyez un autre numéro."
         ),
         "unavailable": (
@@ -123,21 +123,21 @@ _TEXT: dict[str, dict[str, str]] = {
     "en": {
         "offer": (
             "Good news: the landlord confirms the place is still available.\nTo get "
-            "their number and the location of the place, idia's fee is 1,000 FCFA, "
+            "their number and the location of the place, idia's fee is 500 FCFA, "
             "paid once.\nDo you want to pay with this number ({phone})? Reply YES, or "
             "send the Mobile Money or Orange Money number to use. Reply NO to cancel."
         ),
         "requested": (
-            "I sent a 1,000 FCFA payment request to {phone}. Approve it on your phone "
+            "I sent a 500 FCFA payment request to {phone}. Approve it on your phone "
             "with your Mobile Money or Orange Money PIN. I will send the landlord's "
             "contact as soon as the payment is confirmed."
         ),
         "waiting": (
-            "Your 1,000 FCFA payment is waiting for approval on {phone}. As soon as it "
+            "Your 500 FCFA payment is waiting for approval on {phone}. As soon as it "
             "is confirmed, I will send the landlord's contact."
         ),
         "unclear": (
-            "Reply YES to pay 1,000 FCFA with this number ({phone}), send another "
+            "Reply YES to pay 500 FCFA with this number ({phone}), send another "
             "Mobile Money or Orange Money number, or reply NO to cancel."
         ),
         "cancelled": (
@@ -154,7 +154,7 @@ _TEXT: dict[str, dict[str, str]] = {
             "another Mobile Money or Orange Money number."
         ),
         "failed": (
-            "The 1,000 FCFA payment did not go through and nothing was charged. Reply "
+            "The 500 FCFA payment did not go through and nothing was charged. Reply "
             "YES to try again with {phone}, or send another number."
         ),
         "unavailable": (
@@ -184,7 +184,7 @@ def contact_text(
     point: Mapping[str, float] | None,
     language: str,
 ) -> str:
-    """The landlord's number and where the lodging is: what the 1 000 FCFA bought."""
+    """The landlord's number and where the lodging is: what the 500 FCFA bought."""
     words = _TEXT.get(language, _TEXT["fr"])
     lines = [
         words["contact"].format(phone="+237 " + display(landlord_phone), lodging=lodging)

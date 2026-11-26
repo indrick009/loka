@@ -1,4 +1,4 @@
-"""The sweep that hands over contacts once their 1 000 FCFA is validated.
+"""The sweep that hands over contacts once their 500 FCFA is validated.
 
 Dating: each member of the match gets the other's WhatsApp number, or a member
 who bought more questions gets them. Found: the owner gets the finder's, the

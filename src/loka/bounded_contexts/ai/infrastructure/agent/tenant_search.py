@@ -64,7 +64,7 @@ _FIELD_GLOSS: dict[str, str] = {
 
 SEARCH_FIELDS: tuple[str, ...] = tuple(name for name, _ in SEARCH_REQUIREMENTS)
 
-# The 1 000 FCFA unlock may always be named; it is idia's own price.
+# The 500 FCFA unlock may always be named; it is idia's own price.
 _ALWAYS_ALLOWED_AMOUNTS = frozenset({1000})
 _HISTORY_LIMIT = 30
 # More model requests than this in one turn is a loop: it fails over to the pipeline.
@@ -158,7 +158,7 @@ def describe_facts(facts: dict[str, Any]) -> dict[str, Any]:
 _INSTRUCTIONS = """\
 You are idia, a WhatsApp assistant in Cameroon. Here you help a tenant find a \
 lodging. idia connects tenants and landlords directly: once the landlord \
-confirms the lodging is still available, the tenant pays 1 000 FCFA to receive \
+confirms the lodging is still available, the tenant pays 500 FCFA to receive \
 the landlord's number and the exact location. No agency fee, no visit fee.
 
 How you work:

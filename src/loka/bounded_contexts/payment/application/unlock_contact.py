@@ -1,4 +1,4 @@
-"""Ask a payer's phone for the 1 000 FCFA that unlocks someone's contact."""
+"""Ask a payer's phone for the 500 FCFA that unlocks someone's contact."""
 
 from __future__ import annotations
 

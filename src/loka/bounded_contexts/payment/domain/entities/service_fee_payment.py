@@ -5,7 +5,7 @@ The single most important invariant in this context: a payment being
 from a ``SUCCEEDED`` state reached through a verified gateway callback.
 
 The unlock is anchored on **(tenant, listing)**, not on an application: the
-1 000 FCFA buys the landlord's number *and* the lodging's location, and a
+500 FCFA buys the landlord's number *and* the lodging's location, and a
 location belongs to one listing. So the same tenant returning to the same
 listing owes nothing, a second listing from the same landlord is a second
 unlock, and another tenant wanting that listing pays his own — the grant is

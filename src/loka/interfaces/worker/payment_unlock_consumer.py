@@ -2,7 +2,7 @@
 
 Two payment events, one promise each:
 
-- ``PaymentSucceeded`` — the 1 000 FCFA is settled. The grant is marked as
+- ``PaymentSucceeded`` — the 500 FCFA is settled. The grant is marked as
   revealed so the fact is recorded, and the landlord's number and the lodging's
   location are sent to the tenant. This is the only place the contact crosses
   from Payment back into the conversation, and it is driven by the provider's
