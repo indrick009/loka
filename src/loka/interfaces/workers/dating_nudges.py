@@ -50,6 +50,8 @@ _KEEP_SECONDS = 30 * 86400
 # The one who has not answered sees the person again after an hour, and gets
 # at most one such reminder per ``ASK_SPACING_SECONDS``.
 ASK_AFTER_MINUTES = 60
+# A recent match: nobody pushes other profiles at its members.
+MATCH_QUIET_DAYS = 7
 ASK_SPACING_SECONDS = 3 * 3600
 _ASK_KEY = "dating:ask:{silent}:{waiting}"
 _ASKED_KEY = "dating:asked:{silent}"
@@ -164,9 +166,14 @@ async def nudge_once(database: Database, redis: Redis, *, now: datetime) -> int:
             )
             nudges.append(_Nudge(key, member, text))
         told: set[str] = set()
+        matched_after = now - timedelta(days=MATCH_QUIET_DAYS)
         for nudge in nudges:
             uid = str(nudge.member.user_id)
             if uid in told or await redis.exists(nudge.key):
+                continue
+            if await store.matched_since(nudge.member.profile_id, matched_after):
+                # Eva, matched with Ismaël, was told four minutes later to look
+                # at other profiles (journal of 26 Nov 2026, 10:43).
                 continue
             if await desk.busy(nudge.member.user_id, now=now):
                 continue

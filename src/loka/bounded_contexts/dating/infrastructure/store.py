@@ -11,7 +11,7 @@ from sqlalchemy.orm import aliased
 
 from loka.bounded_contexts.dating.domain.attributes import Wish
 from loka.bounded_contexts.dating.domain.profile import Profile
-from loka.bounded_contexts.dating.domain.talk import OPEN, Side, Talk
+from loka.bounded_contexts.dating.domain.talk import MATCHED, OPEN, Side, Talk
 from loka.bounded_contexts.dating.infrastructure.models import (
     DatingAnswerRow,
     DatingProfileRow,
@@ -331,6 +331,22 @@ class SqlAlchemyDatingStore:
             )
         ).scalar_one_or_none()
         return _talk(row) if row is not None else None
+
+    async def matched_since(self, profile_id: uuid.UUID, since: datetime) -> bool:
+        """A match opened since ``since``: the member is not shown anyone else."""
+        found = await self._session.execute(
+            select(DatingTalkRow.id)
+            .where(
+                DatingTalkRow.status == MATCHED,
+                DatingTalkRow.created_at >= since,
+                or_(
+                    DatingTalkRow.first_profile == profile_id,
+                    DatingTalkRow.second_profile == profile_id,
+                ),
+            )
+            .limit(1)
+        )
+        return found.first() is not None
 
     async def ever_talked(self, a: uuid.UUID, b: uuid.UUID) -> bool:
         found = await self._session.scalar(
