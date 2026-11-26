@@ -134,7 +134,7 @@ test('a refused delivery is not retried; a down platform is', async () => {
     },
   });
   assert.equal(await down.forward({ external_message_id: 'x' }), false);
-  assert.equal(calls, 4);
+  assert.equal(calls, 10);
 });
 
 test('media goes to /media and its key comes back', async () => {

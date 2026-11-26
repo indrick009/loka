@@ -5,7 +5,11 @@
 // contract as deploy/baileys (routers/whatsapp.py): the API cannot tell which
 // transport sent it.
 
-const FORWARD_ATTEMPTS = 4;
+// Long enough to outlast an API restart during a deploy (20 to 40 s): with 4
+// attempts over 7 s, Laure's message to Morel was lost (26 Nov 2026, 10:48).
+// 1, 2, 4… seconds, capped at a minute: about four minutes in all.
+const FORWARD_ATTEMPTS = 10;
+const MAX_PAUSE_MS = 60000;
 const UPLOAD_ATTEMPTS = 3;
 // MAX_MEDIA_BYTES in routers/whatsapp.py.
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
@@ -39,7 +43,7 @@ function createPlatform({ eventsUrl, apiKey, log, fetchImpl = fetch, pause = sle
       } catch (error) {
         lastError = (error && error.message) || String(error);
       }
-      if (attempt < FORWARD_ATTEMPTS) await pause(1000 * 2 ** (attempt - 1));
+      if (attempt < FORWARD_ATTEMPTS) await pause(Math.min(1000 * 2 ** (attempt - 1), MAX_PAUSE_MS));
     }
     log.error({ error: lastError, external_message_id: delivery.external_message_id }, 'delivery forwarding failed');
     return false;
