@@ -154,6 +154,8 @@ class AnalyseConversationMessageUseCase:
         form_filler: FormFiller | None = None,
         idia: IdiaAgent | None = None,
         triage: PhotoTriage | None = None,
+        closed: frozenset[FlowName] = frozenset(),
+        team_phones: tuple[str, ...] = (),
     ) -> None:
         self._uow = uow
         self._exchanges = exchanges
@@ -184,6 +186,8 @@ class AnalyseConversationMessageUseCase:
             housing=self._housing,
             plugs=dict(plugs or {}),
             desk=ConversationDesk(uow, sessions),
+            closed=closed,
+            team_phones=team_phones,
         )
         tenant = AgentLane(
             agent, uow=uow, writer=self._writer, ledger=self._ledger, housing=self._housing

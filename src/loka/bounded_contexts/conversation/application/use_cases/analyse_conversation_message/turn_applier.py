@@ -80,6 +80,24 @@ def explanation_in(reply_text: str | None) -> str | None:
     return told if len(told) >= MIN_EXPLANATION_CHARS else None
 
 
+# Registrations closed for now (decision of 26 Nov 2026): whoever asks is told
+# the customer service will call him on this number, and the team gets it.
+# Which flows are closed is set by ``CLOSED_SERVICES``; the agent sends the
+# travel agencies here too (``call_back``).
+CLOSED_FLOWS: dict[FlowName, str] = {FlowName.PROPERTY_CREATION: "de ton logement"}
+_CALL_BACK = {
+    "fr": (
+        "Merci 🙏🏾 L'inscription {service} ne se fait pas encore directement sur idia : "
+        "notre service client va te contacter sur ce numéro pour s'en occuper avec toi."
+    ),
+    "en": (
+        "Thank you 🙏🏾 Registering {service} is not done directly on idia yet: our "
+        "customer service will call you on this number to set it up with you."
+    ),
+}
+_CALLED_BACK = "_called_back"
+
+
 class TurnApplier:
     def __init__(
         self,
@@ -90,6 +108,8 @@ class TurnApplier:
         housing: HousingTurns,
         plugs: dict[str, DomainTurns] | None = None,
         desk: PlugDesk | None = None,
+        closed: frozenset[FlowName] = frozenset(),
+        team_phones: tuple[str, ...] = (),
     ) -> None:
         self._uow = uow
         self._ledger = ledger
@@ -97,6 +117,8 @@ class TurnApplier:
         self._housing = housing
         self._plugs = plugs or {}
         self._desk = desk
+        self._closed = closed
+        self._team_phones = team_phones
 
     async def apply(
         self,
@@ -122,6 +144,15 @@ class TurnApplier:
         reply_text = collapse_repeats(reply_text) if reply_text else reply_text
 
         target = target_flow(session, verdict.intent)
+        if target in self._closed and target in CLOSED_FLOWS:
+            # Closed for now: the thread returns to the start instead of asking
+            # the form's questions, and the customer service calls him back.
+            observed = session.revision
+            session.restart(now=cost.now)
+            await self._writer.save(session, observed=observed)
+            return await self.call_back(
+                session, verdict, cost, call=None, service=CLOSED_FLOWS[target], text=text
+            )
         is_aside = self._is_aside(session, verdict, target, reply_text)
         journal(
             "reading", session.phone.e164, intent=verdict.intent, accepted=verdict.accepted,
@@ -226,6 +257,38 @@ class TurnApplier:
             text=text,
             media_burst_of=media_burst_of,
             media_marker=media_marker,
+        )
+
+    async def call_back(
+        self,
+        session: ConversationSession,
+        verdict: Verdict,
+        cost: TurnCost,
+        *,
+        call: CallUsage | None,
+        service: str,
+        text: str | None,
+    ) -> AnalysisReport:
+        """A registration not open yet: the customer service calls him back.
+
+        The team is told once per service and conversation; the user, each time.
+        """
+        if session.context.get(_CALLED_BACK) != service and self._desk is not None:
+            alert = (
+                f"📞 À rappeler : {session.phone.e164} veut l'inscription {service} "
+                f"(fermée sur idia pour le moment). Son message : « {(text or '')[:200]} »"
+            )
+            for phone in self._team_phones:
+                await self._desk.notify_phone(phone, alert, now=cost.now)
+            session.context[_CALLED_BACK] = service
+        language = "en" if session.language == "en" else "fr"
+        return await self.aside(
+            session,
+            replace(verdict, intent="SUPPORT"),
+            cost,
+            call=call,
+            reply_text=_CALL_BACK[language].format(service=service),
+            text=text,
         )
 
     async def aside(

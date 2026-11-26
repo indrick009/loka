@@ -292,6 +292,9 @@ class Settings(BaseSettings):
     outbound_webhook_signing_secret: SecretStr = SecretStr("change-me")
     # DEMO ONLY: lets the WhatsApp message "_empty_all_data" forget the test numbers.
     demo_reset_enabled: bool = False
+    # Registrations closed for now, by flow name (« PROPERTY_CREATION »): idia
+    # says the service comes soon instead of starting it (decision of 26 Nov 2026).
+    closed_services: str = ""
     # Test phase: every conversation appended to this JSONL file. Empty: off.
     conversation_log_path: str = ""
     conversation_log_retention_days: int = 30

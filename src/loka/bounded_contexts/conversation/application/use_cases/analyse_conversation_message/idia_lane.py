@@ -137,6 +137,16 @@ class IdiaLane:
                 now=now,
             )
         cost, call = _cost(reply, message_id=message_id, now=now)
+        if reply.action == "call_back":
+            # A lodging or a travel agency to register: closed for now, the
+            # customer service calls him (decision of 26 Nov 2026).
+            verdict = self._judge(
+                session, intent="SUPPORT", confidence=1.0, entities={}, reason=None
+            )
+            service = str(reply.entities.get("service") or "de ton activité")
+            return await self._applier.call_back(
+                session, verdict, cost, call=call, service=service, text=text
+            )
         if reply.action == "ask_team":
             # A person answers it (see ``interfaces/worker/stuck_guard``): the
             # outbound worker holds the thread and alerts the admin.

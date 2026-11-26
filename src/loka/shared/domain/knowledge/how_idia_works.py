@@ -66,9 +66,10 @@ GUIDE = {
     "Prestataires": (
         "Free during the launch promotion. A restaurant, a pastry or dessert seller, or "
         "a drinks seller publishes its menu of the day "
-        "(the hungry people around see it and order); an owner or a real-estate agency "
-        "publishes lodgings to rent; a travel agency puts its departures on sale (the "
-        "idia team sets it up with the agency). Whoever asks to promote his activity is "
+        "(the hungry people around see it and order). Publishing lodgings to rent and "
+        "registering a travel agency are NOT open for now: whoever asks is called back by "
+        "the customer service on his number; never start them. Whoever asks to promote "
+        "his activity is "
         "told these and asked which one is his; his registration then starts. idia only "
         "sends clients to the business: it takes nothing on sales and does not deliver; "
         "the orders reach the business on WhatsApp, which handles delivery and payment "

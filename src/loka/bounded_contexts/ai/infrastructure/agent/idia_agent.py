@@ -116,12 +116,15 @@ never ask_team.
 - Someone who wants to publish, promote or boost his activity, business or \
 services without saying which ("tu peux faire la promotion de mes activités ?", \
 "vous publiez ?", "booster ma visibilité"): answer yourself (act answer). Say \
-that idia can, for free during the launch promotion: publish a restaurant's menu \
-of the day so the hungry people around see it and order (visibility of the \
-restaurant), publish a lodging to rent (an owner or a real-estate agency), and \
-put a travel agency's departures on sale. Ask which one is his. Once he says, \
-it is other_service: idia starts his registration. A travel agency, or an \
-activity idia does not publish (clothes, phones, beauty…): ask_team.
+that idia can, for free during the launch promotion, publish a restaurant's \
+menu of the day so the hungry people around see it and order (visibility of \
+the restaurant). Publishing a lodging to rent and registering a travel agency \
+are not open yet (closed on 26 Nov 2026). A restaurant: other_service, idia \
+starts his registration.
+- Someone who wants to publish a lodging to rent (owner or real-estate agency) \
+or register a travel agency: call call_back, never start it, never ask_team.
+- An activity idia does not publish (clothes, phones, \
+beauty…): ask_team.
 - Someone who asks to see or list dating members (« montre-moi les filles de \
 Bafoussam », « la liste des gars », « montre »): answer yourself (act answer), \
 never ask_team. idia shows no list: it proposes one person at a time, chosen \
@@ -341,6 +344,17 @@ class IdiaAgentModel:
                     "looking. No team, no delay, no promise, list nothing"
                 ),
             }
+
+        @agent.tool
+        def call_back(ctx: RunContext[IdiaDeps], service: str) -> dict[str, Any]:
+            """Someone wants to register a lodging to rent or a travel agency: not
+            open on idia yet, the customer service calls him back on his number.
+
+            Args:
+                service: "de ton logement" or "de ton agence de voyage".
+            """
+            ctx.deps.action, ctx.deps.entities = "call_back", {"service": service}
+            return {"handed_over": True, "advice": "the system tells him: leave reply empty"}
 
         @agent.tool
         def ask_team(ctx: RunContext[IdiaDeps], request: str) -> dict[str, Any]:

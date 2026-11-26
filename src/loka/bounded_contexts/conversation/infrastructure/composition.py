@@ -37,6 +37,7 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 from loka.bounded_contexts.conversation.application.use_cases.voice_platform_reply import (
     VoicePlatformReplyUseCase,
 )
+from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowName
 from loka.bounded_contexts.conversation.infrastructure.adapters.photo_triage import (
     OpenRouterPhotoTriage,
 )
@@ -168,6 +169,14 @@ def analyse_conversation_message_use_case(
         budget=budget_policy(settings),
         provider_name=settings.ai.provider,
         triage=photo_triage(settings, usage_recorder(uow, settings)),
+        closed=frozenset(
+            FlowName(name.strip())
+            for name in settings.closed_services.split(",")
+            if name.strip() in FlowName.__members__
+        ),
+        team_phones=tuple(
+            phone.strip() for phone in settings.whatsapp.alert_phones.split(",") if phone.strip()
+        ),
         # The one write the analysis triggers: a confirmed listing becomes a
         # property draft. Injected here so the pipeline depends on the port.
         listing=create_property_from_conversation_use_case(uow),
