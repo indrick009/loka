@@ -345,8 +345,14 @@ class DatingTurns:
         reading = await self._profiles.read(member, keys)
         if reading is None:
             return member
-        await self._store.update_attributes(member.user_id, reading.traits, reading.wishes)
-        return replace(member, traits=reading.traits, wishes=reading.wishes)
+        # A reading adds and corrects, never forgets: read again after a reason
+        # of refusal, Serena's profile lost « hygiène », « maturité » and
+        # « stabilité » (26 Nov 2026). What the new reading says wins.
+        traits = {**member.traits, **reading.traits}
+        said = {wish.key for wish in reading.wishes}
+        wishes = (*reading.wishes, *(wish for wish in member.wishes if wish.key not in said))
+        await self._store.update_attributes(member.user_id, traits, wishes)
+        return replace(member, traits=traits, wishes=wishes)
 
     async def _after_no(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile
