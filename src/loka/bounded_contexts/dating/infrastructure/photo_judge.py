@@ -48,6 +48,19 @@ _SEX_RULE = (
 )
 
 
+# Before a match is confirmed and unlocked, no way to reach each other passes
+# through a photo either (decision of 26 Nov 2026).
+_CONTACT_PROMPT = (
+    "Deux personnes qui se découvrent sur une app de rencontre n'ont pas encore le droit "
+    "d'échanger leurs contacts. Cette image montre-t-elle, même en partie, un moyen de "
+    "joindre ou de retrouver quelqu'un : numéro de téléphone (écrit, imprimé, à la main, "
+    "en morceaux), pseudo ou QR code de WhatsApp, Facebook, Instagram, TikTok, Snapchat, "
+    "Telegram, adresse e-mail, capture d'écran d'un profil ou d'une conversation, carte de "
+    "visite, adresse précise ? Une simple photo de la personne ou d'un lieu sans tout "
+    'cela n\'en montre pas. Réponds en JSON : {"contact": true} ou {"contact": false}.'
+)
+
+
 class OpenRouterPhotoJudge:
     def __init__(
         self, settings: AISettings, storage: S3MediaStorage, record: RecordUsage | None = None
@@ -77,8 +90,27 @@ class OpenRouterPhotoJudge:
         _logger.warning("dating_photo_check_unavailable")
         return PhotoVerdict(ok=True)
 
+    async def shows_contact(self, object_key: str) -> bool:
+        """A photo sent in a talk that carries a way to reach the sender."""
+        try:
+            data, content_type = await self._storage.get(object_key)
+        except MediaStoreError:
+            return False
+        if len(data) > _MAX_BYTES or not content_type.startswith("image/"):
+            return False
+        image = f"data:{content_type};base64,{base64.b64encode(data).decode()}"
+        for model in dict.fromkeys((self._settings.default_model, self._settings.fallback_model)):
+            payload = await self._call(model, _CONTACT_PROMPT, image)
+            if payload is not None and isinstance(payload.get("contact"), bool):
+                _logger.info("dating_photo_contact_checked", contact=payload["contact"])
+                return bool(payload["contact"])
+        return False
+
     async def _ask(self, model: str, image: str, sex: str | None) -> dict[str, Any] | None:
         prompt = f"{_PROMPT} {_SEX_RULE.format(said=_SEX[sex])}" if sex in _SEX else _PROMPT
+        return await self._call(model, prompt, image)
+
+    async def _call(self, model: str, prompt: str, image: str) -> dict[str, Any] | None:
         body = {
             "model": model,
             "temperature": 0,

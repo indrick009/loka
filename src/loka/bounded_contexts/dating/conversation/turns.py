@@ -147,7 +147,9 @@ class DatingTurns:
         self._judge = judge
         self._photos = photos
         self._profiles = profiles
-        self._talk = DatingTalk(store, unlock=unlock, reader=reader, thread_of=thread_of)
+        self._talk = DatingTalk(
+            store, unlock=unlock, reader=reader, thread_of=thread_of, photos=photos
+        )
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         user, lang = turn.session.user_id, turn.language
@@ -533,7 +535,12 @@ class DatingTurns:
         if not photo or self._photos is None:
             return ""
         verdict = await self._photos.check(photo, sex=sex if isinstance(sex, str) else None)
-        return "" if verdict.ok else texts.photo_refused(verdict.reason, language)
+        if not verdict.ok:
+            return texts.photo_refused(verdict.reason, language)
+        if await self._photos.shows_contact(photo):
+            # The profile photo is shown before any match: no number on it either.
+            return texts.photo_refused("CONTACT", language)
+        return ""
 
     async def _quoted(self, member: Profile, turn: PlugTurn) -> Profile | None:
         """The profile proposed in the message this one replies to, if any."""

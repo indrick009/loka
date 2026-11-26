@@ -26,3 +26,7 @@ class PhotoCheck(Protocol):
         """``sex`` is the one declared, HOMME or FEMME, when known.
 
         A model that cannot answer lets the photo through: nobody is blocked by it."""
+
+    async def shows_contact(self, object_key: str) -> bool:
+        """A photo carrying a number, an account, a QR code or an address. A model
+        that cannot answer says ``False``: the text checks still apply."""

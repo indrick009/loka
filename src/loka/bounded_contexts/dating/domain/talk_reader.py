@@ -26,6 +26,8 @@ class TalkReading:
     decision: str
     relay_text: str | None = None
     reply: str | None = None
+    # The message gives or asks for a way to reach each other outside idia.
+    contact: bool = False
 
 
 class TalkReader(Protocol):

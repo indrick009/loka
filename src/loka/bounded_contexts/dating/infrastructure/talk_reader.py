@@ -45,10 +45,18 @@ _PROMPT = (
     "l'envoyais.\n"
     "- KEEP : {member} dit de ne pas envoyer le message gardé.\n"
     "- UNCLEAR : seulement si tu ne peux vraiment pas savoir.\n"
+    "Tu surveilles aussi les contacts : tant qu'ils n'ont pas tous les deux confirmé et "
+    "que le déblocage n'est pas payé, aucun moyen de se joindre ou de se retrouver hors "
+    "d'idia ne passe. Mets contact à true si le message donne ou demande, sous quelque "
+    "forme que ce soit : un numéro (en chiffres, en lettres, espacé, en code, ou coupé en "
+    "morceaux sur plusieurs messages — regarde les derniers), WhatsApp, Facebook, "
+    "Instagram, TikTok, Snapchat, Telegram, un pseudo, un e-mail, un lien, une adresse "
+    "précise ou un rendez-vous pour se voir (lieu et heure). Demander le quartier ou la "
+    "ville n'est pas un contact.\n"
     "Message gardé, pas encore transmis : {kept}\n"
     "Comment marche idia Rencontre : {guide}\n"
     'Réponds en JSON : {{"decision": "...", "relay_text": "..." ou null, '
-    '"reply": "..." ou null}}.'
+    '"reply": "..." ou null, "contact": false}}.'
 )
 
 
@@ -89,6 +97,7 @@ class OpenRouterTalkReader:
                 decision=str(payload["decision"]),
                 relay_text=_text(payload.get("relay_text")),
                 reply=_text(payload.get("reply")),
+                contact=payload.get("contact") is True,
             )
             _logger.info("talk_read", decision=reading.decision)
             return reading

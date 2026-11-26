@@ -189,6 +189,7 @@ def nobody_now(
 
 
 _PHOTO_REFUSED_FR = {
+    "CONTACT": "Cette photo montre un moyen de te joindre (numéro, réseau, QR code)",
     "AI": "Cette photo semble générée ou retouchée par une IA",
     "STOCK": "Cette photo ressemble à une photo de pub ou d'internet",
     "CELEBRITY": "Cette photo montre une personne connue",

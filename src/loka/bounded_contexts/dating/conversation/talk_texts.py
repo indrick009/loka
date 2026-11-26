@@ -53,8 +53,10 @@ def photo_sent(other: Profile, left: int, *, video: bool = False) -> str:
 
 def contact_refused() -> str:
     return (
-        "Je ne transmets ni numéro, ni compte, ni lien : vos contacts se débloquent "
-        "quand vous avez confirmé tous les deux. Reformule ton message."
+        "Je ne transmets aucun moyen de vous joindre ou de vous retrouver (numéro, même "
+        "écrit autrement, réseau social, pseudo, adresse, rendez-vous) 🙏 Vos contacts se "
+        "débloquent seulement quand vous avez confirmé le match tous les deux et que le "
+        "déblocage est réglé. Reformule ton message."
     )
 
 

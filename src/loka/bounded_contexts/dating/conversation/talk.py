@@ -32,6 +32,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
     TALK_KEY,
     UNLOCK_KEY,
 )
+from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.relay import gives_contact
 from loka.bounded_contexts.dating.domain.store import DatingStore
@@ -39,6 +40,7 @@ from loka.bounded_contexts.dating.domain.talk import Talk
 from loka.bounded_contexts.dating.domain.talk_reader import TalkLine, TalkReader, TalkReading
 from loka.bounded_contexts.payment.application.unlock_contact import UnlockContact, payer_answer
 from loka.bounded_contexts.payment.domain.contact_unlock import DATING_PLUS
+from loka.shared.infrastructure.conversation_log import journal
 
 Propose = Callable[[str], Awaitable[TurnOutcome]]
 # The last lines of a member's thread, oldest first.
@@ -100,8 +102,10 @@ class DatingTalk:
         unlock: UnlockContact | None = None,
         reader: TalkReader | None = None,
         thread_of: ThreadOf | None = None,
+        photos: PhotoCheck | None = None,
     ) -> None:
         self._store = store
+        self._photos = photos
         self._unlock = unlock
         self._reader = reader
         self._thread_of = thread_of
@@ -240,6 +244,11 @@ class DatingTalk:
             return await self._stop(turn, desk, member, other, talk, propose=propose)
         if decision == "CONFIRM":
             return await self._confirm(turn, desk, member, other, talk)
+        if reading is not None and reading.contact and decision != "IDIA":
+            # The model watches what the words hide: a number in letters, cut in
+            # pieces, a nickname (decision of 26 Nov 2026). Never kept to be sent
+            # later either.
+            return await self._refuse_contact(turn, desk, member, other, talk, text)
         if decision == "SEND":
             if kept is None:
                 return await self._reply(turn, desk, talk, other, talk_texts.nothing_to_send(other))
@@ -250,7 +259,10 @@ class DatingTalk:
         keep = {PENDING_RELAY: words[:LONGEST], KEPT_KEY: words[:LONGEST]}
         if decision == "IDIA" and answer_for_idia:
             answer = f"{answer_for_idia}\n{talk_texts.not_relayed(other)}"
-            return await self._reply(turn, desk, talk, other, answer, extra=keep)
+            flagged = reading is not None and reading.contact
+            return await self._reply(
+                turn, desk, talk, other, answer, extra=None if flagged else keep
+            )
         if decision != "MATCH":
             # Only when the model itself cannot tell, or did not say.
             return await self._reply(
@@ -263,6 +275,19 @@ class DatingTalk:
                 extra=keep,
             )
         return await self._relay(turn, desk, member, other, talk, words)
+
+    async def _refuse_contact(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        member: Profile,
+        other: Profile,
+        talk: Talk,
+        what: str,
+    ) -> TurnOutcome:
+        """Nothing to reach each other by before a confirmed, unlocked match."""
+        journal("dating_contact_blocked", str(member.user_id), text=what[:120])
+        return await self._reply(turn, desk, talk, other, talk_texts.contact_refused())
 
     async def _offered_to_close(self, turn: PlugTurn) -> bool:
         """idia's last words offered to close the talk (see ``dating_nudges``)."""
@@ -297,7 +322,7 @@ class DatingTalk:
         text: str,
     ) -> TurnOutcome:
         if gives_contact(text):
-            return await self._reply(turn, desk, talk, other, talk_texts.contact_refused())
+            return await self._refuse_contact(turn, desk, member, other, talk, text)
         if turn.rejected.get("message") == "inappropriate":
             return await self._reply(turn, desk, talk, other, talk_texts.inappropriate())
         side = talk.side(member.profile_id)
@@ -325,6 +350,9 @@ class DatingTalk:
         side = talk.side(member.profile_id)
         if side.photos_left <= 0:
             return await self._reply(turn, desk, talk, other, talk_texts.used_up(other, "photos"))
+        if not video and self._photos is not None and await self._photos.shows_contact(media_key):
+            shown = f"[photo] {media_key}"
+            return await self._refuse_contact(turn, desk, member, other, talk, shown)
         side.photos += 1
         talk.acted(member.profile_id, now=turn.now)
         await self._store.save_talk(talk)
