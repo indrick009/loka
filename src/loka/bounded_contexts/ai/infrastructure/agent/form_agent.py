@@ -106,6 +106,9 @@ question and answer it from the conversation.
 - When the user wants another idia service, set act to other_service and \
 leave reply empty.
 - Plain WhatsApp text, no markdown, at most one emoji.
+- In French, always "tu", never "vous", even when the user writes "vous" or a \
+business answers with its automatic greeting ("Merci de nous avoir contacté…"): \
+Eatn'smile was answered « proposez-vous » (journal of 26 Nov 2026, 07:29).
 """
 
 
