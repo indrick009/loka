@@ -48,6 +48,9 @@ ThreadOf = Callable[[uuid.UUID], Awaitable[list[TalkLine]]]
 # other message is read by the model, which sees the thread, the other's name
 # and the message kept (decision of 25 Nov 2026: no word lists in its place).
 _KEYWORDS = {"confirmer": "CONFIRM", "confirme": "CONFIRM", "stop": "END"}
+_AGREE = re.compile(
+    r"^\W*(oui|ok|okay|d accord|vas y|volontiers|yes)\b[\w\s-]{0,30}$"
+)
 _PLUS = re.compile(r"^\W*(plus|more)\W*$")
 # A relayed message is a question, not a letter.
 LONGEST = 600
@@ -219,6 +222,10 @@ class DatingTalk:
             )
         if not text:
             return await self._reply(turn, desk, talk, other, talk_texts.only_text_and_photos())
+        if _AGREE.match(folded) and await self._offered_to_close(turn):
+            # « Oui » to « dis-le-moi : je fermerai ta discussion » closes it;
+            # read by the model, it could reach the other as a message.
+            return await self._stop(turn, desk, member, other, talk, propose=propose)
         pending = turn.session.context.get(PENDING_RELAY)
         kept = pending if isinstance(pending, str) and pending else None
         reading = None if folded.strip(" .!") in _KEYWORDS else await self._read(
@@ -256,6 +263,13 @@ class DatingTalk:
                 extra=keep,
             )
         return await self._relay(turn, desk, member, other, talk, words)
+
+    async def _offered_to_close(self, turn: PlugTurn) -> bool:
+        """idia's last words offered to close the talk (see ``dating_nudges``)."""
+        if self._thread_of is None:
+            return False
+        said = [line for line in await self._thread_of(turn.session.id) if line.speaker == "idia"]
+        return bool(said) and "je fermerai" in said[-1].text
 
     async def _read(
         self, turn: PlugTurn, member: Profile, other: Profile, kept: str | None, text: str
