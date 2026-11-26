@@ -293,11 +293,21 @@ class FoodTurns:
             and isinstance(offered, list)
             and offered
             and not turn.facts.get("dish")
+            and not _elsewhere(turn)
         ):
             pending = turn.session.context.get(FAR_KEY)
             if isinstance(pending, list) and pending:
                 return await self._far_answer(turn, desk, client, offered, pending)
             picks = chosen_all(turn)
+            if not picks and not re.search(r"\d", turn.text or ""):
+                # « Je veux pas ça »: no number at all is not a choice; asking
+                # for one again looped until the stuck guard (journal of
+                # 26 Nov 2026, 08:46).
+                context = {k: v for k, v in turn.session.context.items() if k != HITS_KEY}
+                await desk.settle(
+                    turn, step=FlowStep.COLLECT_FIELD, question_key=None, context=context
+                )
+                return say(texts.something_else(lang), voiced=False)
             if not picks or not all(1 <= pick <= len(offered) for pick in picks):
                 return say(
                     texts.pick_a_number(len(offered), lang),
@@ -561,6 +571,17 @@ def _yes_no(turn: PlugTurn) -> bool | None:
     if folded.startswith(_YES):
         return True
     return None
+
+
+def _elsewhere(turn: PlugTurn) -> bool:
+    """« Et à Douala ? » while a list is shown: another town is a new search,
+    not a wrong number (journal of 26 Nov 2026, 08:45)."""
+
+    def city(place: object) -> str:
+        return fold(str(place.get("city") or "")) if isinstance(place, dict) else ""
+
+    new = city(turn.facts.get("place"))
+    return bool(new) and new != city(turn.session.context.get("place"))
 
 
 def _wanted(known: dict[str, Any]) -> list[str]:

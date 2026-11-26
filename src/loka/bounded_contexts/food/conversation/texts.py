@@ -365,6 +365,15 @@ def pick_a_number(count: int, language: str) -> str:
     return f"Reply with the dish number, between 1 and {count}."
 
 
+def something_else(language: str) -> str:
+    if _fr(language):
+        return (
+            "D'accord 🙂 Dis-moi le plat qui te ferait envie, ou une autre ville, "
+            "et je cherche."
+        )
+    return "All right 🙂 Tell me a dish you'd like, or another town, and I'll look."
+
+
 def request_sent(restaurant: str, dish: str, language: str) -> str:
     if _fr(language):
         return (
