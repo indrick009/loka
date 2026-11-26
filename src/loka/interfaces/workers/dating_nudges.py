@@ -141,6 +141,14 @@ async def nudge_once(database: Database, redis: Redis, *, now: datetime) -> int:
             nudges.append(
                 _Nudge(key, waiting, text, other.photo_key or None, _proposing(other))
             )
+        # Members someone said yes to, still unanswered: Morel, in a talk
+        # Margaret left, is told someone else waits for him.
+        wanted = {
+            silent.profile_id
+            for _, silent in await store.unanswered_yeses(
+                now - timedelta(minutes=ASK_AFTER_MINUTES), since
+            )
+        }
         for talk in await store.open_talks():
             pair = talk.waiting()
             if pair is None or pair[0].last_at > int(cutoff.timestamp()):
@@ -151,9 +159,10 @@ async def nudge_once(database: Database, redis: Redis, *, now: datetime) -> int:
             if member is None or them is None:
                 continue
             key = _TALK_KEY.format(talk=talk.talk_id, side=waiter.profile_id, at=waiter.last_at)
-            nudges.append(
-                _Nudge(key, member, texts.still_waiting_talk(them, confirmed=waiter.confirmed))
+            text = texts.still_waiting_talk(
+                them, confirmed=waiter.confirmed, wanted=member.profile_id in wanted
             )
+            nudges.append(_Nudge(key, member, text))
         told: set[str] = set()
         for nudge in nudges:
             uid = str(nudge.member.user_id)

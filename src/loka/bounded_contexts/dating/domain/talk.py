@@ -76,9 +76,23 @@ class Talk:
         """``(waiting, silent)``: the member who acted last and has had no word
         back since, and the one he waits on; ``None`` while nobody waits."""
         first, second = self.first, self.second
+        if first.last_at == second.last_at == 0:
+            return self._waiting_before_last_at()
         if first.last_at == second.last_at:
             return None
         return (first, second) if first.last_at > second.last_at else (second, first)
+
+    def _waiting_before_last_at(self) -> tuple[Side, Side] | None:
+        """Talks opened before ``last_at`` was kept: whoever confirmed, else
+        whoever wrote more, waits. Morel had confirmed to Margaret, who never
+        answered, and nobody was told (journal of 26 Nov 2026)."""
+        first, second = self.first, self.second
+        if first.confirmed != second.confirmed:
+            return (first, second) if first.confirmed else (second, first)
+        said_first, said_second = first.sent + first.photos, second.sent + second.photos
+        if said_first == said_second:
+            return None
+        return (first, second) if said_first > said_second else (second, first)
 
     def close(self) -> None:
         self.status = CLOSED

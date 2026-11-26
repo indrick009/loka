@@ -353,9 +353,17 @@ def someone_waits() -> str:
     return "Quelqu'un aimerait faire ta connaissance et attend ta réponse 💛"
 
 
-def still_waiting_talk(silent: Profile, *, confirmed: bool) -> str:
-    """A talk where the other has not answered for hours."""
+def still_waiting_talk(silent: Profile, *, confirmed: bool, wanted: bool = False) -> str:
+    """A talk where the other has not answered for hours; ``wanted`` when
+    someone else said yes to this member meanwhile."""
     what = "à ton CONFIRMER" if confirmed else "à ton dernier message"
+    if wanted:
+        return (
+            f"{silent.first_name} n'a pas encore répondu {what}. Pendant ce temps, "
+            "quelqu'un d'autre aimerait faire ta connaissance 💛 Si tu veux voir son "
+            f"profil, dis-le-moi : je fermerai ta discussion avec {silent.first_name} "
+            "et je te le présente."
+        )
     return (
         f"{silent.first_name} n'a pas encore répondu {what}. Votre discussion reste "
         "ouverte. Si tu préfères découvrir d'autres profils, dis-le-moi : je fermerai "
