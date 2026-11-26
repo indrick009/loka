@@ -16,8 +16,9 @@ from typing import Protocol
 Vector = tuple[float, ...]
 
 # Cosine similarity above which two photos are taken for the same person.
-# OpenCV gives 0.363 for SFace; a little higher, a near-double is not enough.
-SAME_PERSON = 0.42
+# OpenCV gives 0.363 for SFace, but on our members' photos two different
+# women reached 0.41 (26 Nov 2026): well above that, never a resemblance.
+SAME_PERSON = 0.55
 # Answers needed before a taste is trusted: two yeses can be chance.
 MIN_ANSWERS = 3
 
