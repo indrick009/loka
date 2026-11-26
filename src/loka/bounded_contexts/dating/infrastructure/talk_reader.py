@@ -51,8 +51,9 @@ _PROMPT = (
     "forme que ce soit : un numéro (en chiffres, en lettres, espacé, en code, ou coupé en "
     "morceaux sur plusieurs messages — regarde les derniers), WhatsApp, Facebook, "
     "Instagram, TikTok, Snapchat, Telegram, un pseudo, un e-mail, un lien, une adresse "
-    "précise ou un rendez-vous pour se voir (lieu et heure). Demander le quartier ou la "
-    "ville n'est pas un contact.\n"
+    "précise ou un rendez-vous pour se voir (lieu et heure), même déguisés (« fesse "
+    "bouc », « wtsp », « mon num c'est… »). Demander le quartier ou la ville n'est pas un "
+    "contact. contact vaut aussi quand le message est pour toi.\n"
     "Message gardé, pas encore transmis : {kept}\n"
     "Comment marche idia Rencontre : {guide}\n"
     'Réponds en JSON : {{"decision": "...", "relay_text": "..." ou null, '

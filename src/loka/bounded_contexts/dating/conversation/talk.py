@@ -252,6 +252,11 @@ class DatingTalk:
         if decision == "SEND":
             if kept is None:
                 return await self._reply(turn, desk, talk, other, talk_texts.nothing_to_send(other))
+            # The kept words are read again on their own: « ajoute-moi sur fesse
+            # bouc », taken for idia, was kept and would have gone on « envoie ».
+            again = await self._read(turn, member, other, None, kept)
+            if again is not None and again.contact:
+                return await self._refuse_contact(turn, desk, member, other, talk, kept)
             return await self._relay(turn, desk, member, other, talk, kept)
         if decision == "KEEP" and kept is not None:
             return await self._reply(turn, desk, talk, other, talk_texts.kept_back(other))
