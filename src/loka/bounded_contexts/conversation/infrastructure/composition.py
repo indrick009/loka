@@ -54,6 +54,7 @@ from loka.bounded_contexts.dating.conversation.turns import DatingTurns
 from loka.bounded_contexts.dating.domain.talk_reader import TalkLine
 from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMatchJudge
 from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
+from loka.bounded_contexts.dating.infrastructure.profile_reader import OpenRouterProfileReader
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
 from loka.bounded_contexts.dating.infrastructure.talk_reader import OpenRouterTalkReader
 from loka.bounded_contexts.food.conversation.turns import FoodTurns
@@ -319,6 +320,15 @@ def talk_reader(
     return OpenRouterTalkReader(settings.ai, record)
 
 
+def profile_reader(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterProfileReader | None:
+    """Reads what a dating member is and wants; none without a model."""
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterProfileReader(settings.ai, record)
+
+
 def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any]:
     """Food, Dating, Found and Booking, each over its own store."""
 
@@ -351,6 +361,7 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             photos=photo_judge(settings, record),
             reader=talk_reader(settings, record),
             thread_of=thread_of,
+            profiles=profile_reader(settings, record),
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

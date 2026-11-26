@@ -9,6 +9,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from loka.bounded_contexts.dating.domain.attributes import Wish
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.talk import OPEN, Side, Talk
 from loka.bounded_contexts.dating.infrastructure.models import (
@@ -40,6 +41,8 @@ def _profile(row: DatingProfileRow) -> Profile:
         seeking=row.seeking,
         age_min=row.age_min,
         age_max=row.age_max,
+        traits={str(k): str(v) for k, v in (row.traits or {}).items()},
+        wishes=tuple(w for w in (Wish.from_dict(raw) for raw in row.wishes or []) if w),
         created_at=row.created_at,
     )
 
@@ -112,6 +115,8 @@ class SqlAlchemyDatingStore:
                 seeking=profile.seeking,
                 age_min=profile.age_min,
                 age_max=profile.age_max,
+                traits=dict(profile.traits),
+                wishes=[wish.as_dict() for wish in profile.wishes],
                 created_at=profile.created_at,
             )
         )
@@ -211,6 +216,24 @@ class SqlAlchemyDatingStore:
         if row is not None:
             row.looking = list(looking)
             await self._session.flush()
+
+    async def update_attributes(
+        self, user_id: uuid.UUID, traits: dict[str, str], wishes: tuple[Wish, ...]
+    ) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.traits = dict(traits)
+            row.wishes = [wish.as_dict() for wish in wishes]
+            await self._session.flush()
+
+    async def attribute_keys(self) -> set[str]:
+        """Every key a member's traits or wishes already use: the vocabulary grows."""
+        rows = await self._session.execute(select(DatingProfileRow.traits, DatingProfileRow.wishes))
+        keys: set[str] = set()
+        for traits, wishes in rows.all():
+            keys.update(str(key) for key in (traits or {}))
+            keys.update(str(w.get("key")) for w in wishes or [] if isinstance(w, dict))
+        return keys
 
     async def update_ages(self, user_id: uuid.UUID, low: int | None, high: int | None) -> None:
         row = await self._row_of(user_id)

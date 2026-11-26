@@ -1,4 +1,5 @@
-"""Location and sex as filters; then age and descriptions.
+"""Location and sex as filters; then age, descriptions and each one's wishes (see
+``attributes``).
 
 In Cameroon a woman most often looks for a man older than her: a couple where
 he is 0 to 10 years older comes first, a larger or reversed gap after
@@ -13,6 +14,7 @@ import re
 import uuid
 from collections.abc import Iterable, Mapping
 
+from loka.bounded_contexts.dating.domain.attributes import fit
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.shared.domain.knowledge.market import normalize
 
@@ -86,14 +88,21 @@ def best_candidates(
     answers: a profile often turned down comes later.
     """
     seen = refusals or {}
-    ranked = [
-        (
-            other,
-            (affinity(member, other) + AGE_WEIGHT * age_fit(member, other))
-            * appeal(*seen.get(other.profile_id, (0, 0))),
-        )
-        for other in others
-        if str(other.profile_id) not in excluded and member.could_meet(other)
-    ]
+    ranked: list[tuple[Profile, float]] = []
+    for other in others:
+        if str(other.profile_id) in excluded or not member.could_meet(other):
+            continue
+        kept, wanted = wishes_fit(member, other)
+        if not kept:
+            continue
+        base = affinity(member, other) + AGE_WEIGHT * age_fit(member, other) + wanted
+        ranked.append((other, max(base, 0.0) * appeal(*seen.get(other.profile_id, (0, 0)))))
     ranked.sort(key=lambda item: item[1], reverse=True)
     return ranked
+
+
+def wishes_fit(a: Profile, b: Profile) -> tuple[bool, float]:
+    """Both ways: each one's wishes against what the other is."""
+    kept_a, score_a = fit(a.all_wishes(), b.all_traits())
+    kept_b, score_b = fit(b.all_wishes(), a.all_traits())
+    return kept_a and kept_b, score_a + score_b

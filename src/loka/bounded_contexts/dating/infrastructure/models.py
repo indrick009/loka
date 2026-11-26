@@ -30,6 +30,8 @@ class DatingProfileRow(Base):
     looking: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
     age_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
     age_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    traits: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False, default=dict)
+    wishes: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
     seeking: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

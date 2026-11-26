@@ -35,10 +35,12 @@ from loka.bounded_contexts.dating.conversation.keys import (
 )
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk, ThreadOf
+from loka.bounded_contexts.dating.domain.attributes import BASE_KEYS
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
 from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
+from loka.bounded_contexts.dating.domain.profile_reader import ProfileReader
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import CLOSED
 from loka.bounded_contexts.dating.domain.talk_reader import TalkReader
@@ -118,11 +120,13 @@ class DatingTurns:
         photos: PhotoCheck | None = None,
         reader: TalkReader | None = None,
         thread_of: ThreadOf | None = None,
+        profiles: ProfileReader | None = None,
     ) -> None:
         self._store = store
         self._unlock = unlock
         self._judge = judge
         self._photos = photos
+        self._profiles = profiles
         self._talk = DatingTalk(store, unlock=unlock, reader=reader, thread_of=thread_of)
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
@@ -225,6 +229,19 @@ class DatingTurns:
                 await self._store.save_talk(talk)
             await self._store.withdraw(user)
         return await self._close(turn, desk, texts.withdrawn(turn.language))
+
+    async def _read(self, member: Profile) -> Profile:
+        """What the member is and wants, read once from the profile (see
+        ``attributes``); the profile is ranked without when it cannot be read."""
+        if self._profiles is None:
+            return member
+        known = await self._store.attribute_keys()
+        keys = {**dict.fromkeys(known, ""), **BASE_KEYS}
+        reading = await self._profiles.read(member, keys)
+        if reading is None:
+            return member
+        await self._store.update_attributes(member.user_id, reading.traits, reading.wishes)
+        return replace(member, traits=reading.traits, wishes=reading.wishes)
 
     async def _photo_first(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, photo: object
@@ -334,6 +351,7 @@ class DatingTurns:
             fields={**known, "photo_key": known["photo"]},
         )
         await self._store.add(member)
+        member = await self._read(member)
         return await self._propose(turn, desk, member, prefix=texts.ready(lang))
 
     async def _propose(

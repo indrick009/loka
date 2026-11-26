@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Protocol
 
+from loka.bounded_contexts.dating.domain.attributes import Wish
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.talk import Talk
 
@@ -42,6 +43,14 @@ class DatingStore(Protocol):
 
     async def passed_on(self, profile_id: uuid.UUID) -> list[Profile]:
         """Active profiles this member said no to, latest first."""
+
+    async def update_attributes(
+        self, user_id: uuid.UUID, traits: dict[str, str], wishes: tuple[Wish, ...]
+    ) -> None:
+        """What the member is and wants, as read from the profile."""
+
+    async def attribute_keys(self) -> set[str]:
+        """The keys already used by any profile."""
 
     async def update_ages(self, user_id: uuid.UUID, low: int | None, high: int | None) -> None:
         """The age range sought; ``None`` ends are no bound."""

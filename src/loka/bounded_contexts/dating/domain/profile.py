@@ -7,10 +7,11 @@ forced through the Cameroonian district index.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from loka.bounded_contexts.dating.domain.attributes import PREFER, Wish
 from loka.shared.domain.errors import ValidationFailed
 from loka.shared.domain.knowledge.market import normalize
 
@@ -40,6 +41,28 @@ class Profile:
     # 22 to 25 were proposed (journal of 26 Nov 2026, 07:48).
     age_min: int | None = None
     age_max: int | None = None
+    # Read by a model from the profile (see ``attributes``): what the member is,
+    # and what they want in the other. Empty until read.
+    traits: dict[str, str] = field(default_factory=dict)
+    wishes: tuple[Wish, ...] = ()
+
+    def all_traits(self) -> dict[str, str]:
+        """The traits read, with what the profile itself says."""
+        return {
+            **self.traits,
+            "age": str(self.age),
+            "metier": self.profession,
+            "ville": self.city,
+            "pays": self.country,
+        }
+
+    def all_wishes(self) -> tuple[Wish, ...]:
+        """The wishes read, with the age range asked as a preference."""
+        asked = (self.age_min, self.age_max) != (None, None)
+        if not asked or any(wish.key == "age" for wish in self.wishes):
+            return self.wishes
+        age = Wish(key="age", low=self.age_min, high=self.age_max, strength=PREFER)
+        return (*self.wishes, age)
 
     @classmethod
     def create(cls, *, user_id: uuid.UUID, now: datetime, fields: dict[str, Any]) -> Profile:
@@ -97,8 +120,11 @@ class Profile:
         )
 
     def could_meet(self, other: Profile) -> bool:
-        """Both ways: the sex each seeks, each lives where the other looks, and
-        each is of an age the other seeks.
+        """Both ways: the sex each seeks, and each lives where the other looks.
+
+        The age sought and the other wishes are scored, not filtered (see
+        ``attributes``): « plus de 26 ans » kept out a man of 25 who fitted the
+        rest (decision of 26 Nov 2026).
 
         Reciprocity is decided here, once: a proposal is only made when both
         members' location preferences include the other's residence.
@@ -109,8 +135,6 @@ class Profile:
             and self.sex == other.sought_sex
             and self.accepts_place_of(other)
             and other.accepts_place_of(self)
-            and self.accepts_age_of(other)
-            and other.accepts_age_of(self)
         )
 
 
