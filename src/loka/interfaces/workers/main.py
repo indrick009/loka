@@ -18,6 +18,7 @@ from loka.interfaces.workers import (
     booking_payments,
     housing_payments,
     menu_reminders,
+    openrouter_watch,
     referral_commissions,
     unlock_payments,
 )
@@ -100,6 +101,11 @@ async def run() -> None:
         name="maintenance-replay",
     )
 
+    # OpenRouter, the backup behind the shared model proxy, watched for credit.
+    openrouter_task = asyncio.create_task(
+        openrouter_watch.watch_forever(database, settings), name="openrouter-watch"
+    )
+
     try:
         await stop.wait()
     finally:
@@ -112,6 +118,7 @@ async def run() -> None:
             referral_task,
             menu_task,
             maintenance_task,
+            openrouter_task,
         ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

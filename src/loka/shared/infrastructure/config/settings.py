@@ -99,6 +99,11 @@ class AISettings(BaseModel):
     backup_model: str = "auto"
     backup_timeout_seconds: float = 30.0
     backup_cooldown_seconds: float = 120.0
+    # The model calls go through the shared CLIProxyAPI (subscription first,
+    # OpenRouter behind it). This key only lets the worker watch OpenRouter's
+    # credit, and alert ``ALERT_PHONE`` before the backup runs dry. Empty: no watch.
+    openrouter_watch_key: SecretStr = SecretStr("")
+    openrouter_min_credit_usd: float = 1.0
     # The tenant search led by the Pydantic AI agent (docs/pydantic-ai-prototype.md).
     # Off: the classifier and the form lead it, as before.
     agent_enabled: bool = False
