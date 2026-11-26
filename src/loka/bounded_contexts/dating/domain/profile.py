@@ -7,11 +7,11 @@ forced through the Cameroonian district index.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Any
 
-from loka.bounded_contexts.dating.domain.attributes import MUST, PREFER, Wish
+from loka.bounded_contexts.dating.domain.attributes import MUST, Wish
 from loka.shared.domain.errors import ValidationFailed
 from loka.shared.domain.knowledge.market import normalize
 
@@ -19,10 +19,6 @@ ADULT_AGE = 18
 SEXES = ("HOMME", "FEMME")
 # Where a member looks for love. Several may be chosen; "PEU_IMPORTE" is all.
 LOOKING = ("QUARTIER", "VILLE", "PAYS", "ETRANGER", "PEU_IMPORTE")
-
-
-# Set in the traits when a member insists on the age range: it then keeps out.
-AGE_STRICT = "_age_strict"
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,15 +59,18 @@ class Profile:
         }
 
     def all_wishes(self) -> tuple[Wish, ...]:
-        """The wishes read, with the age range asked as a preference — a must
-        once the member insisted on it (``AGE_STRICT``)."""
-        asked = (self.age_min, self.age_max) != (None, None)
-        strict = asked and bool(self.traits.get(AGE_STRICT))
-        if not asked or (not strict and any(wish.key == "age" for wish in self.wishes)):
-            return self.wishes
-        age = Wish(
-            key="age", low=self.age_min, high=self.age_max, strength=MUST if strict else PREFER
-        )
+        """The wishes read, with the age range sought as a must.
+
+        A preference let men of 23 and 24 through to women who said « 26 ans
+        minimum », « 28 ans minimum », and every one of them complained
+        (journal of 26 Nov 2026, 07:48, 10:31, 12:21): an age said is kept to.
+        """
+        if (self.age_min, self.age_max) == (None, None):
+            return tuple(
+                replace(wish, strength=MUST) if wish.key == "age" else wish
+                for wish in self.wishes
+            )
+        age = Wish(key="age", low=self.age_min, high=self.age_max, strength=MUST)
         return (*(wish for wish in self.wishes if wish.key != "age"), age)
 
     @classmethod

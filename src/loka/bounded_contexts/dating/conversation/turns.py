@@ -50,7 +50,7 @@ from loka.bounded_contexts.dating.domain.faces import FaceReader, same_person
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
-from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, AGE_STRICT, LOOKING, Profile
+from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.profile_reader import ProfileReader
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import CLOSED
@@ -215,20 +215,18 @@ class DatingTurns:
         if isinstance(wishes, str) and question in (None, BACK_KEY, LIKE_KEY):
             return await self._more_wishes(turn, desk, member, wishes)
         ages = turn.facts.get("ages")
-        if isinstance(ages, dict) and question in (None, BACK_KEY, LIKE_KEY):
+        if (
+            isinstance(ages, dict)
+            and question in (None, BACK_KEY, LIKE_KEY)
+            and (ages.get("min"), ages.get("max")) != (member.age_min, member.age_max)
+        ):
             # « J'ai dit plus de 26 ans »: the range is kept, and the next person
-            # proposed is in it (journal of 26 Nov 2026, 07:48).
-            # Said again, the range becomes a must: Serena, « à partir de 26 ans »
-            # twice, was told so and shown a man of 23 (journal of 26 Nov 2026,
-            # 10:32). Asked once at registration, it stays a preference.
+            # proposed is in it (journal of 26 Nov 2026, 07:48). Only when it
+            # changes: the same range read again in « Non un autre » answered
+            # « c'est noté » four times instead of the no (12:22).
             low, high = ages.get("min"), ages.get("max")
-            if (low, high) != (member.age_min, member.age_max):
-                await self._store.update_ages(user, low, high)
-                member = replace(member, age_min=low, age_max=high)
-            if low is not None or high is not None:
-                traits = {**member.traits, AGE_STRICT: "1"}
-                await self._store.update_attributes(user, traits, member.wishes)
-                member = replace(member, traits=traits)
+            await self._store.update_ages(user, low, high)
+            member = replace(member, age_min=low, age_max=high)
             return await self._propose(turn, desk, member, prefix=texts.ages_noted(lang))
         talk_id = turn.session.context.get(TALK_ID)
         in_talk = not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id
