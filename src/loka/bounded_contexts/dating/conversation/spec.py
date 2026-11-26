@@ -264,6 +264,9 @@ def _ages(entities: dict[str, Any]) -> dict[str, int | None] | None:
         low, high = bounds.get("min"), bounds.get("max")
         if low is not None and high is not None and low > high:
             low, high = high, low
+        if low is not None and low == high:
+            # One age said is a minimum: « un gar de 28 ans » (26 Nov 2026).
+            high = None
         return {"min": low, "max": high}
     if entities.get("ages_any") is True:
         return {"min": None, "max": None}

@@ -67,10 +67,10 @@ class Profile:
         """
         if (self.age_min, self.age_max) == (None, None):
             return tuple(
-                replace(wish, strength=MUST) if wish.key == "age" else wish
+                replace(_at_least(wish), strength=MUST) if wish.key == "age" else wish
                 for wish in self.wishes
             )
-        age = Wish(key="age", low=self.age_min, high=self.age_max, strength=MUST)
+        age = _at_least(Wish(key="age", low=self.age_min, high=self.age_max, strength=MUST))
         return (*(wish for wish in self.wishes if wish.key != "age"), age)
 
     @classmethod
@@ -168,3 +168,11 @@ def _bound(ages: object, name: str) -> int | None:
     """One end of an age range ``{"min": 26, "max": None}``; anything else is none."""
     value = ages.get(name) if isinstance(ages, dict) else None
     return value if isinstance(value, int) and ADULT_AGE <= value <= 99 else None
+
+
+def _at_least(wish: Wish) -> Wish:
+    """One age said is a minimum: « un gar de 28 ans », « il doit avoir 25 ans »
+    read as exactly 28, exactly 25, left nobody (journal of 26 Nov 2026, 12:23)."""
+    if wish.low is not None and wish.low == wish.high:
+        return replace(wish, high=None)
+    return wish
