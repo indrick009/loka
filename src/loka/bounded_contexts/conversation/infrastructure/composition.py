@@ -52,6 +52,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
 )
 from loka.bounded_contexts.dating.conversation.turns import DatingTurns
 from loka.bounded_contexts.dating.domain.talk_reader import TalkLine
+from loka.bounded_contexts.dating.infrastructure.face_reader import face_reader
 from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMatchJudge
 from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
 from loka.bounded_contexts.dating.infrastructure.profile_reader import OpenRouterProfileReader
@@ -362,6 +363,7 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             reader=talk_reader(settings, record),
             thread_of=thread_of,
             profiles=profile_reader(settings, record),
+            faces=face_reader(S3MediaStorage(settings.object_storage)),
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

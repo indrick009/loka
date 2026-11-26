@@ -17,16 +17,11 @@ from redis.asyncio import Redis
 
 from loka.bounded_contexts.conversation.application.plugs.desk import ConversationDesk
 from loka.bounded_contexts.conversation.application.plugs.turn import Steer
-from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
-    FlowName,
-    FlowStep,
-)
 from loka.bounded_contexts.conversation.infrastructure.messaging_composition import (
     CONVERSATION_SESSION_REPOSITORY,
 )
 from loka.bounded_contexts.dating.conversation import texts
-from loka.bounded_contexts.dating.conversation.keys import LIKE_KEY, PROPOSED_KEY
-from loka.bounded_contexts.dating.domain.matching import best_candidates
+from loka.bounded_contexts.dating.conversation.ranking import proposing, ranked_for
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.infrastructure.store import SqlAlchemyDatingStore
 from loka.bounded_contexts.food.domain.menu import DOUALA
@@ -66,16 +61,6 @@ class _Nudge:
     steer: Steer | None = None
 
 
-def _proposing(other: Profile) -> Steer:
-    """The member's next answer is read as a yes or a no to ``other``."""
-    return Steer(
-        flow=FlowName.DATING_PROFILE,
-        step=FlowStep.COLLECT_CHOICE,
-        question_key=LIKE_KEY,
-        context={PROPOSED_KEY: str(other.profile_id), "_score": 0.0},
-    )
-
-
 async def _silent_side(
     store: SqlAlchemyDatingStore, redis: Redis, now: datetime
 ) -> list[_Nudge]:
@@ -99,15 +84,14 @@ async def _silent_side(
             continue
         asked.add(sid)
         text = f"{texts.someone_waits()}\n{texts.proposal(waiting, 'fr')}"
-        nudges.append(_Nudge(key, silent, text, waiting.photo_key or None, _proposing(waiting)))
+        nudges.append(_Nudge(key, silent, text, waiting.photo_key or None, proposing(waiting)))
     return nudges
 
 
-async def _next_for(store: SqlAlchemyDatingStore, member: Profile) -> Profile | None:
-    excluded = await store.answered(member.profile_id) | await store.passed_by(member.profile_id)
-    ranked = best_candidates(
-        member, await store.members(), excluded=excluded, refusals=await store.refusals()
-    )
+async def _next_for(
+    store: SqlAlchemyDatingStore, member: Profile, now: datetime
+) -> Profile | None:
+    ranked = await ranked_for(store, member, now=now)
     return ranked[0][0] if ranked else None
 
 
@@ -135,13 +119,13 @@ async def nudge_once(database: Database, redis: Redis, *, now: datetime) -> int:
             names = [s.first_name for s in silents]
             # Three hours at most: the next profile comes with the news
             # (decision of 26 Nov 2026).
-            other = await _next_for(store, waiting)
+            other = await _next_for(store, waiting, now)
             if other is None:
                 nudges.append(_Nudge(key, waiting, texts.still_waiting_yes(names)))
                 continue
             text = f"{texts.still_waiting_next(names)}\n\n{texts.proposal(other, 'fr')}"
             nudges.append(
-                _Nudge(key, waiting, text, other.photo_key or None, _proposing(other))
+                _Nudge(key, waiting, text, other.photo_key or None, proposing(other))
             )
         # Members someone said yes to, still unanswered: Morel, in a talk
         # Margaret left, is told someone else waits for him.

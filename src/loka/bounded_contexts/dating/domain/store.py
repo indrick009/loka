@@ -98,5 +98,13 @@ class DatingStore(Protocol):
         """``(waiting, silent)``: yeses given between ``since`` and ``before`` the
         other never answered."""
 
+    async def update_face(self, user_id: uuid.UUID, face: tuple[float, ...]) -> None: ...
+
+    async def all_answers(self) -> dict[uuid.UUID, list[tuple[uuid.UUID, bool]]]:
+        """Per profile, every answer it gave: ``(to_profile, liked)``."""
+
+    async def last_wrote(self) -> dict[uuid.UUID, datetime]:
+        """Per user, when they last wrote to idia."""
+
     async def liked_by_both(self, profile_id: uuid.UUID) -> list[uuid.UUID]:
         """Profiles that liked this member and that he liked back, oldest first."""

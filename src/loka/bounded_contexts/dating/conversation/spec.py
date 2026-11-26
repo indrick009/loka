@@ -18,9 +18,13 @@ from loka.shared.domain.knowledge.jobs import jobs_glossary
 # Said word for word before the photo is sent, whoever writes the question.
 PHOTO_RULE = {
     "fr": "Important : la photo ne doit pas être générée par l'IA. Toute photo avec "
-    "filtre, générée ou modifiée par l'IA entraîne la suppression du compte.",
+    "filtre, générée ou modifiée par l'IA entraîne la suppression du compte.\n"
+    "En l'envoyant, tu acceptes qu'idia analyse ton visage, sur ses propres serveurs, "
+    "pour éviter les faux comptes et te proposer des personnes qui te correspondent.",
     "en": "Important: the photo must not be AI-generated. Any photo with a filter, "
-    "generated or modified by AI leads to the account being deleted.",
+    "generated or modified by AI leads to the account being deleted.\n"
+    "By sending it, you agree that idia analyses your face, on its own servers, to "
+    "prevent fake accounts and to propose people who suit you.",
 }
 # The privacy promise that makes people say everything in their description.
 DESCRIPTION_PROMISE = {

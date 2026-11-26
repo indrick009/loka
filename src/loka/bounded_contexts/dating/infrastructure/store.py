@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -43,6 +43,7 @@ def _profile(row: DatingProfileRow) -> Profile:
         age_max=row.age_max,
         traits={str(k): str(v) for k, v in (row.traits or {}).items()},
         wishes=tuple(w for w in (Wish.from_dict(raw) for raw in row.wishes or []) if w),
+        face=tuple(float(x) for x in row.face or ()),
         created_at=row.created_at,
     )
 
@@ -331,6 +332,30 @@ class SqlAlchemyDatingStore:
             )
         ).scalar_one_or_none()
         return _talk(row) if row is not None else None
+
+    async def update_face(self, user_id: uuid.UUID, face: tuple[float, ...]) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.face = list(face)
+
+    async def all_answers(self) -> dict[uuid.UUID, list[tuple[uuid.UUID, bool]]]:
+        rows = await self._session.execute(
+            select(DatingAnswerRow.from_profile, DatingAnswerRow.to_profile, DatingAnswerRow.liked)
+        )
+        answers: dict[uuid.UUID, list[tuple[uuid.UUID, bool]]] = {}
+        for source, target, liked in rows.all():
+            answers.setdefault(source, []).append((target, bool(liked)))
+        return answers
+
+    async def last_wrote(self) -> dict[uuid.UUID, datetime]:
+        """Per user, when they last wrote to idia."""
+        rows = await self._session.execute(
+            text(
+                "select sender_user_id, max(received_at) from inbound_messages "
+                "where sender_user_id is not null group by sender_user_id"
+            )
+        )
+        return {uuid.UUID(str(user)): at for user, at in rows.all() if at is not None}
 
     async def matched_since(self, profile_id: uuid.UUID, since: datetime) -> bool:
         """A match opened since ``since``: the member is not shown anyone else."""

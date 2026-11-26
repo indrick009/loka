@@ -16,6 +16,7 @@ from loka.bounded_contexts.conversation.infrastructure.composition import valida
 from loka.interfaces.worker.maintenance_desk import replay_forever
 from loka.interfaces.workers import (
     booking_payments,
+    dating_morning,
     dating_nudges,
     housing_payments,
     menu_reminders,
@@ -111,6 +112,10 @@ async def run() -> None:
     nudges_task = asyncio.create_task(
         dating_nudges.sweep_forever(database, settings), name="dating-nudges"
     )
+    # Every morning, a new profile for whoever has nothing under way.
+    morning_task = asyncio.create_task(
+        dating_morning.propose_forever(database, settings), name="dating-morning"
+    )
 
     try:
         await stop.wait()
@@ -126,6 +131,7 @@ async def run() -> None:
             maintenance_task,
             openrouter_task,
             nudges_task,
+            morning_task,
         ):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):

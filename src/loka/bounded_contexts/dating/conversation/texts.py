@@ -374,6 +374,11 @@ def still_waiting_next(silent: list[str]) -> str:
     )
 
 
+def morning_hello() -> str:
+    """The morning proposal, to someone who asked nothing lately."""
+    return "Bonjour 💛 Une nouvelle personne pour toi aujourd'hui :"
+
+
 def someone_waits() -> str:
     """A yes this member never answered, put back in front of them once."""
     return "Quelqu'un aimerait faire ta connaissance et attend ta réponse 💛"

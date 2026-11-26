@@ -1,5 +1,6 @@
-"""Location and sex as filters; then age, descriptions and each one's wishes (see
-``attributes``).
+"""Location, sex and absolute wishes as filters; then, both ways, how likely
+each is to say yes to the other: descriptions, age, wishes (see ``attributes``)
+and faces (see ``faces``).
 
 In Cameroon a woman most often looks for a man older than her: a couple where
 he is 0 to 10 years older comes first, a larger or reversed gap after
@@ -13,8 +14,10 @@ from __future__ import annotations
 import re
 import uuid
 from collections.abc import Iterable, Mapping
+from datetime import datetime
 
 from loka.bounded_contexts.dating.domain.attributes import fit
+from loka.bounded_contexts.dating.domain.faces import Vector, appeal_to, taste
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.shared.domain.knowledge.market import normalize
 
@@ -75,30 +78,87 @@ def age_fit(a: Profile, b: Profile) -> float:
     return 0.2
 
 
+# How much a face being the member's type moves their interest (see ``faces``).
+FACE_WEIGHT = 0.4
+# Interest before anything is known: what the scores add to or take from.
+_NEUTRAL = 0.5
+_FLOOR = 0.05
+
+
+def interest(a: Profile, b: Profile, taste_of_a: Vector | None = None) -> float:
+    """How likely ``a`` is to say yes to ``b``: their words in common, the age
+    gap, ``a``'s wishes against what ``b`` is, ``b``'s face against ``a``'s
+    taste. Never below a floor: unknown is not « no »."""
+    _, wanted = fit(a.all_wishes(), b.all_traits())
+    score = (
+        _NEUTRAL
+        + affinity(a, b)
+        + AGE_WEIGHT * (age_fit(a, b) - 0.5)
+        + wanted
+        + FACE_WEIGHT * appeal_to(taste_of_a, b.face)
+    )
+    return max(score, _FLOOR)
+
+
+def activity(last: datetime | None, now: datetime | None) -> float:
+    """Someone who wrote lately answers: they come first."""
+    if last is None or now is None:
+        return 0.85
+    days = (now - last).total_seconds() / 86400
+    if days <= 3:
+        return 1.0
+    return 0.85 if days <= 7 else 0.7
+
+
 def best_candidates(
     member: Profile,
     others: Iterable[Profile],
     *,
     excluded: set[str],
     refusals: Mapping[uuid.UUID, tuple[int, int]] | None = None,
+    tastes: Mapping[uuid.UUID, Vector | None] | None = None,
+    last_wrote: Mapping[uuid.UUID, datetime] | None = None,
+    now: datetime | None = None,
 ) -> list[tuple[Profile, float]]:
     """Profiles this member could meet, best match first.
 
-    ``refusals`` gives, per profile, how many « non » it got out of how many
-    answers: a profile often turned down comes later.
+    Reciprocal (decision of 26 Nov 2026): the chance the member says yes to
+    them times the chance they say yes back — a profile the member would like
+    but who would never like the member is no match. Then how often the
+    profile was turned down (``refusals``) and how lately it wrote.
     """
     seen = refusals or {}
+    taste_of = tastes or {}
+    wrote = last_wrote or {}
     ranked: list[tuple[Profile, float]] = []
     for other in others:
         if str(other.profile_id) in excluded or not member.could_meet(other):
             continue
-        kept, wanted = wishes_fit(member, other)
+        kept, _ = wishes_fit(member, other)
         if not kept:
             continue
-        base = affinity(member, other) + AGE_WEIGHT * age_fit(member, other) + wanted
-        ranked.append((other, max(base, 0.0) * appeal(*seen.get(other.profile_id, (0, 0)))))
+        both = interest(member, other, taste_of.get(member.profile_id)) * interest(
+            other, member, taste_of.get(other.profile_id)
+        )
+        score = (
+            both
+            * appeal(*seen.get(other.profile_id, (0, 0)))
+            * activity(wrote.get(other.user_id), now)
+        )
+        ranked.append((other, round(score, 4)))
     ranked.sort(key=lambda item: item[1], reverse=True)
     return ranked
+
+
+def tastes_of(
+    members: Iterable[Profile], answers: Mapping[uuid.UUID, list[tuple[uuid.UUID, bool]]]
+) -> dict[uuid.UUID, Vector | None]:
+    """Each member's taste in faces, from the faces they answered."""
+    faces = {profile.profile_id: profile.face for profile in members}
+    return {
+        source: taste((faces[target], liked) for target, liked in given if faces.get(target))
+        for source, given in answers.items()
+    }
 
 
 def wishes_fit(a: Profile, b: Profile) -> tuple[bool, float]:

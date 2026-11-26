@@ -49,6 +49,8 @@ class Profile:
     # and what they want in the other. Empty until read.
     traits: dict[str, str] = field(default_factory=dict)
     wishes: tuple[Wish, ...] = ()
+    # The face of the photo as a vector (see ``faces``); empty until read.
+    face: tuple[float, ...] = ()
 
     def all_traits(self) -> dict[str, str]:
         """The traits read, with what the profile itself says."""

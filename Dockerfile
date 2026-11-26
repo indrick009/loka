@@ -13,6 +13,20 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# Face detection (YuNet, MIT) and recognition (SFace, Apache 2.0) from the
+# OpenCV model zoo, for dating: lookalike accounts and each member's taste.
+# Before the sources, so every build reuses the layer.
+ARG ZOO=https://github.com/opencv/opencv_zoo/raw/main/models
+RUN mkdir -p /app/models \
+    && curl -fsSL -o /app/models/face_detection_yunet_2023mar.onnx \
+        $ZOO/face_detection_yunet/face_detection_yunet_2023mar.onnx \
+    && curl -fsSL -o /app/models/face_recognition_sface_2021dec.onnx \
+        $ZOO/face_recognition_sface/face_recognition_sface_2021dec.onnx \
+    && printf '%s\n' \
+        "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4  /app/models/face_detection_yunet_2023mar.onnx" \
+        "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79  /app/models/face_recognition_sface_2021dec.onnx" \
+        | sha256sum -c -
+
 COPY pyproject.toml ./
 COPY src ./src
 RUN pip install --no-cache-dir -e ".[dev,agent]"

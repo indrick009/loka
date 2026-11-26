@@ -25,6 +25,7 @@ dependencies = [
     "prometheus-client>=0.21",
     "pillow>=10.4",
     "phonenumbers==9.0.43",
+    "opencv-python-headless>=4.10,<5",
 ]
 
 [project.optional-dependencies]

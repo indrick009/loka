@@ -36,6 +36,7 @@ from loka.bounded_contexts.dating.conversation.keys import (
     TRAIT_KEY,
     UNLOCK_KEY,
 )
+from loka.bounded_contexts.dating.conversation.ranking import ranked_for
 from loka.bounded_contexts.dating.conversation.spec import DATING, country_of
 from loka.bounded_contexts.dating.conversation.talk import DatingTalk, ThreadOf
 from loka.bounded_contexts.dating.domain.attributes import (
@@ -45,6 +46,7 @@ from loka.bounded_contexts.dating.domain.attributes import (
     fit,
     missing_fact,
 )
+from loka.bounded_contexts.dating.domain.faces import FaceReader, same_person
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
@@ -137,8 +139,10 @@ class DatingTurns:
         reader: TalkReader | None = None,
         thread_of: ThreadOf | None = None,
         profiles: ProfileReader | None = None,
+        faces: FaceReader | None = None,
     ) -> None:
         self._store = store
+        self._faces = faces
         self._unlock = unlock
         self._judge = judge
         self._photos = photos
@@ -174,6 +178,7 @@ class DatingTurns:
             if refused:
                 return await self._close(turn, desk, refused)
             await self._store.update_photo(user, photo)
+            await self._read_face(replace(member, photo_key=photo))
             return await self._close(turn, desk, texts.photo_updated(turn.language))
         quoted = await self._quoted(member, turn)
         if quoted is not None and question in (None, BACK_KEY, LIKE_KEY):
@@ -229,6 +234,7 @@ class DatingTurns:
             refused = await self._refusal(photo, turn.language, member.sex)
             if not refused:
                 await self._store.update_photo(user, photo)
+                await self._read_face(replace(member, photo_key=photo))
             return say(
                 refused or texts.photo_updated(turn.language),
                 question=str(question),
@@ -317,6 +323,16 @@ class DatingTurns:
             return member
         await self._store.update_attributes(member.user_id, reading.traits, reading.wishes)
         return replace(member, traits=reading.traits, wishes=reading.wishes)
+
+    async def _read_face(self, member: Profile) -> Profile:
+        """The face of the photo as a vector (see ``faces``); unchanged without."""
+        if self._faces is None or not member.photo_key:
+            return member
+        face = await self._faces.vector(member.photo_key)
+        if face is None:
+            return member
+        await self._store.update_face(member.user_id, face)
+        return replace(member, face=face)
 
     async def _photo_first(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, photo: object
@@ -427,8 +443,17 @@ class DatingTurns:
         )
         await self._store.add(member)
         member = await self._read(member)
+        member = await self._read_face(member)
         prefix = texts.ready(lang)
-        twin = next((o for o in await self._store.members() if member.looks_like(o)), None)
+        twin = next(
+            (
+                other
+                for other in await self._store.members()
+                if member.looks_like(other)
+                or (other.user_id != member.user_id and same_person(member.face, other.face))
+            ),
+            None,
+        )
         if twin is not None:
             # Warned now; the team deletes both if they prove to be one person
             # (decision of 26 Nov 2026).
@@ -457,9 +482,7 @@ class DatingTurns:
             member.profile_id
         )
         refusals = await self._store.refusals()
-        ranked = best_candidates(
-            member, await self._store.members(), excluded=excluded, refusals=refusals
-        )
+        ranked = await ranked_for(self._store, member, now=turn.now)
         if not ranked:
             state = await self._standing(member, lang)
             raw = turn.session.context.get("_quiet")
