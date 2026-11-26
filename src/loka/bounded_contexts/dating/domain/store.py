@@ -43,6 +43,9 @@ class DatingStore(Protocol):
     async def passed_on(self, profile_id: uuid.UUID) -> list[Profile]:
         """Active profiles this member said no to, latest first."""
 
+    async def update_ages(self, user_id: uuid.UUID, low: int | None, high: int | None) -> None:
+        """The age range sought; ``None`` ends are no bound."""
+
     async def update_looking(self, user_id: uuid.UUID, looking: tuple[str, ...]) -> None: ...
 
     async def refusals(self) -> dict[uuid.UUID, tuple[int, int]]:

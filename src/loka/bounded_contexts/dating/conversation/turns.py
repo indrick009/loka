@@ -12,6 +12,7 @@ from dataclasses import replace
 
 from loka.bounded_contexts.conversation.application.plugs.forms import ask_field, say, stored
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn, Steer
+from loka.bounded_contexts.conversation.application.services.closing import is_closing
 from loka.bounded_contexts.conversation.application.services.privacy import fold
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
@@ -60,6 +61,10 @@ _NO = ("non", "no", "pas intéress", "bof", "suivant")
 
 
 PHOTO_KEY = DATING.question_key("photo")
+# When the pending proposal went out, and how soon after it an « ok » is
+# taken for an answer to the message before rather than a yes to it.
+PROPOSED_AT = "_proposed_at"
+RACE_SECONDS = 20
 
 # « montre un autre », « une autre personne », « suivant »: a pass, not a yes
 # (journal of 25 Nov 2026, 07:28: « Montre un autre » then « Ok » became a yes).
@@ -171,6 +176,15 @@ class DatingTurns:
                 await self._store.update_looking(user, wanted)
                 member = replace(member, looking=wanted)
                 return await self._propose(turn, desk, member, prefix="")
+        ages = turn.facts.get("ages")
+        if isinstance(ages, dict) and question in (None, BACK_KEY, LIKE_KEY):
+            # « J'ai dit plus de 26 ans »: the range is kept, and the next person
+            # proposed is in it (journal of 26 Nov 2026, 07:48).
+            low, high = ages.get("min"), ages.get("max")
+            if (low, high) != (member.age_min, member.age_max):
+                await self._store.update_ages(user, low, high)
+                member = replace(member, age_min=low, age_max=high)
+                return await self._propose(turn, desk, member, prefix=texts.ages_noted(lang))
         talk_id = turn.session.context.get(TALK_ID)
         in_talk = not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id
         if in_talk and isinstance(photo, str) and photo and _PROFILE.search(fold(turn.text or "")):
@@ -372,7 +386,12 @@ class DatingTurns:
             turn,
             step=FlowStep.COLLECT_CHOICE,
             question_key=LIKE_KEY,
-            context={PROPOSED_KEY: str(other.profile_id), "_score": round(score, 3), "_why": why},
+            context={
+                PROPOSED_KEY: str(other.profile_id),
+                "_score": round(score, 3),
+                "_why": why,
+                PROPOSED_AT: turn.now.timestamp(),
+            },
         )
         text = f"{prefix}\n{texts.proposal(other, lang)}".strip()
         return say(
@@ -462,6 +481,22 @@ class DatingTurns:
         other = await self._store.profile(proposed)
         if other is None:
             return await self._propose(turn, desk, member, prefix="")
+        sent_at = turn.session.context.get(PROPOSED_AT)
+        if (
+            answer is not None
+            and is_closing(turn.text)
+            and isinstance(sent_at, int | float)
+            and turn.now.timestamp() - sent_at < RACE_SECONDS
+        ):
+            # « Oki » sent with « présente quelqu'un d'autre », read after the
+            # next proposal went out: a yes to a person not yet seen (journal of
+            # 26 Nov 2026, 07:54). Asked plainly instead.
+            return say(
+                texts.yes_or_no_to(other, lang),
+                question=LIKE_KEY,
+                step=FlowStep.COLLECT_CHOICE,
+                voiced=False,
+            )
         if answer is None:
             # The person proposed, again, with the photo: rewritten by the model,
             # the bare « réponds OUI ou NON » became « voici quelqu'un qui

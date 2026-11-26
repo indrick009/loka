@@ -99,6 +99,18 @@ PROFILE_FORM = (
         notice=DESCRIPTION_PROMISE,
     ),
     FormField(
+        "ages",
+        "the age range of the person sought: age_min and/or age_max, or ages_any "
+        "when any adult age is fine; taken from the description when it says it "
+        "(« plus de 26 ans » is age_min 26)",
+        {
+            "fr": "Quel âge doit avoir la personne que tu cherches ? Par exemple "
+            "« 25-35 ans », « plus de 26 ans », ou « peu importe ».",
+            "en": "How old should the person you are looking for be? For example "
+            "« 25-35 », « over 26 », or « any age ».",
+        },
+    ),
+    FormField(
         "looking",
         "where they look for love: quartier, ville, pays, etranger or peu importe; a "
         "preference (« de préférence », « plutôt », « idéalement », « X mais… ») is "
@@ -126,7 +138,10 @@ RULES = (
     "flags included) and "
     "looking (any of QUARTIER, VILLE, PAYS, ETRANGER, or PEU_IMPORTE; a mere "
     "preference such as « de préférence à l'étranger mais… » adds PEU_IMPORTE, "
-    "and it may be changed later, once the profile exists). "
+    "and it may be changed later, once the profile exists), and the age range "
+    "sought: age_min / age_max (« plus de 26 ans », « entre 25 et 35 », « pas plus "
+    "de 40 ans »), read from the description too, or ages_any for « peu importe » "
+    "when the open question is the age; it may be changed later too. "
     "Set 'inappropriate' to true when the description is sexual, "
     "offensive or commercial. A description is private: never quote or sum it up "
     "to another member, and never say what someone looks like or is from it. "
@@ -165,6 +180,9 @@ ENTITIES: dict[str, Any] = {
     "country": {"type": "string"},
     "description": {"type": "string"},
     "looking": {"type": "array", "items": {"type": "string", "enum": list(LOOKING)}},
+    "age_min": {"type": "integer"},
+    "age_max": {"type": "integer"},
+    "ages_any": {"type": "boolean"},
     "inappropriate": {"type": "boolean"},
     "addressee": {"type": "string", "enum": list(ADDRESSEES)},
     "relay_text": {"type": "string"},
@@ -199,6 +217,9 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
         picked = [item for item in looking if item in LOOKING]
         if picked:
             facts["looking"] = ["PEU_IMPORTE"] if "PEU_IMPORTE" in picked else picked
+    ages = _ages(entities)
+    if ages is not None:
+        facts["ages"] = ages
     description = text_of(entities.get("description"))
     if description:
         if entities.get("inappropriate") is True:
@@ -218,6 +239,23 @@ def validate(entities: dict[str, Any], flow: FlowName) -> ExtractedFacts:
     if common.get("media_kind") == "IMAGE" and common.get("media_key"):
         facts["photo"] = common["media_key"]
     return ExtractedFacts(facts=facts, rejected=rejected)
+
+
+def _ages(entities: dict[str, Any]) -> dict[str, int | None] | None:
+    """The age range sought, ``{"min": 26, "max": None}``; any age is two ``None``."""
+    bounds = {
+        end: value
+        for end, value in (("min", entities.get("age_min")), ("max", entities.get("age_max")))
+        if isinstance(value, int) and not isinstance(value, bool) and 18 <= value <= 99
+    }
+    if bounds:
+        low, high = bounds.get("min"), bounds.get("max")
+        if low is not None and high is not None and low > high:
+            low, high = high, low
+        return {"min": low, "max": high}
+    if entities.get("ages_any") is True:
+        return {"min": None, "max": None}
+    return None
 
 
 DATING = DomainSpec(

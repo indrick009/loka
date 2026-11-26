@@ -38,6 +38,8 @@ def _profile(row: DatingProfileRow) -> Profile:
         description=row.description,
         looking=tuple(row.looking or ()),
         seeking=row.seeking,
+        age_min=row.age_min,
+        age_max=row.age_max,
         created_at=row.created_at,
     )
 
@@ -108,6 +110,8 @@ class SqlAlchemyDatingStore:
                 description=profile.description,
                 looking=list(profile.looking),
                 seeking=profile.seeking,
+                age_min=profile.age_min,
+                age_max=profile.age_max,
                 created_at=profile.created_at,
             )
         )
@@ -206,6 +210,12 @@ class SqlAlchemyDatingStore:
         row = await self._row_of(user_id)
         if row is not None:
             row.looking = list(looking)
+            await self._session.flush()
+
+    async def update_ages(self, user_id: uuid.UUID, low: int | None, high: int | None) -> None:
+        row = await self._row_of(user_id)
+        if row is not None:
+            row.age_min, row.age_max = low, high
             await self._session.flush()
 
     async def members(self) -> list[Profile]:

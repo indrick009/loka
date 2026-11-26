@@ -28,6 +28,8 @@ class DatingProfileRow(Base):
     photo_key: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
     looking: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    age_min: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    age_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
     seeking: Mapped[str | None] = mapped_column(String(8), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

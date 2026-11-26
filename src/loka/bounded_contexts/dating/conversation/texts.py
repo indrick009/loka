@@ -54,6 +54,20 @@ def yes_or_no(language: str) -> str:
     return "Just reply YES if you are interested, or NO."
 
 
+def yes_or_no_to(other: Profile, language: str) -> str:
+    if _fr(language):
+        return f"Réponds simplement OUI si {other.first_name} t'intéresse, ou NON."
+    return f"Just reply YES if {other.first_name} interests you, or NO."
+
+
+def ages_noted(language: str) -> str:
+    return (
+        "C'est noté, je ne te propose que des personnes de l'âge que tu cherches."
+        if _fr(language)
+        else "Noted: I only propose people of the age you are looking for."
+    )
+
+
 def _names(names: list[str], fr: bool) -> str:
     if len(names) == 1:
         return names[0]

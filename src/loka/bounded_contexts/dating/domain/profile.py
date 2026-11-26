@@ -35,6 +35,11 @@ class Profile:
     looking: tuple[str, ...]
     seeking: str | None
     created_at: datetime
+    # The age sought, inclusive; ``None`` is no bound. Asked after the
+    # description: « plus de 26 ans » was only read by the matching, and men of
+    # 22 to 25 were proposed (journal of 26 Nov 2026, 07:48).
+    age_min: int | None = None
+    age_max: int | None = None
 
     @classmethod
     def create(cls, *, user_id: uuid.UUID, now: datetime, fields: dict[str, Any]) -> Profile:
@@ -60,6 +65,8 @@ class Profile:
             looking=looking,
             seeking=str(fields["seeking"]) if fields.get("seeking") in SEXES else None,
             created_at=now,
+            age_min=_bound(fields.get("ages"), "min"),
+            age_max=_bound(fields.get("ages"), "max"),
         )
 
     @property
@@ -83,8 +90,15 @@ class Profile:
             or ("ETRANGER" in self.looking and not same_country)
         )
 
+    def accepts_age_of(self, other: Profile) -> bool:
+        """Whether ``other``'s age is in the range this member seeks."""
+        return (self.age_min is None or other.age >= self.age_min) and (
+            self.age_max is None or other.age <= self.age_max
+        )
+
     def could_meet(self, other: Profile) -> bool:
-        """Both ways: the sex each seeks, and each lives where the other looks.
+        """Both ways: the sex each seeks, each lives where the other looks, and
+        each is of an age the other seeks.
 
         Reciprocity is decided here, once: a proposal is only made when both
         members' location preferences include the other's residence.
@@ -95,4 +109,12 @@ class Profile:
             and self.sex == other.sought_sex
             and self.accepts_place_of(other)
             and other.accepts_place_of(self)
+            and self.accepts_age_of(other)
+            and other.accepts_age_of(self)
         )
+
+
+def _bound(ages: object, name: str) -> int | None:
+    """One end of an age range ``{"min": 26, "max": None}``; anything else is none."""
+    value = ages.get(name) if isinstance(ages, dict) else None
+    return value if isinstance(value, int) and ADULT_AGE <= value <= 99 else None
