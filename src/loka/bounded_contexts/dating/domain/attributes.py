@@ -100,11 +100,17 @@ class Wish:
                 self.high is None or found <= self.high
             )
             return inside if self.wants else not inside
-        if not self.values:
+        bare_number = _number(trait) is not None and not re.search("[a-z]", normalize(trait))
+        if not self.values or bare_number:
+            # Words against a bare number (« grand » against 177) tell nothing.
             return None
         said = normalize(trait)
         hit = any(value and (value in said or said in value) for value in self.values)
-        return hit if self.wants else not hit
+        if not hit:
+            # Words not found prove nothing: « travailleur » is not written in
+            # « dessinateur industriel », which does not make him idle.
+            return None
+        return self.wants
 
 
 def key_of(raw: object) -> str:
