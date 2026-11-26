@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from loka.bounded_contexts.dating.domain.attributes import PREFER, Wish
+from loka.bounded_contexts.dating.domain.attributes import MUST, PREFER, Wish
 from loka.shared.domain.errors import ValidationFailed
 from loka.shared.domain.knowledge.market import normalize
 
@@ -19,6 +19,10 @@ ADULT_AGE = 18
 SEXES = ("HOMME", "FEMME")
 # Where a member looks for love. Several may be chosen; "PEU_IMPORTE" is all.
 LOOKING = ("QUARTIER", "VILLE", "PAYS", "ETRANGER", "PEU_IMPORTE")
+
+
+# Set in the traits when a member insists on the age range: it then keeps out.
+AGE_STRICT = "_age_strict"
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,12 +61,16 @@ class Profile:
         }
 
     def all_wishes(self) -> tuple[Wish, ...]:
-        """The wishes read, with the age range asked as a preference."""
+        """The wishes read, with the age range asked as a preference — a must
+        once the member insisted on it (``AGE_STRICT``)."""
         asked = (self.age_min, self.age_max) != (None, None)
-        if not asked or any(wish.key == "age" for wish in self.wishes):
+        strict = asked and bool(self.traits.get(AGE_STRICT))
+        if not asked or (not strict and any(wish.key == "age" for wish in self.wishes)):
             return self.wishes
-        age = Wish(key="age", low=self.age_min, high=self.age_max, strength=PREFER)
-        return (*self.wishes, age)
+        age = Wish(
+            key="age", low=self.age_min, high=self.age_max, strength=MUST if strict else PREFER
+        )
+        return (*(wish for wish in self.wishes if wish.key != "age"), age)
 
     @classmethod
     def create(cls, *, user_id: uuid.UUID, now: datetime, fields: dict[str, Any]) -> Profile:

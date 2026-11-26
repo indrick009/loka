@@ -48,7 +48,7 @@ from loka.bounded_contexts.dating.domain.attributes import (
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
 from loka.bounded_contexts.dating.domain.photo_check import PhotoCheck
-from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, LOOKING, Profile
+from loka.bounded_contexts.dating.domain.profile import ADULT_AGE, AGE_STRICT, LOOKING, Profile
 from loka.bounded_contexts.dating.domain.profile_reader import ProfileReader
 from loka.bounded_contexts.dating.domain.store import DatingStore
 from loka.bounded_contexts.dating.domain.talk import CLOSED
@@ -94,6 +94,12 @@ _WANT = re.compile(
     r"\bcelui\b|\bcelle\b|\bcelle ?(ci|la)\b|\bje (le|la) (veux|prends|choisis)\b|"
     r"\b(il|elle) m.?interesse|\bc.?est (lui|elle)\b"
 )
+# « Non non je ne veux pas celui ci »: « celui » made it a yes, and Serena's
+# profile went to Evrad (journal of 26 Nov 2026, 10:29). A refusal wins.
+_REFUSE = re.compile(
+    r"^\W*non\b|\bne?\b[\w\s'\u2019]{0,20}?(veux|aime|interesse|plait|prends|choisis)\w*.*\bpas\b|"
+    r"\b(veux|aime) pas\b|\bpas (de )?(celui|celle|lui|elle)\b"
+)
 # The name in a proposal: « Voici quelqu'un qui pourrait te plaire : Jordan, 24 ans ».
 _PROPOSED_NAME = re.compile(r"te plaire\s*:\s*([^,\n]+),")
 # « Supprime mon profil »: idia's model answered « je supprime ton profil »,
@@ -104,7 +110,7 @@ _LEAVE = re.compile(rf"\b{_ERASE}\b.*\bprofil|\bprofil\w*\b.*\b{_ERASE}\b")
 
 
 def _answer(turn: PlugTurn) -> bool | None:
-    if _NEXT.search(fold(turn.text or "")):
+    if _NEXT.search(fold(turn.text or "")) or _REFUSE.search(fold(turn.text or "")):
         return False
     if _WANT.search(fold(turn.text or "")):
         return True
@@ -175,7 +181,11 @@ class DatingTurns:
             answer = _answer(turn)
             if answer is not None:
                 return await self._decide(turn, desk, member, quoted, liked=answer, score=0.0)
-        if question in (None, BACK_KEY) and _WANT.search(fold(turn.text or "")):
+        if (
+            question in (None, BACK_KEY)
+            and _WANT.search(fold(turn.text or ""))
+            and not _REFUSE.search(fold(turn.text or ""))
+        ):
             passed = await self._store.passed_on(member.profile_id)
             if passed:
                 return await self._decide(turn, desk, member, passed[0], liked=True, score=0.0)
@@ -198,11 +208,18 @@ class DatingTurns:
         if isinstance(ages, dict) and question in (None, BACK_KEY, LIKE_KEY):
             # « J'ai dit plus de 26 ans »: the range is kept, and the next person
             # proposed is in it (journal of 26 Nov 2026, 07:48).
+            # Said again, the range becomes a must: Serena, « à partir de 26 ans »
+            # twice, was told so and shown a man of 23 (journal of 26 Nov 2026,
+            # 10:32). Asked once at registration, it stays a preference.
             low, high = ages.get("min"), ages.get("max")
             if (low, high) != (member.age_min, member.age_max):
                 await self._store.update_ages(user, low, high)
                 member = replace(member, age_min=low, age_max=high)
-                return await self._propose(turn, desk, member, prefix=texts.ages_noted(lang))
+            if low is not None or high is not None:
+                traits = {**member.traits, AGE_STRICT: "1"}
+                await self._store.update_attributes(user, traits, member.wishes)
+                member = replace(member, traits=traits)
+            return await self._propose(turn, desk, member, prefix=texts.ages_noted(lang))
         talk_id = turn.session.context.get(TALK_ID)
         in_talk = not turn.fresh and question in (TALK_KEY, PLUS_KEY, RELAY_KEY) and talk_id
         if in_talk and isinstance(photo, str) and photo and _PROFILE.search(fold(turn.text or "")):
@@ -449,7 +466,10 @@ class DatingTurns:
             # Read even on a fresh turn: « montre-moi d'autres profils » opens the
             # flow anew each time, and a counter reset there sent the same
             # sentence three times (journal of 24 Nov 2026, 13:14 to 13:17).
-            quiet = raw if isinstance(raw, int) else 0
+            # After something happened (a talk closed, a « non »), the state is
+            # said in full: Milly, out of her talk, got « D'accord 👍 » alone
+            # (journal of 26 Nov 2026, 10:15).
+            quiet = raw if isinstance(raw, int) and not prefix else 0
             anywhere = replace(member, looking=("PEU_IMPORTE",))
             narrow = "PEU_IMPORTE" not in member.looking and bool(
                 best_candidates(anywhere, await self._store.members(), excluded=excluded)
@@ -574,6 +594,20 @@ class DatingTurns:
             # « Oki » sent with « présente quelqu'un d'autre », read after the
             # next proposal went out: a yes to a person not yet seen (journal of
             # 26 Nov 2026, 07:54). Asked plainly instead.
+            return say(
+                texts.yes_or_no_to(other, lang),
+                question=LIKE_KEY,
+                step=FlowStep.COLLECT_CHOICE,
+                voiced=False,
+            )
+        if (
+            answer is None
+            and isinstance(sent_at, int | float)
+            and turn.now.timestamp() - sent_at < RACE_SECONDS
+        ):
+            # A second message sent with the last answer: the proposal just
+            # went out, it is not sent twice (Serena, journal of 26 Nov 2026,
+            # 10:28).
             return say(
                 texts.yes_or_no_to(other, lang),
                 question=LIKE_KEY,
