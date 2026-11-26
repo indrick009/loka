@@ -337,6 +337,22 @@ def still_waiting_yes(silent: list[str]) -> str:
     )
 
 
+def still_waiting_next(silent: list[str]) -> str:
+    """Three hours without an answer: the next profile comes with the news
+    (decision of 26 Nov 2026)."""
+    names = _names(silent, True)
+    verb = "n'a" if len(silent) == 1 else "n'ont"
+    return (
+        f"{names} {verb} pas encore répondu 💛 Je te préviens dès qu'une réponse "
+        "arrive. Tu n'as pas besoin d'attendre :"
+    )
+
+
+def someone_waits() -> str:
+    """A yes this member never answered, put back in front of them once."""
+    return "Quelqu'un aimerait faire ta connaissance et attend ta réponse 💛"
+
+
 def still_waiting_talk(silent: Profile, *, confirmed: bool) -> str:
     """A talk where the other has not answered for hours."""
     what = "à ton CONFIRMER" if confirmed else "à ton dernier message"
