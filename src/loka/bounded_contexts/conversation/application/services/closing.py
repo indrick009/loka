@@ -21,7 +21,10 @@ _LONGEST = 5
 
 
 def is_closing(text: str | None) -> bool:
-    if not text or not text.strip():
+    if not text or not text.strip() or "?" in text:
+        # « ?? » is someone waiting for an answer, never a closing: folded to
+        # nothing, it was taken for an emoji and Milly got no reply (journal
+        # of 26 Nov 2026, 14:22).
         return False
     words = fold(text).split()
     if not words:
