@@ -27,9 +27,12 @@ RUN mkdir -p /app/models \
         "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79  /app/models/face_recognition_sface_2021dec.onnx" \
         | sha256sum -c -
 
+# Dependencies first, against an empty package: the layer is reused until
+# pyproject.toml changes, instead of reinstalling OpenCV on every code change.
 COPY pyproject.toml ./
+RUN mkdir -p src/loka && touch src/loka/__init__.py \
+    && pip install --no-cache-dir -e ".[dev,agent]"
 COPY src ./src
-RUN pip install --no-cache-dir -e ".[dev,agent]"
 
 FROM base AS test
 COPY .env.example ./
