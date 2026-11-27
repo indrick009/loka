@@ -98,6 +98,11 @@ class DatingStore(Protocol):
         """``(waiting, silent)``: yeses given between ``since`` and ``before`` the
         other never answered."""
 
+    async def recent_answers(
+        self, profile_id: uuid.UUID, limit: int = 6
+    ) -> list[tuple[Profile, bool, str | None]]:
+        """The member's latest answers, newest first: who, yes or no, why."""
+
     async def note_reason(
         self, from_profile: uuid.UUID, to_profile: uuid.UUID, reason: str
     ) -> None:

@@ -333,6 +333,23 @@ class SqlAlchemyDatingStore:
         ).scalar_one_or_none()
         return _talk(row) if row is not None else None
 
+    async def recent_answers(
+        self, profile_id: uuid.UUID, limit: int = 6
+    ) -> list[tuple[Profile, bool, str | None]]:
+        """The member's latest answers, newest first: who, yes or no, why."""
+        rows = await self._session.execute(
+            select(DatingAnswerRow.to_profile, DatingAnswerRow.liked, DatingAnswerRow.reason)
+            .where(DatingAnswerRow.from_profile == profile_id)
+            .order_by(DatingAnswerRow.created_at.desc())
+            .limit(limit)
+        )
+        answers: list[tuple[Profile, bool, str | None]] = []
+        for target, liked, reason in rows.all():
+            other = await self.profile(target)
+            if other is not None:
+                answers.append((other, bool(liked), reason))
+        return answers
+
     async def note_reason(
         self, from_profile: uuid.UUID, to_profile: uuid.UUID, reason: str
     ) -> None:

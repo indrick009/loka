@@ -53,6 +53,7 @@ from loka.bounded_contexts.conversation.infrastructure.persistence.repositories 
 )
 from loka.bounded_contexts.dating.conversation.turns import DatingTurns
 from loka.bounded_contexts.dating.domain.talk_reader import TalkLine
+from loka.bounded_contexts.dating.infrastructure.dating_agent import OpenRouterDatingAgent
 from loka.bounded_contexts.dating.infrastructure.face_reader import face_reader
 from loka.bounded_contexts.dating.infrastructure.match_judge import OpenRouterMatchJudge
 from loka.bounded_contexts.dating.infrastructure.photo_judge import OpenRouterPhotoJudge
@@ -335,6 +336,26 @@ def talk_agent(
     return OpenRouterTalkAgent(settings.ai, record)
 
 
+def dating_agent(
+    settings: Settings, record: RecordUsage | None = None
+) -> OpenRouterDatingAgent | None:
+    """The model that conducts each member's dating thread, when
+    ``DATING__AGENT`` is ``test`` or ``on`` (decision of 27 Nov 2026)."""
+    if os.environ.get("DATING__AGENT", "off").strip() not in ("test", "on"):
+        return None
+    if not settings.ai.pipeline_enabled or not settings.ai.api_key.get_secret_value():
+        return None
+    return OpenRouterDatingAgent(settings.ai, record)
+
+
+def _agent_phones(switch: str) -> frozenset[str] | None:
+    """``test``: only the numbers in ``<switch>_PHONES``; ``on``: everyone."""
+    if os.environ.get(switch, "off").strip() == "on":
+        return None
+    raw = os.environ.get(f"{switch}_PHONES", "+237692617975")
+    return frozenset(phone.strip() for phone in raw.split(",") if phone.strip())
+
+
 def talk_agent_phones() -> frozenset[str] | None:
     """``test``: only the numbers in ``DATING__TALK_AGENT_PHONES``; ``on``: all."""
     if os.environ.get("DATING__TALK_AGENT", "off").strip() == "on":
@@ -388,6 +409,8 @@ def domain_turns(uow: SqlAlchemyUnitOfWork, settings: Settings) -> dict[str, Any
             faces=face_reader(S3MediaStorage(settings.object_storage)),
             talk_agent=talk_agent(settings, record),
             talk_agent_phones=talk_agent_phones(),
+            agent=dating_agent(settings, record),
+            agent_phones=_agent_phones("DATING__AGENT"),
         ),
         "found": FoundTurns(SqlAlchemyFoundStore(uow.session), unlock=unlock),
         "booking": BookingTurns(

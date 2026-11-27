@@ -22,6 +22,7 @@ from loka.bounded_contexts.conversation.domain.entities.conversation_session imp
     FlowStep,
 )
 from loka.bounded_contexts.dating.conversation import texts
+from loka.bounded_contexts.dating.conversation.conductor import DatingConductor
 from loka.bounded_contexts.dating.conversation.keys import (
     ASKED_TRAIT,
     BACK_KEY,
@@ -49,6 +50,7 @@ from loka.bounded_contexts.dating.domain.attributes import (
     fit,
     missing_fact,
 )
+from loka.bounded_contexts.dating.domain.dating_agent import DatingAgent
 from loka.bounded_contexts.dating.domain.faces import FaceReader, same_person
 from loka.bounded_contexts.dating.domain.judge import SHORTLIST, MatchJudge
 from loka.bounded_contexts.dating.domain.matching import appeal, best_candidates
@@ -165,6 +167,8 @@ class DatingTurns:
         faces: FaceReader | None = None,
         talk_agent: TalkAgent | None = None,
         talk_agent_phones: frozenset[str] | None = None,
+        agent: DatingAgent | None = None,
+        agent_phones: frozenset[str] | None = None,
     ) -> None:
         self._store = store
         self._faces = faces
@@ -181,6 +185,8 @@ class DatingTurns:
             agent=talk_agent,
             agent_phones=talk_agent_phones,
         )
+        # The model conducts the member's thread (decision of 27 Nov 2026).
+        self._conductor = DatingConductor(self, agent, agent_phones) if agent else None
 
     async def apply(self, turn: PlugTurn, desk: PlugDesk) -> TurnOutcome:
         user, lang = turn.session.user_id, turn.language
@@ -196,7 +202,10 @@ class DatingTurns:
         if member is None:
             return await self._register(turn, desk, user)
         question = turn.session.context.get("next_question")
-        if question == REASON_KEY and not turn.fresh:
+        conducting = self._conductor is not None and self._conductor.conducts(
+            turn.session.phone.e164
+        )
+        if question == REASON_KEY and not turn.fresh and not conducting:
             return await self._reason(turn, desk, member)
         if question == TRAIT_KEY and not turn.fresh:
             answered = await self._trait(turn, desk, member)
@@ -215,6 +224,13 @@ class DatingTurns:
             await self._store.update_photo(user, photo)
             await self._read_face(replace(member, photo_key=photo))
             return await self._close(turn, desk, texts.photo_updated(turn.language))
+        in_thread = question in (None, BACK_KEY, LIKE_KEY, REASON_KEY) or turn.fresh
+        if conducting and in_thread and self._conductor is not None:
+            # The model reads the message with the whole situation; the rules
+            # below are only what answers when it cannot be asked.
+            conducted = await self._conductor.conduct(turn, desk, member)
+            if conducted is not None:
+                return conducted
         quoted = await self._quoted(member, turn)
         if quoted is not None and question in (None, BACK_KEY, LIKE_KEY):
             # A reply to a proposal answers that profile, whichever came since.
@@ -798,19 +814,25 @@ class DatingTurns:
             now=turn.now,
         )
         if not answer:
-            if (
-                await self._store.likes(other.profile_id, member.profile_id)
-                and await self._store.open_talk_of(other.profile_id) is None
-                and not await desk.busy(other.user_id, now=turn.now)
-            ):
-                # Never into a talk under way: « écris rencontre » sent to Dave
-                # mid-talk had his next two messages relayed to Margaret
-                # (journal of 25 Nov 2026, 08:37). He hears it afterwards.
-                # They said yes and wait: told now, never left with a yes that
-                # gets no answer (decision of 25 Nov 2026), never « refused ».
-                await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)
+            await self._tell_no_follow_up(turn, desk, member, other)
             return await self._after_no(turn, desk, member, other)
         return await self._after_yes(turn, desk, member, other, score)
+
+    async def _tell_no_follow_up(
+        self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile
+    ) -> None:
+        """Whoever said yes to a member who just said no hears it, kindly."""
+        if (
+            await self._store.likes(other.profile_id, member.profile_id)
+            and await self._store.open_talk_of(other.profile_id) is None
+            and not await desk.busy(other.user_id, now=turn.now)
+        ):
+            # Never into a talk under way: « écris rencontre » sent to Dave
+            # mid-talk had his next two messages relayed to Margaret
+            # (journal of 25 Nov 2026, 08:37). He hears it afterwards.
+            # They said yes and wait: told now, never left with a yes that
+            # gets no answer (decision of 25 Nov 2026), never « refused ».
+            await desk.notify(other.user_id, texts.no_follow_up(member), now=turn.now)
 
     async def _after_yes(
         self, turn: PlugTurn, desk: PlugDesk, member: Profile, other: Profile, score: float
