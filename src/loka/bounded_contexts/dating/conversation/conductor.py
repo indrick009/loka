@@ -9,12 +9,14 @@ notices. Nothing a member could be harmed by is left to the model.
 
 from __future__ import annotations
 
+import re
 import uuid
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from loka.bounded_contexts.conversation.application.plugs.forms import say
 from loka.bounded_contexts.conversation.application.plugs.turn import PlugDesk, PlugTurn
+from loka.bounded_contexts.conversation.application.services.privacy import fold
 from loka.bounded_contexts.conversation.application.use_cases.analyse_conversation_message.turn import (  # noqa: E501
     TurnOutcome,
 )
@@ -98,7 +100,16 @@ class DatingConductor:
         text = " ".join((turn.text or "").split())
         if thread and thread[-1].speaker == "member" and thread[-1].text.strip() == text:
             thread = thread[:-1]
+        last_no = next(
+            ((other, reason) for other, liked, reason in await store.recent_answers(
+                member.profile_id, limit=1) if not liked),
+            None,
+        )
         return DatingSituation(
+            last_refused=(
+                f"{card(last_no[0])} — raison : {last_no[1] or 'pas encore donnée'}"
+                if last_no else None
+            ),
             member=member.first_name,
             profile=_profile(member),
             proposed=card(proposed) if proposed else None,
@@ -119,7 +130,10 @@ class DatingConductor:
     ) -> TurnOutcome | None:
         turns, lang = self._turns, turn.language
         kind = move.move
-        if kind != "ANSWER":
+        # The model's own words, whole, for when nobody is left to propose.
+        said = move.reply
+        move = replace(move, reason=_meaningful(move.reason))
+        if kind not in ("ANSWER", "SHOW_PHOTO"):
             move = replace(move, reply=_reaction(move.reply, proposed))
         if kind in ("ANSWER_PROPOSAL", "NEXT") and proposed is not None:
             liked = move.liked is True if kind == "ANSWER_PROPOSAL" else False
@@ -127,9 +141,9 @@ class DatingConductor:
                 raw = turn.session.context.get("_score")
                 score = float(raw) if isinstance(raw, int | float) else 0.0
                 return await turns._decide(turn, desk, member, proposed, liked=True, score=score)
-            return await self._no(turn, desk, member, proposed, move)
+            return await self._no(turn, desk, member, proposed, move, said)
         if kind in ("ANSWER_PROPOSAL", "NEXT"):
-            return await turns._propose(turn, desk, member, prefix=move.reply or "")
+            return await self._next(turn, desk, member, move.reply or "", said)
         if kind == "REASON" and move.reason:
             refused = next(
                 (other for other, liked, _ in await turns._store.recent_answers(member.profile_id)
@@ -139,10 +153,12 @@ class DatingConductor:
             if refused is not None:
                 member = await turns._learn_reason(member, refused, move.reason)
             prefix = move.reply or texts.reason_noted(lang)
-            return await self._keep_or_propose(turn, desk, member, proposed, prefix)
+            if proposed is not None:
+                return await self._keep_or_propose(turn, desk, member, proposed, prefix)
+            return await self._next(turn, desk, member, prefix, said)
         if kind == "SHOW_PHOTO" and proposed is not None and proposed.photo_key:
             return say(
-                move.reply or texts.proposal(proposed, lang),
+                move.reply or texts.photo_again(proposed, lang),
                 question=LIKE_KEY,
                 step=FlowStep.COLLECT_CHOICE,
                 voiced=False,
@@ -152,11 +168,13 @@ class DatingConductor:
             wanted = tuple(move.looking)
             await turns._store.update_looking(member.user_id, wanted)
             member = replace(member, looking=wanted)
-            return await self._still_or_next(turn, desk, member, proposed, move.reply or "")
+            return await self._still_or_next(
+                turn, desk, member, proposed, move.reply or "", said
+            )
         if kind == "ADD_WISHES" and (move.wishes or move.age_min or move.age_max):
             member = await self._add_wishes(member, move)
             prefix = move.reply or texts.wishes_noted(lang)
-            return await self._still_or_next(turn, desk, member, proposed, prefix)
+            return await self._still_or_next(turn, desk, member, proposed, prefix, said)
         if kind == "WITHDRAW":
             return await turns._withdraw(turn, desk, member.user_id)
         if not move.reply:
@@ -170,6 +188,7 @@ class DatingConductor:
         member: Profile,
         proposed: Profile | None,
         prefix: str,
+        said: str | None,
     ) -> TurnOutcome:
         """New criteria: the person proposed still waits when they still fit — a
         new person put in their place came back later (bench of 27 Nov 2026,
@@ -179,7 +198,24 @@ class DatingConductor:
         )[0]:
             text = f"{prefix}\n{texts.yes_or_no_to(proposed, turn.language)}".strip()
             return say(text, question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False)
-        return await self._turns._propose(turn, desk, member, prefix=prefix)
+        return await self._next(turn, desk, member, prefix, said)
+
+    async def _next(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        member: Profile,
+        prefix: str,
+        said: str | None,
+    ) -> TurnOutcome:
+        """The next person; with nobody left, the model's own words — the same
+        « tu as vu tous les profils » four times in a row read as a wall (bench
+        of 27 Nov 2026, Ma belle)."""
+        if await ranked_for(self._turns._store, member, now=turn.now):
+            return await self._turns._propose(turn, desk, member, prefix=prefix)
+        if said:
+            return await self._turns._close(turn, desk, said)
+        return await self._turns._propose(turn, desk, member, prefix="")
 
     async def _no(
         self,
@@ -188,6 +224,7 @@ class DatingConductor:
         member: Profile,
         proposed: Profile,
         move: DatingMove,
+        said: str | None,
     ) -> TurnOutcome:
         """A no to the person proposed, with its reason when said; the next one."""
         turns = self._turns
@@ -204,7 +241,7 @@ class DatingConductor:
             return await turns._after_no(turn, desk, member, proposed)
         member = await turns._learn_reason(member, proposed, move.reason)
         prefix = move.reply or texts.reason_noted(turn.language)
-        return await turns._propose(turn, desk, member, prefix=prefix)
+        return await self._next(turn, desk, member, prefix, said)
 
     async def _add_wishes(self, member: Profile, move: DatingMove) -> Profile:
         store = self._turns._store
@@ -239,6 +276,20 @@ class DatingConductor:
 
 
 _ABOUT_NEXT = ("attend", "tu as vu tous", "personne d'autre", "je te propose", "voici")
+
+
+_GENERIC = re.compile(
+    r"^\W*((non+|no|nan)\W*)*((il|elle|ca|celui[ -]ci|celle[ -]ci|je) )?(ne )?(me )?"
+    r"(plait|convient|interesse|veux|dit rien)?( pas)?( de (lui|elle))?"
+    r"( celui[ -]ci| celle[ -]ci)?\W*$"
+)
+
+
+def _meaningful(reason: str | None) -> str | None:
+    """« Elle ne me plaît pas » says no, not why: it is no reason."""
+    if not reason or _GENERIC.match(fold(reason)):
+        return None
+    return reason
 
 
 def _reaction(reply: str | None, proposed: Profile | None) -> str | None:

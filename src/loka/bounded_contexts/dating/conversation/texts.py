@@ -69,6 +69,15 @@ def yes_or_no(language: str) -> str:
     return "Just reply YES if you are interested, or NO."
 
 
+def photo_again(other: Profile, language: str) -> str:
+    if _fr(language):
+        return (
+            f"Voici à nouveau la photo de {other.first_name} 📸 Tu aimerais faire sa "
+            "connaissance ? Réponds OUI ou NON."
+        )
+    return f"Here is {other.first_name}'s photo again 📸 Reply YES or NO."
+
+
 def yes_or_no_to(other: Profile, language: str) -> str:
     if _fr(language):
         return f"Réponds simplement OUI si {other.first_name} t'intéresse, ou NON."

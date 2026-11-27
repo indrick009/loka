@@ -43,6 +43,9 @@ class DatingSituation:
     left: str
     thread: list[TalkLine]
     message: str
+    # The member's last answer when it was a no, with its reason or « pas encore
+    # donnée »: a short reason that follows is that no's.
+    last_refused: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
