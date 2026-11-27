@@ -28,6 +28,7 @@ from loka.bounded_contexts.dating.domain.dating_agent import (
     DatingMove,
     DatingSituation,
 )
+from loka.bounded_contexts.dating.domain.matching import wishes_fit
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.shared.infrastructure.conversation_log import journal
 
@@ -118,6 +119,8 @@ class DatingConductor:
     ) -> TurnOutcome | None:
         turns, lang = self._turns, turn.language
         kind = move.move
+        if kind != "ANSWER":
+            move = replace(move, reply=_reaction(move.reply, proposed))
         if kind in ("ANSWER_PROPOSAL", "NEXT") and proposed is not None:
             liked = move.liked is True if kind == "ANSWER_PROPOSAL" else False
             if liked:
@@ -149,16 +152,34 @@ class DatingConductor:
             wanted = tuple(move.looking)
             await turns._store.update_looking(member.user_id, wanted)
             member = replace(member, looking=wanted)
-            return await turns._propose(turn, desk, member, prefix=move.reply or "")
+            return await self._still_or_next(turn, desk, member, proposed, move.reply or "")
         if kind == "ADD_WISHES" and (move.wishes or move.age_min or move.age_max):
             member = await self._add_wishes(member, move)
             prefix = move.reply or texts.wishes_noted(lang)
-            return await turns._propose(turn, desk, member, prefix=prefix)
+            return await self._still_or_next(turn, desk, member, proposed, prefix)
         if kind == "WITHDRAW":
             return await turns._withdraw(turn, desk, member.user_id)
         if not move.reply:
             return None
         return await self._keep_or_propose(turn, desk, member, proposed, move.reply, ask=False)
+
+    async def _still_or_next(
+        self,
+        turn: PlugTurn,
+        desk: PlugDesk,
+        member: Profile,
+        proposed: Profile | None,
+        prefix: str,
+    ) -> TurnOutcome:
+        """New criteria: the person proposed still waits when they still fit — a
+        new person put in their place came back later (bench of 27 Nov 2026,
+        Hermann and Ange); else the next one."""
+        if proposed is not None and member.could_meet(proposed) and wishes_fit(
+            member, proposed
+        )[0]:
+            text = f"{prefix}\n{texts.yes_or_no_to(proposed, turn.language)}".strip()
+            return say(text, question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False)
+        return await self._turns._propose(turn, desk, member, prefix=prefix)
 
     async def _no(
         self,
@@ -178,9 +199,11 @@ class DatingConductor:
             now=turn.now,
         )
         await turns._tell_no_follow_up(turn, desk, member, proposed)
-        if move.reason:
-            member = await turns._learn_reason(member, proposed, move.reason)
-        prefix = move.reply or texts.passed(turn.language)
+        if not move.reason:
+            # Why, asked once (unless skipped twice before), then the next one.
+            return await turns._after_no(turn, desk, member, proposed)
+        member = await turns._learn_reason(member, proposed, move.reason)
+        prefix = move.reply or texts.reason_noted(turn.language)
         return await turns._propose(turn, desk, member, prefix=prefix)
 
     async def _add_wishes(self, member: Profile, move: DatingMove) -> Profile:
@@ -213,6 +236,23 @@ class DatingConductor:
         if ask:
             return await self._turns._propose(turn, desk, member, prefix=text)
         return await self._turns._close(turn, desk, text)
+
+
+_ABOUT_NEXT = ("attend", "tu as vu tous", "personne d'autre", "je te propose", "voici")
+
+
+def _reaction(reply: str | None, proposed: Profile | None) -> str | None:
+    """A move's own words keep to a reaction: what comes next is the code's to
+    say. « Ange attend toujours ta réponse » came before a new person (bench of
+    27 Nov 2026)."""
+    if not reply:
+        return None
+    folded = reply.casefold()
+    if any(part in folded for part in _ABOUT_NEXT) or (
+        proposed is not None and proposed.first_name.casefold() in folded
+    ):
+        return None
+    return reply
 
 
 def _profile(member: Profile) -> str:
