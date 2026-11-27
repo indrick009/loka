@@ -107,7 +107,7 @@ _REFUSE = re.compile(
     r"\b(veux|aime) pas\b|\bpas (de )?(celui|celle|lui|elle)\b"
 )
 # The name in a proposal: « Voici quelqu'un qui pourrait te plaire : Jordan, 24 ans ».
-_PROPOSED_NAME = re.compile(r"te plaire\s*:\s*([^,\n]+),")
+_PROPOSED_NAME = re.compile(r"te plaire\s*:\s*([^,\n]+),\s*(\d+)\s*ans,[^,\n]*,\s*([^(\n]+)")
 # « Supprime mon profil »: idia's model answered « je supprime ton profil »,
 # then « oui, c'est supprimé », and nothing was done: the profile was still
 # proposed (journal of 25 Nov 2026, 18:05, Al-harazi).
@@ -120,7 +120,10 @@ _SKIP_REASON = re.compile(
     r"^\W*(passer|passe|skip|rien|non|no|aucune?|je sais pas|je ne sais pas|ok|okay|oki|"
     r"d accord|rien de special|comme ca)\W*$"
 )
-_REFUSAL_WORDS = re.compile(r"^\W*(non+|no|nan|pas interesse\w*|je ne veux pas|bof)\b[\W]*")
+_REFUSAL_WORDS = re.compile(
+    r"^\W*(non+|no|nan|pas interesse\w*|je ne veux pas|bof)\b[\W]*"
+    r"|^\W*((il|elle|ca) ne me (plait|convient|dit rien) pas|pas pour moi)\W*$"
+)
 
 
 def _reason_in(text: str) -> str | None:
@@ -652,19 +655,25 @@ class DatingTurns:
         return ""
 
     async def _quoted(self, member: Profile, turn: PlugTurn) -> Profile | None:
-        """The profile proposed in the message this one replies to, if any."""
+        """The profile proposed in the message this one replies to, if any.
+
+        Read by name, age and town together: by the name alone, Hermann's four
+        « non » to Helena (20, Nkongsamba) went to Héléna (19, Yaoundé), and
+        Helena came back four times (journal of 26 Nov 2026, 16:41).
+        """
         found = _PROPOSED_NAME.search(turn.quoted)
         if found is None:
             return None
-        name = fold(found.group(1).strip())
-        return next(
-            (
-                other
-                for other in await self._store.members()
-                if fold(other.first_name) == name and member.could_meet(other)
-            ),
-            None,
-        )
+        name, age, city = fold(found.group(1).strip()), found.group(2), fold(found.group(3).strip())
+        same = [
+            other
+            for other in await self._store.members()
+            if fold(other.first_name) == name
+            and str(other.age) == age
+            and fold(other.city) == city
+            and member.could_meet(other)
+        ]
+        return same[0] if len(same) == 1 else None
 
     async def _named_again(self, member: Profile, text: str) -> Profile | None:
         """A profile this member passed on, named in the message."""
