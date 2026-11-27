@@ -6,7 +6,7 @@ nudges: each read the same answers, faces and activity.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from loka.bounded_contexts.conversation.application.plugs.turn import Steer
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import (
@@ -18,6 +18,8 @@ from loka.bounded_contexts.dating.domain.matching import best_candidates, tastes
 from loka.bounded_contexts.dating.domain.profile import Profile
 from loka.bounded_contexts.dating.domain.store import DatingStore
 
+MATCH_QUIET_DAYS = 7
+
 
 async def ranked_for(
     store: DatingStore, member: Profile, *, now: datetime
@@ -27,6 +29,14 @@ async def ranked_for(
     on him (journal of 25 Nov 2026, 10:26)."""
     excluded = await store.answered(member.profile_id) | await store.passed_by(member.profile_id)
     members = await store.members()
+    # Nor anyone with a recent match: Eva, matched with Ismaël and waiting for
+    # his payment, came first for Hermann (27 Nov 2026).
+    since = now - timedelta(days=MATCH_QUIET_DAYS)
+    for other in members:
+        if str(other.profile_id) not in excluded and await store.matched_since(
+            other.profile_id, since
+        ):
+            excluded.add(str(other.profile_id))
     return best_candidates(
         member,
         members,
