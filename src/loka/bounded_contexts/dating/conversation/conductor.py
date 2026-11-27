@@ -22,7 +22,7 @@ from loka.bounded_contexts.conversation.application.use_cases.analyse_conversati
 )
 from loka.bounded_contexts.conversation.domain.entities.conversation_session import FlowStep
 from loka.bounded_contexts.dating.conversation import texts
-from loka.bounded_contexts.dating.conversation.keys import LIKE_KEY, PROPOSED_KEY
+from loka.bounded_contexts.dating.conversation.keys import LIKE_KEY, PROPOSED_KEY, REASON_KEY
 from loka.bounded_contexts.dating.conversation.ranking import ranked_for
 from loka.bounded_contexts.dating.domain.attributes import MUST, Wish
 from loka.bounded_contexts.dating.domain.dating_agent import (
@@ -137,12 +137,25 @@ class DatingConductor:
             move = replace(move, reply=_reaction(move.reply, proposed))
         if kind in ("ANSWER_PROPOSAL", "NEXT") and proposed is not None:
             liked = move.liked is True if kind == "ANSWER_PROPOSAL" else False
+            if liked and not _says_yes(turn.text or ""):
+                # A yes sends the member's profile to the other: it is taken
+                # only when it is said. « Je veux une belle femme » was read as a
+                # yes to Ange (bench of 27 Nov 2026).
+                text = f"{move.reply or ''}\n{texts.yes_or_no_to(proposed, lang)}".strip()
+                return say(text, question=LIKE_KEY, step=FlowStep.COLLECT_CHOICE, voiced=False)
             if liked:
                 raw = turn.session.context.get("_score")
                 score = float(raw) if isinstance(raw, int | float) else 0.0
                 return await turns._decide(turn, desk, member, proposed, liked=True, score=score)
             return await self._no(turn, desk, member, proposed, move, said)
         if kind in ("ANSWER_PROPOSAL", "NEXT"):
+            return await self._next(turn, desk, member, move.reply or "", said)
+        if kind == "REASON" and not move.reason:
+            # No reason in it (« elle ne me plaît pas » again): the next person.
+            if proposed is not None:
+                return await self._keep_or_propose(
+                    turn, desk, member, proposed, move.reply or texts.passed(lang)
+                )
             return await self._next(turn, desk, member, move.reply or "", said)
         if kind == "REASON" and move.reason:
             refused = next(
@@ -179,6 +192,10 @@ class DatingConductor:
             return await turns._withdraw(turn, desk, member.user_id)
         if not move.reply:
             return None
+        if proposed is None and turn.session.context.get("next_question") == REASON_KEY:
+            # idia asked why and the member spoke of something else: answered,
+            # and the next person comes, never a thread left hanging.
+            return await self._next(turn, desk, member, move.reply, None)
         return await self._keep_or_propose(turn, desk, member, proposed, move.reply, ask=False)
 
     async def _still_or_next(
@@ -283,6 +300,19 @@ _GENERIC = re.compile(
     r"(plait|convient|interesse|veux|dit rien)?( pas)?( de (lui|elle))?"
     r"( celui[ -]ci| celle[ -]ci)?\W*$"
 )
+
+
+_YES = re.compile(
+    r"^\W*(oui+|ouais|ok+|okay|oki|yes|yep|d ?accord|dac|volontiers|carrement|bien sur|"
+    r"avec plaisir|pourquoi pas|go)\b"
+    r"|(?<!ne )\b(elle|il) me plait\b|\bje (la|le) veux\b|\bje veux bien\b"
+    r"|\b(ca|cela) me (va|plait)\b|(?<!pas )\binteresse(e)?\b(?! pas)|\bc est (elle|lui)\b"
+)
+
+
+def _says_yes(text: str) -> bool:
+    folded = fold(text)
+    return bool(_YES.search(folded)) and "ne me plait pas" not in folded
 
 
 def _meaningful(reason: str | None) -> str | None:

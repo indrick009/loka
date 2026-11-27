@@ -39,6 +39,11 @@ BASE_KEYS: dict[str, str] = {
     "ville": "ville où la personne vit",
 }
 
+# Keys whose value is one of a few: a value not found is another one.
+CATEGORICAL = frozenset(
+    ("ville", "religion", "tabac", "alcool", "enfants", "veut_enfants", "situation")
+)
+
 # Facts a member is asked after saying yes to someone whose wishes need them,
 # when their profile does not say (decision of 26 Nov 2026). Asked neutrally:
 # never what the other is looking for, or the answer would bend to it. The
@@ -136,8 +141,10 @@ class Wish:
         hit = any(value and (value in said or said in value) for value in self.values)
         if not hit:
             # Words not found prove nothing: « travailleur » is not written in
-            # « dessinateur industriel », which does not make him idle.
-            return None
+            # « dessinateur industriel », which does not make him idle. A town, a
+            # religion, a yes or no fact is different: Yaoundé is not Bafoussam
+            # (« uniquement Bafoussam », bench of 27 Nov 2026).
+            return (not self.wants) if self.key in CATEGORICAL else None
         return self.wants
 
 
